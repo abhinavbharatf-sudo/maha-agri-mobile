@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: maha-agri-production
+  labels:
+    environment: production
+    governance: maha-agri-statewide

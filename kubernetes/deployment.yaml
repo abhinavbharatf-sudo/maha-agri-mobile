@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: maha-agri-backend
+  namespace: maha-agri-prod
+  labels:
+    app.kubernetes.io/name: maha-agri-backend
+    app.kubernetes.io/part-of: maha-agri-platform
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: maha-agri-backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: maha-agri-backend
+    spec:
+      containers:
+        - name: backend
+          image: registry.mahaagri.gov.in/maha-agri/backend:v1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 4000
+          envFrom:
+            - configMapRef:
+                name: maha-agri-config
+            - secretRef:
+                name: maha-agri-secrets
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health/liveness
+              port: 4000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health/readiness
+              port: 4000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: maha-agri-frontend
+  namespace: maha-agri-prod
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: maha-agri-frontend
+  template:
+    metadata:
+      labels:
+        app: maha-agri-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: registry.mahaagri.gov.in/maha-agri/frontend:v1.0.0
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

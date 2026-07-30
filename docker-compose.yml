@@ -1,0 +1,45 @@
+# ============================================================================
+# MAHA-AGRI Government Digital Operations Platform
+# Master Production Docker Compose Stack (PostgreSQL 16 Multi-Schema Engine + NestJS + Nginx)
+# ============================================================================
+
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: maha_agri_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: maha_agri_db
+      POSTGRES_USER: maha_admin
+      POSTGRES_PASSWORD: MahaAgriSecureProductionPassword2026!
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maha_admin -d maha_agri_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: maha_agri_backend
+    restart: always
+    environment:
+      PORT: 3000
+      DATABASE_URL: "postgresql://maha_admin:MahaAgriSecureProductionPassword2026!@postgres:5432/maha_agri_db?schema=platform"
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+    driver: local

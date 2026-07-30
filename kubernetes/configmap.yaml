@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: maha-agri-config
+  namespace: maha-agri-prod
+data:
+  NODE_ENV: "production"
+  PORT: "4000"
+  REDIS_URL: "redis://maha-agri-redis-svc:6379"
+  SMTP_HOST: "smtp.gov.in"
+  SMTP_PORT: "587"

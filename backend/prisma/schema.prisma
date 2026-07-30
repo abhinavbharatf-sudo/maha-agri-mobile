@@ -1,0 +1,1722 @@
+// ============================================================================
+// MAHA-AGRI Government Digital Operations Platform
+// Prisma Multi-Schema Specification (PostgreSQL 16 + PostGIS Spatial Engine)
+// Schemas:
+// 1. platform: Shared Core Platform Infrastructure Services (v1.0)
+// 2. edp: EDP Agri Drone Enterprise Module (v1.0.2)
+// 3. soil: Soil Testing Operations Module (v1.0.2)
+// 4. workforce: MAHA-AGRIDOOT Workforce Module (v1.0)
+// 5. farmer: Shared Farmer Master Module System of Record (v1.0)
+// 6. ops: Phase B Operational Excellence & Observability Framework (v1.1)
+// 7. scale: Phase C Statewide Scale, Multi-Tenant Operations & Reliability (v1.2)
+// 8. security: Phase D Enterprise Security, Compliance & Assurance (v1.3)
+// 9. integration: Phase E Enterprise Integration & Ecosystem Framework (v1.4)
+// ============================================================================
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------------------
+// Shared Platform Core Enums
+// ----------------------------------------------------------------------------
+enum UserRoleType {
+  SUPER_ADMIN
+  STATE_ADMIN
+  DISTRICT_COORDINATOR
+  TALUKA_COORDINATOR
+  MAHA_AGRIDOOT
+  LAB_ADMIN
+  LAB_TECHNICIAN
+  ENTREPRENEUR
+  DRONE_PILOT
+  FINANCE_OFFICER
+  FARMER
+}
+
+enum NotificationChannel {
+  WHATSAPP
+  SMS
+  EMAIL
+  PUSH
+}
+
+enum AuditActionType {
+  USER_LOGIN
+  USER_LOGOUT
+  RECORD_CREATED
+  RECORD_UPDATED
+  RECORD_DELETED
+  STATE_TRANSITION
+  SECURITY_VIOLATION
+}
+
+enum WorkforceStatus {
+  APPLIED
+  SCREENING
+  VERIFIED
+  SELECTED
+  APPOINTED
+  TRAINED
+  ACTIVE
+  TRANSFERRED
+  PROMOTED
+  SUSPENDED
+  EXITED
+}
+
+enum SharedFarmerStatus {
+  REGISTERED
+  KYC_VERIFIED
+  ACTIVE
+  MERGED
+  ARCHIVED
+}
+
+enum IncidentSeverity {
+  P1_CRITICAL
+  P2_MAJOR
+  P3_MINOR
+  P4_COSMETIC
+}
+
+enum IncidentStatus {
+  LOGGED
+  INVESTIGATING
+  RESOLVED
+  CLOSED
+}
+
+enum DistrictRolloutStage {
+  NOT_STARTED
+  ASSESSMENT
+  INFRASTRUCTURE_READY
+  WORKFORCE_DEPLOYED
+  PILOT_ACTIVE
+  PRODUCTION_LIVE
+}
+
+// ============================================================================
+// PHASE E ENTERPRISE INTEGRATION TABLES (v1.4) (schema: "integration")
+// ============================================================================
+
+model IntegPartner {
+  id               String   @id @default(uuid()) @db.Uuid
+  partnerCode      String   @unique @db.VarChar(50)
+  partnerName      String   @db.VarChar(150)
+  partnerType      String   @db.VarChar(50) // GOVT_AGENCY, LAB, TECH_PARTNER, BANK
+  isActive         Boolean  @default(true)
+  slaCompliancePct Decimal  @db.Decimal(5, 2)
+
+  createdAt        DateTime @default(now()) @db.Timestamptz
+  updatedAt        DateTime @updatedAt @db.Timestamptz
+
+  apiKeys          IntegApiKey[]
+
+  @@map("integ_partners")
+  @@schema("integration")
+}
+
+model IntegApiKey {
+  id               String       @id @default(uuid()) @db.Uuid
+  partnerId        String       @db.Uuid
+  keyPrefix        String       @db.VarChar(20)
+  secretHash       String       @db.Text
+  rateLimitPerMin  Int          @default(60)
+  expiresAt        DateTime     @db.Timestamptz
+  isActive         Boolean      @default(true)
+
+  partner          IntegPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@map("integ_api_keys")
+  @@schema("integration")
+}
+
+model IntegGisLayer {
+  id               String   @id @default(uuid()) @db.Uuid
+  layerCode        String   @unique @db.VarChar(50)
+  layerName        String   @db.VarChar(100)
+  geometryType     String   @db.VarChar(30) // POLYGON, POINT, MULTIPOLYGON
+  featureCount     Int      @default(0)
+  isPublic         Boolean  @default(true)
+
+  @@map("integ_gis_layers")
+  @@schema("integration")
+}
+
+model IntegPaymentTxn {
+  id               String   @id @default(uuid()) @db.Uuid
+  txnCode          String   @unique @db.VarChar(50)
+  gatewayName      String   @db.VarChar(50)
+  amount           Decimal  @db.Decimal(12, 2)
+  status           String   @default("SUCCESS") @db.VarChar(30)
+  settledAt        DateTime? @db.Timestamptz
+
+  @@map("integ_payment_txns")
+  @@schema("integration")
+}
+
+model IntegDataJob {
+  id               String   @id @default(uuid()) @db.Uuid
+  jobCode          String   @unique @db.VarChar(50)
+  jobType          String   @db.VarChar(50) // IMPORT, EXPORT, SYNC
+  targetSystem     String   @db.VarChar(100)
+  recordCount      Int      @default(0)
+  status           String   @default("COMPLETED") @db.VarChar(30)
+  executedAt       DateTime @default(now()) @db.Timestamptz
+
+  @@map("integ_data_jobs")
+  @@schema("integration")
+}
+
+// ============================================================================
+// PHASE D ENTERPRISE SECURITY & COMPLIANCE TABLES (v1.3) (schema: "security")
+// ============================================================================
+model SecSecurityEvent {
+  id               String   @id @default(uuid()) @db.Uuid
+  eventCode        String   @unique @db.VarChar(50)
+  eventType        String   @db.VarChar(100)
+  severity         String   @default("HIGH") @db.VarChar(20)
+  userId           String?  @db.Uuid
+  ipAddress        String   @db.VarChar(45)
+  details          String   @db.Text
+  timestamp        DateTime @default(now()) @db.Timestamptz
+
+  @@map("sec_security_events")
+  @@schema("security")
+}
+
+model SecComplianceItem {
+  id               String   @id @default(uuid()) @db.Uuid
+  itemCode         String   @unique @db.VarChar(50)
+  title            String   @db.VarChar(200)
+  standardName     String   @db.VarChar(100)
+  status           String   @default("COMPLIANT") @db.VarChar(30)
+  lastAuditedDate  DateTime @db.Date
+
+  @@map("sec_compliance_items")
+  @@schema("security")
+}
+
+model SecVulnerability {
+  id               String   @id @default(uuid()) @db.Uuid
+  vulnCode         String   @unique @db.VarChar(50)
+  cveId            String?  @db.VarChar(50)
+  title            String   @db.VarChar(200)
+  riskRating       String   @default("LOW") @db.VarChar(20)
+  status           String   @default("PATCHED") @db.VarChar(30)
+
+  @@map("sec_vulnerabilities")
+  @@schema("security")
+}
+
+model SecAccessReview {
+  id               String   @id @default(uuid()) @db.Uuid
+  reviewCode       String   @unique @db.VarChar(50)
+  userId           String   @db.Uuid
+  roleName         String   @db.VarChar(50)
+  status           String   @default("CERTIFIED") @db.VarChar(30)
+  certifiedAt      DateTime @default(now()) @db.Timestamptz
+
+  @@map("sec_access_reviews")
+  @@schema("security")
+}
+
+model SecDataPolicy {
+  id               String   @id @default(uuid()) @db.Uuid
+  policyCode       String   @unique @db.VarChar(50)
+  policyName       String   @db.VarChar(150)
+  retentionDays    Int      @default(3650)
+  isActive         Boolean  @default(true)
+
+  @@map("sec_data_policies")
+  @@schema("security")
+}
+
+model SecReadinessCert {
+  id               String   @id @default(uuid()) @db.Uuid
+  certCode         String   @unique @db.VarChar(50)
+  districtId       String   @unique @db.Uuid
+  securityScore    Decimal  @db.Decimal(5, 2)
+  complianceScore  Decimal  @db.Decimal(5, 2)
+  isCertified      Boolean  @default(true)
+  certifiedAt      DateTime @default(now()) @db.Timestamptz
+
+  @@map("sec_readiness_certs")
+  @@schema("security")
+}
+
+// ============================================================================
+// PHASE C STATEWIDE SCALE TABLES (v1.2) (schema: "scale")
+// ============================================================================
+model ScaleDistrictOperation {
+  id               String               @id @default(uuid()) @db.Uuid
+  districtId       String               @unique @db.Uuid
+  stage            DistrictRolloutStage @default(NOT_STARTED)
+  readinessScore   Decimal              @db.Decimal(5, 2)
+  isProductionLive Boolean              @default(false)
+  activatedAt      DateTime?            @db.Timestamptz
+
+  createdAt        DateTime             @default(now()) @db.Timestamptz
+  updatedAt        DateTime             @updatedAt @db.Timestamptz
+
+  @@map("scale_district_operations")
+  @@schema("scale")
+}
+
+model ScaleLabRouting {
+  id               String   @id @default(uuid()) @db.Uuid
+  primaryLabId     String   @db.Uuid
+  backupLabId      String   @db.Uuid
+  autoFailoverActive Boolean @default(true)
+  maxCapacityPerDay Int     @default(200)
+  currentLoadPct   Decimal  @db.Decimal(5, 2)
+
+  createdAt        DateTime @default(now()) @db.Timestamptz
+  updatedAt        DateTime @updatedAt @db.Timestamptz
+
+  @@map("scale_lab_routings")
+  @@schema("scale")
+}
+
+model ScaleWorkforceCapacity {
+  id               String   @id @default(uuid()) @db.Uuid
+  districtId       String   @unique @db.Uuid
+  sanctionedPosts  Int      @default(100)
+  filledPosts      Int      @default(80)
+  vacantPosts      Int      @default(20)
+  capacityScore    Decimal  @db.Decimal(5, 2)
+
+  updatedAt        DateTime @updatedAt @db.Timestamptz
+
+  @@map("scale_workforce_capacities")
+  @@schema("scale")
+}
+
+model ScaleReliabilityCheck {
+  id               String   @id @default(uuid()) @db.Uuid
+  serviceName      String   @db.VarChar(100)
+  healthStatus     String   @default("HEALTHY") @db.VarChar(30)
+  p99LatencyMs     Decimal  @db.Decimal(7, 2)
+  circuitBreakerOpen Boolean @default(false)
+  checkedAt        DateTime @default(now()) @db.Timestamptz
+
+  @@map("scale_reliability_checks")
+  @@schema("scale")
+}
+
+model ScaleDrSimulation {
+  id               String   @id @default(uuid()) @db.Uuid
+  simulationCode   String   @unique @db.VarChar(50)
+  pitrValidated    Boolean  @default(true)
+  restoreTimeSec   Int      @default(45)
+  status           String   @default("SUCCESS") @db.VarChar(30)
+  testedAt         DateTime @default(now()) @db.Timestamptz
+
+  @@map("scale_dr_simulations")
+  @@schema("scale")
+}
+
+model ScaleRolloutWave {
+  id               String   @id @default(uuid()) @db.Uuid
+  waveName         String   @unique @db.VarChar(50)
+  targetDistricts  Int      @default(8)
+  status           String   @default("PLANNED") @db.VarChar(30)
+  plannedStartDate DateTime @db.Date
+
+  createdAt        DateTime @default(now()) @db.Timestamptz
+
+  @@map("scale_rollout_waves")
+  @@schema("scale")
+}
+
+// ============================================================================
+// OPERATIONAL EXCELLENCE TABLES (v1.1) (schema: "ops")
+// ============================================================================
+model OpsIncident {
+  id               String           @id @default(uuid()) @db.Uuid
+  incidentCode     String           @unique @db.VarChar(50)
+  title            String           @db.VarChar(200)
+  description      String           @db.Text
+  severity         IncidentSeverity @default(P3_MINOR)
+  status           IncidentStatus   @default(LOGGED)
+  moduleName       String           @db.VarChar(50)
+  districtId       String?          @db.Uuid
+  reportedByUserId String           @db.Uuid
+  assignedToUserId String?          @db.Uuid
+  rootCauseAnalysis String?         @db.Text
+  resolutionNotes  String?          @db.Text
+
+  createdAt        DateTime         @default(now()) @db.Timestamptz
+  createdBy        String           @db.Uuid
+  updatedAt        DateTime         @updatedAt @db.Timestamptz
+  updatedBy        String           @db.Uuid
+  deletedAt        DateTime?        @db.Timestamptz
+  deletedBy        String?          @db.Uuid
+  isDeleted        Boolean          @default(false)
+  recordVersion    Int              @default(1)
+
+  @@map("ops_incidents")
+  @@schema("ops")
+}
+
+model OpsFeatureRequest {
+  id               String   @id @default(uuid()) @db.Uuid
+  requestCode      String   @unique @db.VarChar(50)
+  title            String   @db.VarChar(200)
+  description      String   @db.Text
+  targetRelease    String   @default("v1.1.0") @db.VarChar(20)
+  status           String   @default("UNDER_REVIEW") @db.VarChar(30)
+  requestedByUserId String  @db.Uuid
+
+  createdAt        DateTime @default(now()) @db.Timestamptz
+  createdBy        String   @db.Uuid
+  updatedAt        DateTime @updatedAt @db.Timestamptz
+  updatedBy        String   @db.Uuid
+  deletedAt        DateTime? @db.Timestamptz
+  deletedBy        String?  @db.Uuid
+  isDeleted        Boolean  @default(false)
+  recordVersion    Int      @default(1)
+
+  @@map("ops_feature_requests")
+  @@schema("ops")
+}
+
+model OpsUserFeedback {
+  id               String   @id @default(uuid()) @db.Uuid
+  feedbackCode     String   @unique @db.VarChar(50)
+  userRole         String   @db.VarChar(50)
+  rating           Int      @default(5)
+  comments         String   @db.Text
+  moduleName       String   @db.VarChar(50)
+  districtId       String?  @db.Uuid
+  submittedAt      DateTime @default(now()) @db.Timestamptz
+
+  @@map("ops_user_feedbacks")
+  @@schema("ops")
+}
+
+model OpsRelease {
+  id               String   @id @default(uuid()) @db.Uuid
+  versionNumber    String   @unique @db.VarChar(20)
+  releaseTitle     String   @db.VarChar(150)
+  releaseNotes     String   @db.Text
+  rollbackPlan     String   @db.Text
+  status           String   @default("PLANNED") @db.VarChar(30)
+  deployedAt       DateTime? @db.Timestamptz
+
+  createdAt        DateTime @default(now()) @db.Timestamptz
+  createdBy        String   @db.Uuid
+
+  @@map("ops_releases")
+  @@schema("ops")
+}
+
+model OpsKnowledgeBase {
+  id               String   @id @default(uuid()) @db.Uuid
+  docCode          String   @unique @db.VarChar(50)
+  title            String   @db.VarChar(200)
+  category         String   @db.VarChar(50)
+  contentMarkdown  String   @db.Text
+  targetRole       String   @db.VarChar(50)
+
+  createdAt        DateTime @default(now()) @db.Timestamptz
+  updatedAt        DateTime @updatedAt @db.Timestamptz
+
+  @@map("ops_knowledge_bases")
+  @@schema("ops")
+}
+
+model OpsRolloutPlan {
+  id               String   @id @default(uuid()) @db.Uuid
+  planCode         String   @unique @db.VarChar(50)
+  districtId       String   @unique @db.Uuid
+  readinessScore   Decimal  @db.Decimal(5, 2)
+  readinessStatus  String   @default("READY") @db.VarChar(30)
+  targetRolloutDate DateTime @db.Date
+
+  createdAt        DateTime @default(now()) @db.Timestamptz
+  updatedAt        DateTime @updatedAt @db.Timestamptz
+
+  @@map("ops_rollout_plans")
+  @@schema("ops")
+}
+
+// ============================================================================
+// PLATFORM CORE SHARED TABLES (schema: "platform")
+// ============================================================================
+model PlatformUser {
+  id               String       @id @default(uuid()) @db.Uuid
+  userCode         String       @unique @db.VarChar(50)
+  fullName         String       @db.VarChar(150)
+  mobileNumber     String       @unique @db.VarChar(15)
+  email            String?      @db.VarChar(100)
+  roleType         UserRoleType @default(MAHA_AGRIDOOT)
+  districtId       String?      @db.Uuid
+  talukaId         String?      @db.Uuid
+  villageId        String?      @db.Uuid
+  isActive         Boolean      @default(true)
+  isOtpVerified    Boolean      @default(false)
+
+  createdAt        DateTime     @default(now()) @db.Timestamptz
+  createdBy        String       @db.Uuid
+  updatedAt        DateTime     @updatedAt @db.Timestamptz
+  updatedBy        String       @db.Uuid
+  deletedAt        DateTime?    @db.Timestamptz
+  deletedBy        String?      @db.Uuid
+  isDeleted        Boolean      @default(false)
+  recordVersion    Int          @default(1)
+
+  sessions         PlatformSession[]
+  auditLogs        PlatformAuditLog[]
+
+  @@map("platform_users")
+  @@schema("platform")
+}
+
+model PlatformSession {
+  id               String       @id @default(uuid()) @db.Uuid
+  userId           String       @db.Uuid
+  sessionToken     String       @unique @db.Text
+  refreshToken     String       @unique @db.Text
+  ipAddress        String       @db.VarChar(45)
+  userAgent        String       @db.Text
+  expiresAt        DateTime     @db.Timestamptz
+  createdAt        DateTime     @default(now()) @db.Timestamptz
+
+  user             PlatformUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("platform_sessions")
+  @@schema("platform")
+}
+
+model PlatformDistrictMaster {
+  id               String   @id @default(uuid()) @db.Uuid
+  districtCode     String   @unique @db.VarChar(50)
+  districtNameEn   String   @db.VarChar(100)
+  districtNameMr   String   @db.VarChar(100)
+  divisionName     String   @db.VarChar(100)
+  isActive         Boolean  @default(true)
+
+  @@map("platform_district_masters")
+  @@schema("platform")
+}
+
+model PlatformTalukaMaster {
+  id               String   @id @default(uuid()) @db.Uuid
+  talukaCode       String   @unique @db.VarChar(50)
+  districtId       String   @db.Uuid
+  talukaNameEn     String   @db.VarChar(100)
+  talukaNameMr     String   @db.VarChar(100)
+  isActive         Boolean  @default(true)
+
+  @@map("platform_taluka_masters")
+  @@schema("platform")
+}
+
+model PlatformNotificationQueue {
+  id               String              @id @default(uuid()) @db.Uuid
+  channel          NotificationChannel
+  recipient        String              @db.VarChar(100)
+  messageText      String              @db.Text
+  templateId       String?             @db.VarChar(50)
+  status           String              @default("QUEUED") @db.VarChar(30)
+  attemptCount     Int                 @default(0)
+  deliveredAt      DateTime?           @db.Timestamptz
+  createdAt        DateTime            @default(now()) @db.Timestamptz
+
+  @@map("platform_notification_queues")
+  @@schema("platform")
+}
+
+model PlatformVaultFile {
+  id               String   @id @default(uuid()) @db.Uuid
+  fileCode         String   @unique @db.VarChar(50)
+  originalName     String   @db.VarChar(255)
+  mimeType         String   @db.VarChar(100)
+  fileSizeByte     BigInt
+  fileStoragePath  String   @db.Text
+  publicUrl        String   @db.Text
+  fileHashSha256   String   @db.Char(64)
+  digitalSignature String?  @db.Text
+  uploadedByUserId String   @db.Uuid
+  uploadedAt       DateTime @default(now()) @db.Timestamptz
+
+  @@map("platform_vault_files")
+  @@schema("platform")
+}
+
+model PlatformAuditLog {
+  id               String          @id @default(uuid()) @db.Uuid
+  userId           String?         @db.Uuid
+  actionType       AuditActionType
+  moduleName       String          @db.VarChar(50)
+  resourceName     String          @db.VarChar(100)
+  actionDetails    String          @db.Text
+  ipAddress        String          @db.VarChar(45)
+  timestamp        DateTime        @default(now()) @db.Timestamptz
+
+  user             PlatformUser?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("platform_audit_logs")
+  @@schema("platform")
+}
+
+model PlatformSystemConfig {
+  id               String   @id @default(uuid()) @db.Uuid
+  configKey        String   @unique @db.VarChar(100)
+  configValue      String   @db.Text
+  description      String?  @db.Text
+  updatedAt        DateTime @updatedAt @db.Timestamptz
+
+  @@map("platform_system_configs")
+  @@schema("platform")
+}
+
+// ----------------------------------------------------------------------------
+// SHARED FARMER MASTER TABLES (schema: "farmer")
+// ----------------------------------------------------------------------------
+model SharedFarmerProfile {
+  id               String             @id @default(uuid()) @db.Uuid
+  farmerCode       String             @unique @db.VarChar(50)
+  fullName         String             @db.VarChar(150)
+  mobileNumber     String             @unique @db.VarChar(15)
+  aadhaarHash      String             @db.Char(64)
+  districtId       String             @db.Uuid
+  talukaId         String             @db.Uuid
+  villageId        String             @db.Uuid
+  status           SharedFarmerStatus @default(REGISTERED)
+  isKycVerified    Boolean            @default(false)
+  householdId      String?            @db.Uuid
+
+  createdAt        DateTime           @default(now()) @db.Timestamptz
+  createdBy        String             @db.Uuid
+  updatedAt        DateTime           @updatedAt @db.Timestamptz
+  updatedBy        String             @db.Uuid
+  deletedAt        DateTime?          @db.Timestamptz
+  deletedBy        String?            @db.Uuid
+  isDeleted        Boolean            @default(false)
+  recordVersion    Int                @default(1)
+
+  landHoldings     SharedFarmerLandHolding[]
+  serviceLinks     SharedFarmerServiceLink[]
+  timelines        SharedFarmerTimeline[]
+
+  @@map("shared_farmer_profiles")
+  @@schema("farmer")
+}
+
+model SharedFarmerLandHolding {
+  id               String              @id @default(uuid()) @db.Uuid
+  farmerId         String              @db.Uuid
+  surveyNumber     String              @db.VarChar(50)
+  gatNumber        String?             @db.VarChar(50)
+  totalAreaAcres   Decimal             @db.Decimal(8, 2)
+  districtId       String              @db.Uuid
+  talukaId         String              @db.Uuid
+  villageId        String              @db.Uuid
+
+  farmer           SharedFarmerProfile @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+
+  @@map("shared_farmer_land_holdings")
+  @@schema("farmer")
+}
+
+model SharedFarmerServiceLink {
+  id               String              @id @default(uuid()) @db.Uuid
+  farmerId         String              @db.Uuid
+  moduleName       String              @db.VarChar(50)
+  serviceRefCode   String              @db.VarChar(100)
+  linkedAt         DateTime            @default(now()) @db.Timestamptz
+
+  farmer           SharedFarmerProfile @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+
+  @@map("shared_farmer_service_links")
+  @@schema("farmer")
+}
+
+model SharedFarmerTimeline {
+  id             String               @id @default(uuid()) @db.Uuid
+  farmerId       String               @db.Uuid
+  previousStatus SharedFarmerStatus?
+  newStatus      SharedFarmerStatus
+  actorUserId    String               @db.Uuid
+  actionSummary  String               @db.VarChar(255)
+  createdAt      DateTime             @default(now()) @db.Timestamptz
+
+  farmer         SharedFarmerProfile  @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+
+  @@map("shared_farmer_timelines")
+  @@schema("farmer")
+}
+
+// ----------------------------------------------------------------------------
+// WORKFORCE MODULE TABLES (schema: "workforce")
+// ----------------------------------------------------------------------------
+model WorkforceProfile {
+  id               String          @id @default(uuid()) @db.Uuid
+  agridootCode     String          @unique @db.VarChar(50)
+  fullName         String          @db.VarChar(150)
+  mobileNumber     String          @unique @db.VarChar(15)
+  email            String?         @db.VarChar(100)
+  aadhaarHash      String          @db.Char(64)
+  districtId       String          @db.Uuid
+  talukaId         String          @db.Uuid
+  assignedVillage  String          @db.VarChar(100)
+  status           WorkforceStatus @default(APPLIED)
+  isIdentityCardIssued Boolean     @default(false)
+  
+  createdAt        DateTime        @default(now()) @db.Timestamptz
+  createdBy        String          @db.Uuid
+  updatedAt        DateTime        @updatedAt @db.Timestamptz
+  updatedBy        String          @db.Uuid
+  deletedAt        DateTime?       @db.Timestamptz
+  deletedBy        String?         @db.Uuid
+  isDeleted        Boolean         @default(false)
+  recordVersion    Int             @default(1)
+
+  timelines        WorkforceTimeline[]
+  identityCard     WorkforceIdentityCard?
+  attendances      WorkforceAttendance[]
+  tasks            WorkforceTask[]
+  performances     WorkforcePerformance[]
+  transfers        WorkforceTransfer[]
+
+  @@map("workforce_profiles")
+  @@schema("workforce")
+}
+
+model WorkforceTimeline {
+  id             String           @id @default(uuid()) @db.Uuid
+  profileId      String           @db.Uuid
+  previousStatus WorkforceStatus?
+  newStatus      WorkforceStatus
+  actorUserId    String           @db.Uuid
+  actionSummary  String           @db.VarChar(255)
+  remarks        String?          @db.Text
+  createdAt      DateTime         @default(now()) @db.Timestamptz
+
+  profile        WorkforceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("workforce_timelines")
+  @@schema("workforce")
+}
+
+model WorkforceIdentityCard {
+  id               String           @id @default(uuid()) @db.Uuid
+  cardCode         String           @unique @db.VarChar(50)
+  profileId        String           @unique @db.Uuid
+  qrCode           String           @unique @db.VarChar(100)
+  fileHashSha256   String           @db.Char(64)
+  digitalSignature String           @db.Text
+  pdfPublicUrl     String           @db.Text
+  issuedAt         DateTime         @default(now()) @db.Timestamptz
+  
+  createdAt        DateTime         @default(now()) @db.Timestamptz
+  createdBy        String           @db.Uuid
+  updatedAt        DateTime         @updatedAt @db.Timestamptz
+  updatedBy        String           @db.Uuid
+  deletedAt        DateTime?        @db.Timestamptz
+  deletedBy        String?          @db.Uuid
+  isDeleted        Boolean          @default(false)
+  recordVersion    Int              @default(1)
+
+  profile          WorkforceProfile @relation(fields: [profileId], references: [id])
+
+  @@map("workforce_identity_cards")
+  @@schema("workforce")
+}
+
+model WorkforceAttendance {
+  id               String           @id @default(uuid()) @db.Uuid
+  profileId        String           @db.Uuid
+  attendanceDate   DateTime         @db.Date
+  checkInTime      DateTime         @db.Timestamptz
+  checkOutTime     DateTime?        @db.Timestamptz
+  gpsLatitude      Float
+  gpsLongitude     Float
+  status           String           @default("PRESENT") @db.VarChar(30)
+
+  profile          WorkforceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("workforce_attendances")
+  @@schema("workforce")
+}
+
+model WorkforceTask {
+  id               String           @id @default(uuid()) @db.Uuid
+  taskCode         String           @unique @db.VarChar(50)
+  profileId        String           @db.Uuid
+  title            String           @db.VarChar(200)
+  description      String?          @db.Text
+  dueDate          DateTime         @db.Timestamptz
+  status           String           @default("PENDING") @db.VarChar(30)
+
+  profile          WorkforceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("workforce_tasks")
+  @@schema("workforce")
+}
+
+model WorkforcePerformance {
+  id               String           @id @default(uuid()) @db.Uuid
+  profileId        String           @db.Uuid
+  reviewMonth      String           @db.VarChar(7)
+  leadsGenerated   Int              @default(0)
+  samplesCollected Int              @default(0)
+  slaCompliancePct Decimal          @db.Decimal(5, 2)
+  performanceScore Decimal          @db.Decimal(5, 2)
+
+  profile          WorkforceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("workforce_performances")
+  @@schema("workforce")
+}
+
+model WorkforceTransfer {
+  id               String           @id @default(uuid()) @db.Uuid
+  profileId        String           @db.Uuid
+  fromDistrictId   String           @db.Uuid
+  toDistrictId     String           @db.Uuid
+  fromTalukaId     String           @db.Uuid
+  toTalukaId       String           @db.Uuid
+  reason           String           @db.VarChar(255)
+  approvedByUserId String           @db.Uuid
+  transferredAt    DateTime         @default(now()) @db.Timestamptz
+
+  profile          WorkforceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("workforce_transfers")
+  @@schema("workforce")
+}
+
+// ----------------------------------------------------------------------------
+// EDP Enums & Tables (schema: "edp")
+// ----------------------------------------------------------------------------
+enum EdpCandidateStatus {
+  NEW
+  INTERESTED
+  REGISTERED
+  PAID
+  PORTAL_ACTIVE
+  DOCUMENT_VERIFIED
+  WORKSHOP_ASSIGNED
+  WORKSHOP_COMPLETED
+  CERTIFIED
+  CAREER_SELECTED
+  BUSINESS_READY
+  DRONE_BOOKED
+  LOAN_APPLIED
+  LOAN_APPROVED
+  DRONE_DELIVERED
+  GROUND_TRAINED
+  PARTNER_ACTIVATED
+}
+
+enum CareerTrack {
+  DRONE_ENTREPRENEUR
+  RPC_TRAINING
+  DRONE_PILOT_JOB
+  DRONE_REPAIR_TECHNICIAN
+  DRONE_SURVEY_MAPPING
+}
+
+enum DocumentType {
+  CANDIDATE_PHOTO
+  AADHAAR_CARD
+  PAN_CARD
+  PASSPORT
+  DGCA_MEDICAL_FITNESS
+  BANK_PASSBOOK
+  BUSINESS_REGISTRATION_GST
+}
+
+enum DocumentVerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+model EdpLead {
+  id               String   @id @default(uuid()) @db.Uuid
+  leadCode         String   @unique @db.VarChar(50)
+  fullName         String   @db.VarChar(150)
+  mobileNumber     String   @db.VarChar(15)
+  email            String?  @db.VarChar(100)
+  districtId       String   @db.Uuid
+  talukaId         String   @db.Uuid
+  villageId        String?  @db.Uuid
+  source           String   @db.VarChar(50)
+  agridootUserId   String?  @db.Uuid
+  status           String   @default("NEW") @db.VarChar(30)
+  remarks          String?  @db.Text
+  
+  createdAt        DateTime @default(now()) @db.Timestamptz
+  createdBy        String   @db.Uuid
+  updatedAt        DateTime @updatedAt @db.Timestamptz
+  updatedBy        String   @db.Uuid
+  deletedAt        DateTime? @db.Timestamptz
+  deletedBy        String?  @db.Uuid
+  isDeleted        Boolean  @default(false)
+  recordVersion    Int      @default(1)
+
+  candidate        EdpCandidate?
+
+  @@map("edp_leads")
+  @@schema("edp")
+}
+
+model EdpCandidate {
+  id                 String             @id @default(uuid()) @db.Uuid
+  candidateCode      String             @unique @db.VarChar(50)
+  leadId             String?            @unique @db.Uuid
+  userId             String?            @unique @db.Uuid
+  fullName           String             @db.VarChar(150)
+  mobileNumber       String             @unique @db.VarChar(15)
+  email              String?            @db.VarChar(100)
+  districtId         String             @db.Uuid
+  talukaId           String             @db.Uuid
+  villageId          String?            @db.Uuid
+  status             EdpCandidateStatus @default(NEW)
+  isPortalActive     Boolean            @default(false)
+  isPaid             Boolean            @default(false)
+  
+  createdAt          DateTime           @default(now()) @db.Timestamptz
+  createdBy          String             @db.Uuid
+  updatedAt          DateTime           @updatedAt @db.Timestamptz
+  updatedBy          String             @db.Uuid
+  deletedAt          DateTime?          @db.Timestamptz
+  deletedBy          String?            @db.Uuid
+  isDeleted          Boolean            @default(false)
+  recordVersion      Int                @default(1)
+
+  lead               EdpLead?           @relation(fields: [leadId], references: [id])
+  timelines          EdpCandidateTimeline[]
+  owners             EdpCandidateOwner[]
+  documents          EdpCandidateDocument[]
+  attendances        EdpAttendance[]
+  certificates       EdpCertificate[]
+  careerChoice       EdpCareerChoice?
+  careerHistories    EdpCareerPathHistory[]
+  assessments        EdpBusinessAssessment[]
+  droneBookings      EdpDroneBooking[]
+  loanApplications   EdpLoanApplication[]
+  groundTrainings    EdpGroundTraining[]
+  partnerActivation  EdpPartnerActivation?
+  tasks              EdpTask[]
+  notifications      EdpNotification[]
+  progress           EdpCandidateProgress?
+  activityLogs       EdpActivityLog[]
+
+  @@map("edp_candidates")
+  @@schema("edp")
+}
+
+model EdpCandidateOwner {
+  id               String       @id @default(uuid()) @db.Uuid
+  candidateId      String       @db.Uuid
+  agridootUserId   String       @db.Uuid
+  assignedByUserId String       @db.Uuid
+  assignedOn       DateTime     @default(now()) @db.Timestamptz
+  relievedOn       DateTime?    @db.Timestamptz
+  reason           String?      @db.VarChar(255)
+  isPrimary        Boolean      @default(true)
+
+  candidate        EdpCandidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@map("edp_candidate_owners")
+  @@schema("edp")
+}
+
+model EdpTask {
+  id               String       @id @default(uuid()) @db.Uuid
+  taskCode         String       @unique @db.VarChar(50)
+  candidateId      String       @db.Uuid
+  assignedToRole   String       @db.VarChar(50)
+  title            String       @db.VarChar(200)
+  description      String?      @db.Text
+  dueDate          DateTime     @db.Timestamptz
+  status           String       @default("PENDING") @db.VarChar(30)
+
+  candidate        EdpCandidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@map("edp_tasks")
+  @@schema("edp")
+}
+
+model EdpNotification {
+  id               String              @id @default(uuid()) @db.Uuid
+  candidateId      String              @db.Uuid
+  channel          NotificationChannel
+  recipient        String              @db.VarChar(100)
+  messageText      String              @db.Text
+  status           String              @default("QUEUED") @db.VarChar(30)
+  deliveredAt      DateTime?           @db.Timestamptz
+  readAt           DateTime?           @db.Timestamptz
+
+  candidate        EdpCandidate        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@map("edp_notifications")
+  @@schema("edp")
+}
+
+model EdpCandidateProgress {
+  id                 String             @id @default(uuid()) @db.Uuid
+  candidateId        String             @unique @db.Uuid
+  currentStatus      EdpCandidateStatus
+  percentComplete    Int                @default(0)
+  lastUpdated        DateTime           @default(now()) @db.Timestamptz
+
+  candidate          EdpCandidate       @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@map("edp_candidate_progress")
+  @@schema("edp")
+}
+
+model EdpCandidateTimeline {
+  id             String             @id @default(uuid()) @db.Uuid
+  candidateId    String             @db.Uuid
+  previousStatus EdpCandidateStatus?
+  newStatus      EdpCandidateStatus
+  actorUserId    String             @db.Uuid
+  actionSummary  String             @db.VarChar(255)
+  remarks        String?            @db.Text
+  createdAt      DateTime           @default(now()) @db.Timestamptz
+
+  candidate      EdpCandidate       @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@map("edp_candidate_timelines")
+  @@schema("edp")
+}
+
+model EdpWorkshop {
+  id                String      @id @default(uuid()) @db.Uuid
+  workshopCode      String      @unique @db.VarChar(50)
+  titleEn           String      @db.VarChar(200)
+  titleMr           String      @db.VarChar(200)
+  districtId        String      @db.Uuid
+  venueAddress      String      @db.Text
+  startDate         DateTime    @db.Date
+  endDate           DateTime    @db.Date
+  maxCapacity       Int         @default(50)
+  availableSeats    Int         @default(50)
+  filledSeats       Int         @default(0)
+  waitingListCount  Int         @default(0)
+  status            String      @default("PLANNED") @db.VarChar(30)
+  
+  createdAt         DateTime    @default(now()) @db.Timestamptz
+  createdBy         String      @db.Uuid
+  updatedAt         DateTime    @updatedAt @db.Timestamptz
+  updatedBy         String      @db.Uuid
+  deletedAt         DateTime?   @db.Timestamptz
+  deletedBy         String?     @db.Uuid
+  isDeleted         Boolean     @default(false)
+  recordVersion     Int         @default(1)
+
+  attendances       EdpAttendance[]
+
+  @@map("edp_workshops")
+  @@schema("edp")
+}
+
+model EdpAttendance {
+  id             String       @id @default(uuid()) @db.Uuid
+  workshopId     String       @db.Uuid
+  candidateId    String       @db.Uuid
+  attendanceDate DateTime     @db.Date
+  isPresent      Boolean      @default(true)
+  checkInTime    DateTime?    @db.Timestamptz
+  gpsLatitude    Float?
+  gpsLongitude   Float?
+  markedByUserId String       @db.Uuid
+  
+  createdAt      DateTime     @default(now()) @db.Timestamptz
+  createdBy      String       @db.Uuid
+  updatedAt      DateTime     @updatedAt @db.Timestamptz
+  updatedBy      String       @db.Uuid
+  deletedAt      DateTime?    @db.Timestamptz
+  deletedBy      String?      @db.Uuid
+  isDeleted      Boolean      @default(false)
+  recordVersion  Int          @default(1)
+
+  workshop       EdpWorkshop  @relation(fields: [workshopId], references: [id])
+  candidate      EdpCandidate @relation(fields: [candidateId], references: [id])
+
+  @@map("edp_attendances")
+  @@schema("edp")
+}
+
+model EdpCandidateDocument {
+  id                 String                     @id @default(uuid()) @db.Uuid
+  candidateId        String                     @db.Uuid
+  documentType       DocumentType
+  documentNumber     String?                    @db.VarChar(100)
+  lockerFolder       String                     @default("general") @db.VarChar(50)
+  versionNumber      Int                        @default(1)
+  fileStoragePath    String                     @db.Text
+  publicUrl          String                     @db.Text
+  verifiedCopyUrl    String?                    @db.Text
+  expiryDate         DateTime?                  @db.Date
+  verificationStatus DocumentVerificationStatus @default(PENDING)
+  verifiedByUserId   String?                    @db.Uuid
+  rejectionReason    String?                    @db.Text
+  
+  createdAt          DateTime                   @default(now()) @db.Timestamptz
+  createdBy          String                     @db.Uuid
+  updatedAt          DateTime                   @updatedAt @db.Timestamptz
+  updatedBy          String                     @db.Uuid
+  deletedAt          DateTime?                  @db.Timestamptz
+  deletedBy          String?                    @db.Uuid
+  isDeleted          Boolean                    @default(false)
+  recordVersion      Int                        @default(1)
+
+  candidate          EdpCandidate               @relation(fields: [candidateId], references: [id])
+
+  @@map("edp_candidate_documents")
+  @@schema("edp")
+}
+
+model EdpCareerChoice {
+  id              String       @id @default(uuid()) @db.Uuid
+  candidateId     String       @unique @db.Uuid
+  chosenTrack     CareerTrack
+  selectedAt      DateTime     @default(now()) @db.Timestamptz
+  isBusinessReady Boolean      @default(false)
+  remarks         String?      @db.Text
+  
+  createdAt       DateTime     @default(now()) @db.Timestamptz
+  createdBy       String       @db.Uuid
+  updatedAt       DateTime     @updatedAt @db.Timestamptz
+  updatedBy       String       @db.Uuid
+  deletedAt       DateTime?    @db.Timestamptz
+  deletedBy       String?      @db.Uuid
+  isDeleted       Boolean      @default(false)
+  recordVersion   Int          @default(1)
+
+  candidate       EdpCandidate @relation(fields: [candidateId], references: [id])
+
+  @@map("edp_career_choices")
+  @@schema("edp")
+}
+
+model EdpCareerPathHistory {
+  id             String       @id @default(uuid()) @db.Uuid
+  candidateId    String       @db.Uuid
+  previousTrack  CareerTrack?
+  newTrack       CareerTrack
+  reason         String?      @db.VarChar(255)
+  changedAt      DateTime     @default(now()) @db.Timestamptz
+
+  candidate      EdpCandidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@map("edp_career_path_histories")
+  @@schema("edp")
+}
+
+model EdpBusinessAssessment {
+  id               String       @id @default(uuid()) @db.Uuid
+  candidateId      String       @db.Uuid
+  assessmentScore  Decimal      @db.Decimal(5, 2)
+  remarks          String?      @db.Text
+  approvedByUserId String       @db.Uuid
+  approvedDate     DateTime     @default(now()) @db.Timestamptz
+
+  candidate        EdpCandidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@map("edp_business_assessments")
+  @@schema("edp")
+}
+
+model EdpCertificate {
+  id               String       @id @default(uuid()) @db.Uuid
+  certificateCode  String       @unique @db.VarChar(50)
+  candidateId      String       @db.Uuid
+  qrCode           String       @unique @db.VarChar(100)
+  fileHashSha256   String       @db.Char(64)
+  digitalSignature String       @db.Text
+  pdfPublicUrl     String       @db.Text
+  issuedAt         DateTime     @default(now()) @db.Timestamptz
+  
+  createdAt        DateTime     @default(now()) @db.Timestamptz
+  createdBy        String       @db.Uuid
+  updatedAt        DateTime     @updatedAt @db.Timestamptz
+  updatedBy        String       @db.Uuid
+  deletedAt        DateTime?    @db.Timestamptz
+  deletedBy        String?      @db.Uuid
+  isDeleted        Boolean      @default(false)
+  recordVersion    Int          @default(1)
+
+  candidate        EdpCandidate @relation(fields: [candidateId], references: [id])
+
+  @@map("edp_certificates")
+  @@schema("edp")
+}
+
+model EdpDroneBooking {
+  id                String       @id @default(uuid()) @db.Uuid
+  bookingCode       String       @unique @db.VarChar(50)
+  candidateId       String       @db.Uuid
+  droneCompany      String       @db.VarChar(100)
+  dealerName        String       @db.VarChar(100)
+  droneModel        String       @db.VarChar(100)
+  quotationNumber   String       @db.VarChar(50)
+  totalPrice        Decimal      @db.Decimal(12, 2)
+  bookingAmount     Decimal      @db.Decimal(12, 2)
+  bookingExpiry     DateTime     @db.Date
+  paymentStatus     String       @default("PENDING") @db.VarChar(30)
+  bookingStatus     String       @default("BOOKED") @db.VarChar(30)
+  
+  createdAt         DateTime     @default(now()) @db.Timestamptz
+  createdBy         String       @db.Uuid
+  updatedAt         DateTime     @updatedAt @db.Timestamptz
+  updatedBy         String       @db.Uuid
+  deletedAt         DateTime?    @db.Timestamptz
+  deletedBy         String?      @db.Uuid
+  isDeleted         Boolean      @default(false)
+  recordVersion     Int          @default(1)
+
+  candidate         EdpCandidate @relation(fields: [candidateId], references: [id])
+  loans             EdpLoanApplication[]
+
+  @@map("edp_drone_bookings")
+  @@schema("edp")
+}
+
+model EdpLoanApplication {
+  id               String          @id @default(uuid()) @db.Uuid
+  applicationCode  String          @unique @db.VarChar(50)
+  candidateId      String          @db.Uuid
+  bookingId        String          @db.Uuid
+  bankName         String          @db.VarChar(150)
+  requestedAmount  Decimal         @db.Decimal(12, 2)
+  approvedAmount   Decimal?        @db.Decimal(12, 2)
+  status           String          @default("APPLIED") @db.VarChar(30)
+  sanctionLetterUrl String?        @db.Text
+  
+  createdAt        DateTime        @default(now()) @db.Timestamptz
+  createdBy        String          @db.Uuid
+  updatedAt        DateTime        @updatedAt @db.Timestamptz
+  updatedBy        String          @db.Uuid
+  deletedAt        DateTime?       @db.Timestamptz
+  deletedBy        String?         @db.Uuid
+  isDeleted        Boolean         @default(false)
+  recordVersion    Int             @default(1)
+
+  candidate        EdpCandidate    @relation(fields: [candidateId], references: [id])
+  booking          EdpDroneBooking @relation(fields: [bookingId], references: [id])
+
+  @@map("edp_loan_applications")
+  @@schema("edp")
+}
+
+model EdpGroundTraining {
+  id               String       @id @default(uuid()) @db.Uuid
+  candidateId      String       @db.Uuid
+  trainerUserId    String       @db.Uuid
+  trainingDate     DateTime     @db.Date
+  attemptNumber    Int          @default(1)
+  passed           Boolean      @default(false)
+  remarks          String?      @db.Text
+
+  candidate        EdpCandidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@map("edp_ground_trainings")
+  @@schema("edp")
+}
+
+model EdpPartnerActivation {
+  id                  String       @id @default(uuid()) @db.Uuid
+  partnerCode         String       @unique @db.VarChar(50)
+  candidateId         String       @unique @db.Uuid
+  isWorkshopPassed    Boolean      @default(false)
+  isCertificateIssued Boolean      @default(false)
+  isDroneBooked       Boolean      @default(false)
+  isLoanDisbursed     Boolean      @default(false)
+  isDroneDelivered    Boolean      @default(false)
+  isGroundTrained     Boolean      @default(false)
+  isAgreementSigned   Boolean      @default(false)
+  isAppTransferred    Boolean      @default(false)
+  status              String       @default("ACTIVATED") @db.VarChar(30)
+  
+  createdAt           DateTime     @default(now()) @db.Timestamptz
+  createdBy           String       @db.Uuid
+  updatedAt           DateTime     @updatedAt @db.Timestamptz
+  updatedBy           String       @db.Uuid
+  deletedAt           DateTime?    @db.Timestamptz
+  deletedBy           String?      @db.Uuid
+  isDeleted           Boolean      @default(false)
+  recordVersion       Int          @default(1)
+
+  candidate           EdpCandidate @relation(fields: [candidateId], references: [id])
+
+  @@map("edp_partner_activations")
+  @@schema("edp")
+}
+
+model EdpDashboardMetrics {
+  id                 String   @id @default(uuid()) @db.Uuid
+  districtId         String   @unique @db.Uuid
+  totalLeads         Int      @default(0)
+  totalRegistered    Int      @default(0)
+  totalPaid          Int      @default(0)
+  totalCertified     Int      @default(0)
+  totalPartners      Int      @default(0)
+  lastCalculatedAt   DateTime @default(now()) @db.Timestamptz
+
+  @@map("edp_dashboard_metrics")
+  @@schema("edp")
+}
+
+model EdpKpiSnapshot {
+  id               String   @id @default(uuid()) @db.Uuid
+  snapshotDate     DateTime @db.Date
+  districtId       String   @db.Uuid
+  totalLeads       Int      @default(0)
+  totalPaid        Int      @default(0)
+  totalWorkshops   Int      @default(0)
+  totalCertified   Int      @default(0)
+  totalLoans       Int      @default(0)
+  totalPartners    Int      @default(0)
+
+  @@map("edp_kpi_snapshots")
+  @@schema("edp")
+}
+
+model EdpActivityLog {
+  id               String       @id @default(uuid()) @db.Uuid
+  candidateId      String       @db.Uuid
+  actorUserId      String       @db.Uuid
+  activityType     String       @db.VarChar(100)
+  activityDetails  String       @db.Text
+  ipAddress        String?      @db.VarChar(45)
+  timestamp        DateTime     @default(now()) @db.Timestamptz
+
+  candidate        EdpCandidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@map("edp_activity_logs")
+  @@schema("edp")
+}
+
+// ----------------------------------------------------------------------------
+// SOIL TESTING OPERATIONS TABLES (schema: "soil")
+// ----------------------------------------------------------------------------
+enum SoilSampleStatus {
+  FARMER_REGISTERED
+  LAND_PARCEL_MAPPED
+  SAMPLE_COLLECTED
+  QR_BARCODE_ASSIGNED
+  IN_TRANSIT_TO_LAB
+  LAB_RECEIVED
+  TESTING_IN_PROGRESS
+  RESULT_ENTERED
+  CHEMIST_VERIFIED
+  QC_APPROVED
+  HEALTH_CARD_GENERATED
+  DELIVERED_TO_FARMER
+  ADVISORY_DISPATCHED
+  SAMPLE_REJECTED
+  RETEST_REQUESTED
+  RETEST_IN_PROGRESS
+}
+
+enum SoilParameterRating {
+  LOW
+  MEDIUM
+  OPTIMAL
+  HIGH
+  VERY_HIGH
+}
+
+enum SoilSamplePriority {
+  NORMAL
+  URGENT
+  GOVT_CAMPAIGN
+  RESEARCH
+}
+
+enum LabType {
+  GOVERNMENT_LAB
+  PRIVATE_ACCREDITED_LAB
+  AGRICULTURAL_UNIVERSITY_LAB
+  MOBILE_TESTING_VAN
+}
+
+model SoilFarmer {
+  id               String   @id @default(uuid()) @db.Uuid
+  farmerCode       String   @unique @db.VarChar(50)
+  fullName         String   @db.VarChar(150)
+  mobileNumber     String   @db.VarChar(15)
+  aadhaarHash      String   @db.Char(64)
+  districtId       String   @db.Uuid
+  talukaId         String   @db.Uuid
+  villageId        String   @db.Uuid
+  agridootUserId   String?  @db.Uuid
+
+  createdAt        DateTime @default(now()) @db.Timestamptz
+  createdBy        String   @db.Uuid
+  updatedAt        DateTime @updatedAt @db.Timestamptz
+  updatedBy        String   @db.Uuid
+  deletedAt        DateTime? @db.Timestamptz
+  deletedBy        String?  @db.Uuid
+  isDeleted        Boolean  @default(false)
+  recordVersion    Int      @default(1)
+
+  landParcels      SoilLandParcel[]
+  samples          SoilSample[]
+
+  @@map("soil_farmers")
+  @@schema("soil")
+}
+
+model SoilLandParcel {
+  id               String       @id @default(uuid()) @db.Uuid
+  parcelCode       String       @unique @db.VarChar(50)
+  farmerId         String       @db.Uuid
+  surveyNumber     String       @db.VarChar(50)
+  gatNumber        String?      @db.VarChar(50)
+  totalAreaAcres   Decimal      @db.Decimal(8, 2)
+  districtId       String       @db.Uuid
+  talukaId         String       @db.Uuid
+  villageId        String       @db.Uuid
+  gpsCenterLat     Float?
+  gpsCenterLng     Float?
+
+  createdAt        DateTime     @default(now()) @db.Timestamptz
+  createdBy        String       @db.Uuid
+  updatedAt        DateTime     @updatedAt @db.Timestamptz
+  updatedBy        String       @db.Uuid
+  deletedAt        DateTime?    @db.Timestamptz
+  deletedBy        String?      @db.Uuid
+  isDeleted        Boolean      @default(false)
+  recordVersion    Int          @default(1)
+
+  farmer           SoilFarmer   @relation(fields: [farmerId], references: [id])
+  samples          SoilSample[]
+
+  @@map("soil_land_parcels")
+  @@schema("soil")
+}
+
+model SoilLaboratory {
+  id               String   @id @default(uuid()) @db.Uuid
+  labCode          String   @unique @db.VarChar(50)
+  labName          String   @db.VarChar(200)
+  labType          LabType  @default(GOVERNMENT_LAB)
+  districtId       String   @db.Uuid
+  address          String   @db.Text
+  nablAccreditationNo String? @db.VarChar(100)
+  isOperational    Boolean  @default(true)
+
+  createdAt        DateTime @default(now()) @db.Timestamptz
+  createdBy        String   @db.Uuid
+  updatedAt        DateTime @updatedAt @db.Timestamptz
+  updatedBy        String   @db.Uuid
+  deletedAt        DateTime? @db.Timestamptz
+  deletedBy        String?  @db.Uuid
+  isDeleted        Boolean  @default(false)
+  recordVersion    Int      @default(1)
+
+  assignments      SoilSampleAssignment[]
+
+  @@map("soil_laboratories")
+  @@schema("soil")
+}
+
+model SoilSample {
+  id                 String             @id @default(uuid()) @db.Uuid
+  sampleCode         String             @unique @db.VarChar(50)
+  qrCode             String             @unique @db.VarChar(100)
+  barcodeNumber      String             @unique @db.VarChar(50)
+  farmerId           String             @db.Uuid
+  parcelId           String             @db.Uuid
+  agridootUserId     String             @db.Uuid
+  collectionDepthCm  Int                @default(15)
+  collectionLat      Float
+  collectionLng      Float
+  collectionTimestamp DateTime          @default(now()) @db.Timestamptz
+  priority           SoilSamplePriority @default(NORMAL)
+  status             SoilSampleStatus   @default(SAMPLE_COLLECTED)
+
+  createdAt          DateTime           @default(now()) @db.Timestamptz
+  createdBy          String             @db.Uuid
+  updatedAt          DateTime           @updatedAt @db.Timestamptz
+  updatedBy          String             @db.Uuid
+  deletedAt          DateTime?          @db.Timestamptz
+  deletedBy          String?            @db.Uuid
+  isDeleted          Boolean            @default(false)
+  recordVersion      Int                @default(1)
+
+  farmer             SoilFarmer         @relation(fields: [farmerId], references: [id])
+  landParcel         SoilLandParcel     @relation(fields: [parcelId], references: [id])
+  visits             SoilCollectionVisit[]
+  assignments        SoilSampleAssignment[]
+  custodyRecords     SoilChainOfCustody[]
+  timelines          SoilSampleTimeline[]
+  labTest            SoilLabTest?
+  qcReviews          SoilQcReview[]
+  healthCard         SoilHealthCard?
+  healthCardVersions SoilHealthCardVersion[]
+  recommendations    SoilCropRecommendation[]
+  tasks              SoilTask[]
+  notifications      SoilNotification[]
+  activityLogs       SoilActivityLog[]
+
+  @@map("soil_samples")
+  @@schema("soil")
+}
+
+model SoilCollectionVisit {
+  id                 String     @id @default(uuid()) @db.Uuid
+  sampleId           String     @db.Uuid
+  visitDate          DateTime   @default(now()) @db.Timestamptz
+  agridootUserId     String     @db.Uuid
+  gpsLatitude        Float
+  gpsLongitude       Float
+  collectionStatus   String     @db.VarChar(30)
+  remarks            String?    @db.Text
+  photoEvidenceUrl   String?    @db.Text
+
+  sample             SoilSample @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+
+  @@map("soil_collection_visits")
+  @@schema("soil")
+}
+
+model SoilSampleAssignment {
+  id                 String         @id @default(uuid()) @db.Uuid
+  sampleId           String         @db.Uuid
+  labId              String         @db.Uuid
+  assignedDate       DateTime       @default(now()) @db.Timestamptz
+  receivedDate       DateTime?      @db.Timestamptz
+  expectedCompletion DateTime?      @db.Date
+  currentLabStatus   String         @default("ASSIGNED") @db.VarChar(30)
+
+  sample             SoilSample     @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+  laboratory         SoilLaboratory @relation(fields: [labId], references: [id])
+
+  @@map("soil_sample_assignments")
+  @@schema("soil")
+}
+
+model SoilChainOfCustody {
+  id                 String     @id @default(uuid()) @db.Uuid
+  sampleId           String     @db.Uuid
+  collectedByUserId  String     @db.Uuid
+  transportedByUserId String?   @db.Uuid
+  receivedByUserId   String?    @db.Uuid
+  testedByUserId     String?    @db.Uuid
+  verifiedByUserId   String?    @db.Uuid
+  transferredAt      DateTime   @default(now()) @db.Timestamptz
+  remarks            String?    @db.Text
+
+  sample             SoilSample @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+
+  @@map("soil_chain_of_custody")
+  @@schema("soil")
+}
+
+model SoilSampleTimeline {
+  id             String           @id @default(uuid()) @db.Uuid
+  sampleId       String           @db.Uuid
+  previousStatus SoilSampleStatus?
+  newStatus      SoilSampleStatus
+  actorUserId    String           @db.Uuid
+  actionSummary  String           @db.VarChar(255)
+  remarks        String?          @db.Text
+  createdAt      DateTime         @default(now()) @db.Timestamptz
+
+  sample         SoilSample       @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+
+  @@map("soil_sample_timelines")
+  @@schema("soil")
+}
+
+model SoilLabTest {
+  id                 String              @id @default(uuid()) @db.Uuid
+  testCode           String              @unique @db.VarChar(50)
+  sampleId           String              @unique @db.Uuid
+  testedByUserId     String              @db.Uuid
+  verifiedByUserId   String?             @db.Uuid
+  testingDate        DateTime            @default(now()) @db.Timestamptz
+  
+  phValue            Decimal             @db.Decimal(4, 2)
+  phRating           SoilParameterRating
+  ecValue            Decimal             @db.Decimal(5, 2)
+  ecRating           SoilParameterRating
+  ocValue            Decimal             @db.Decimal(4, 2)
+  ocRating           SoilParameterRating
+  nitrogenValue      Decimal             @db.Decimal(7, 2)
+  nitrogenRating     SoilParameterRating
+  phosphorusValue    Decimal             @db.Decimal(7, 2)
+  phosphorusRating   SoilParameterRating
+  potassiumValue     Decimal             @db.Decimal(7, 2)
+  potassiumRating    SoilParameterRating
+  sulphurValue       Decimal             @db.Decimal(7, 2)
+  sulphurRating      SoilParameterRating
+  zincValue          Decimal             @db.Decimal(7, 2)
+  zincRating         SoilParameterRating
+  ironValue          Decimal             @db.Decimal(7, 2)
+  ironRating         SoilParameterRating
+  manganeseValue     Decimal             @db.Decimal(7, 2)
+  manganeseRating    SoilParameterRating
+  copperValue        Decimal             @db.Decimal(7, 2)
+  copperRating       SoilParameterRating
+  boronValue         Decimal             @db.Decimal(7, 2)
+  boronRating        SoilParameterRating
+
+  createdAt          DateTime            @default(now()) @db.Timestamptz
+  createdBy          String              @db.Uuid
+  updatedAt          DateTime            @updatedAt @db.Timestamptz
+  updatedBy          String              @db.Uuid
+  deletedAt          DateTime?           @db.Timestamptz
+  deletedBy          String?             @db.Uuid
+  isDeleted          Boolean             @default(false)
+  recordVersion      Int                 @default(1)
+
+  sample             SoilSample          @relation(fields: [sampleId], references: [id])
+
+  @@map("soil_lab_tests")
+  @@schema("soil")
+}
+
+model SoilQcReview {
+  id                 String     @id @default(uuid()) @db.Uuid
+  sampleId           String     @db.Uuid
+  qcStatus           String     @default("APPROVED") @db.VarChar(30)
+  reviewerUserId     String     @db.Uuid
+  remarks            String?    @db.Text
+  approvalDate       DateTime   @default(now()) @db.Timestamptz
+
+  sample             SoilSample @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+
+  @@map("soil_qc_reviews")
+  @@schema("soil")
+}
+
+model SoilHealthCard {
+  id               String       @id @default(uuid()) @db.Uuid
+  cardCode         String       @unique @db.VarChar(50)
+  sampleId         String       @unique @db.Uuid
+  fileHashSha256   String       @db.Char(64)
+  digitalSignature String       @db.Text
+  pdfPublicUrl     String       @db.Text
+  qrVerificationUrl String      @db.Text
+  issuedAt         DateTime     @default(now()) @db.Timestamptz
+  
+  createdAt        DateTime     @default(now()) @db.Timestamptz
+  createdBy        String       @db.Uuid
+  updatedAt        DateTime     @updatedAt @db.Timestamptz
+  updatedBy        String       @db.Uuid
+  deletedAt        DateTime?    @db.Timestamptz
+  deletedBy        String?      @db.Uuid
+  isDeleted        Boolean      @default(false)
+  recordVersion    Int          @default(1)
+
+  sample           SoilSample   @relation(fields: [sampleId], references: [id])
+
+  @@map("soil_health_cards")
+  @@schema("soil")
+}
+
+model SoilHealthCardVersion {
+  id               String       @id @default(uuid()) @db.Uuid
+  sampleId         String       @db.Uuid
+  versionNumber    Int          @default(1)
+  fileHashSha256   String       @db.Char(64)
+  pdfPublicUrl     String       @db.Text
+  reasonForRevision String      @db.VarChar(255)
+  generatedByUserId String      @db.Uuid
+  generatedDate    DateTime     @default(now()) @db.Timestamptz
+
+  sample           SoilSample   @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+
+  @@map("soil_health_card_versions")
+  @@schema("soil")
+}
+
+model SoilCropRecommendation {
+  id                  String     @id @default(uuid()) @db.Uuid
+  sampleId            String     @db.Uuid
+  targetCropName      String     @db.VarChar(100)
+  fertilizerSchedule  String     @db.Text
+  micronutrientPlan   String     @db.Text
+  organicAmendmentPlan String    @db.Text
+  irrigationAdvisory  String     @db.Text
+  soilImprovementPlan String     @db.Text
+  recommendedUreaKg   Decimal    @db.Decimal(6, 2)
+  recommendedSspKg    Decimal    @db.Decimal(6, 2)
+  recommendedMopKg    Decimal    @db.Decimal(6, 2)
+
+  createdAt           DateTime   @default(now()) @db.Timestamptz
+  createdBy           String     @db.Uuid
+
+  sample              SoilSample @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+
+  @@map("soil_crop_recommendations")
+  @@schema("soil")
+}
+
+model SoilTask {
+  id               String       @id @default(uuid()) @db.Uuid
+  taskCode         String       @unique @db.VarChar(50)
+  sampleId         String       @db.Uuid
+  assignedToRole   String       @db.VarChar(50)
+  title            String       @db.VarChar(200)
+  dueDate          DateTime     @db.Timestamptz
+  status           String       @default("PENDING") @db.VarChar(30)
+
+  sample           SoilSample   @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+
+  @@map("soil_tasks")
+  @@schema("soil")
+}
+
+model SoilNotification {
+  id               String              @id @default(uuid()) @db.Uuid
+  sampleId         String              @db.Uuid
+  channel          NotificationChannel
+  recipient        String              @db.VarChar(100)
+  messageText      String              @db.Text
+  status           String              @default("QUEUED") @db.VarChar(30)
+  deliveredAt      DateTime?           @db.Timestamptz
+
+  sample           SoilSample          @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+
+  @@map("soil_notifications")
+  @@schema("soil")
+}
+
+model SoilActivityLog {
+  id               String       @id @default(uuid()) @db.Uuid
+  sampleId         String       @db.Uuid
+  actorUserId      String       @db.Uuid
+  activityType     String       @db.VarChar(100)
+  activityDetails  String       @db.Text
+  timestamp        DateTime     @default(now()) @db.Timestamptz
+
+  sample           SoilSample   @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+
+  @@map("soil_activity_logs")
+  @@schema("soil")
+}
+
+model SoilDashboardMetrics {
+  id                   String   @id @default(uuid()) @db.Uuid
+  districtId           String   @unique @db.Uuid
+  totalCollectedToday  Int      @default(0)
+  totalInTransit       Int      @default(0)
+  totalInTesting       Int      @default(0)
+  totalPendingQc       Int      @default(0)
+  totalDelivered       Int      @default(0)
+  avgTurnaroundHours   Decimal  @db.Decimal(6, 2)
+  lastCalculatedAt     DateTime @default(now()) @db.Timestamptz
+
+  @@map("soil_dashboard_metrics")
+  @@schema("soil")
+}

@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: maha-agri-backend-deployment
+  namespace: maha-agri-production
+  labels:
+    app: maha-agri-backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: maha-agri-backend
+  template:
+    metadata:
+      labels:
+        app: maha-agri-backend
+    spec:
+      containers:
+      - name: backend
+        image: registry.mahaagri.gov.in/platform/backend:v1.4.0
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NODE_ENV
+          value: "production"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1024Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: maha-agri-backend-service
+  namespace: maha-agri-production
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 3000
+  selector:
+    app: maha-agri-backend

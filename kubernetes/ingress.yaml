@@ -1,0 +1,37 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: maha-agri-ingress
+  namespace: maha-agri-prod
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - mahaagri.gov.in
+        - api.mahaagri.gov.in
+      secretName: mahaagri-tls-cert
+  rules:
+    - host: mahaagri.gov.in
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: maha-agri-frontend-svc
+                port:
+                  number: 80
+    - host: api.mahaagri.gov.in
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: maha-agri-backend-svc
+                port:
+                  number: 4000

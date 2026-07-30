@@ -1,0 +1,48 @@
+name: MAHA-AGRI Enterprise CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  validate-database:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: maha_agri_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: AdminPassword123
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Phase 1 Database Scripts Validation
+        run: |
+          for f in database/phase1/*.sql; do
+            echo "Executing $f..."
+            PGPASSWORD=AdminPassword123 psql -h localhost -U postgres -d maha_agri_db -f "$f"
+          done
+
+  build-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: cd backend && npm ci
+      - run: cd backend && npm run build
+
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build

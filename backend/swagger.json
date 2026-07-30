@@ -1,0 +1,86 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MAHA-AGRI Government Digital Operations Platform API",
+    "description": "Enterprise OpenAPI 3.1 REST API Specification across 15 Domain Modules",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4000/api/v1",
+      "description": "Local Development Server"
+    },
+    {
+      "url": "https://api.mahaagri.gov.in/v1",
+      "description": "Production Government Gateway"
+    }
+  ],
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "summary": "User Authentication & JWT Issuance",
+        "tags": ["Identity"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mobileNumber": { "type": "string", "example": "9876543210" },
+                  "password": { "type": "string", "example": "Admin@123" }
+                },
+                "required": ["mobileNumber", "password"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authentication successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "accessToken": { "type": "string" },
+                        "refreshToken": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/master/divisions": {
+      "get": {
+        "summary": "Get Maharashtra Divisions",
+        "tags": ["Master Data"],
+        "responses": {
+          "200": { "description": "Divisions List" }
+        }
+      }
+    },
+    "/farmers": {
+      "get": {
+        "summary": "List Farmers",
+        "tags": ["Farmers"],
+        "responses": { "200": { "description": "Farmer list" } }
+      }
+    },
+    "/soil/samples": {
+      "get": {
+        "summary": "List Soil Samples",
+        "tags": ["Soil Testing"],
+        "responses": { "200": { "description": "Sample list" } }
+      }
+    }
+  }
+}

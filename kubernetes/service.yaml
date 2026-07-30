@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: maha-agri-backend-svc
+  namespace: maha-agri-prod
+spec:
+  type: ClusterIP
+  selector:
+    app: maha-agri-backend
+  ports:
+    - port: 4000
+      targetPort: 4000
+      name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: maha-agri-frontend-svc
+  namespace: maha-agri-prod
+spec:
+  type: ClusterIP
+  selector:
+    app: maha-agri-frontend
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http
