@@ -2339,6 +2339,74 @@ export const MahaAgridootFieldApp: React.FC = () => {
                     <span className={`text-[10px] ${textSecondary}`}>Step {regStep} of 4</span>
                   </div>
 
+                  {/* DEV TESTING TOOLKIT (OTP & PROFILE BYPASS) matching screenshot */}
+                  {IS_DEV && (
+                    <div className="bg-[#111827] rounded-2xl border border-amber-500/40 p-3 space-y-2 shadow-lg">
+                      <div className="flex items-center justify-between">
+                        <span className="font-black text-xs text-amber-300 flex items-center space-x-1.5 uppercase tracking-wider">
+                          <Zap className="w-4 h-4 text-amber-400 fill-amber-400 animate-pulse" />
+                          <span>DEV TESTING TOOLKIT (OTP &amp; PROFILE BYPASS)</span>
+                        </span>
+                        <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-black border border-amber-500/40">
+                          DEV BUILD ONLY
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRegMobileNumber('9812441088');
+                            setRegStep(4);
+                            setRegSuccessMsg('✅ Dev Bypass Active: Profile MH-DOT-0025 Loaded');
+                            setIsRegWizardOpen(true);
+                            setWizardSection(1);
+                            setPhase1FormData((prev: any) => ({ ...prev, registrationType: 'farmer' }));
+                            triggerToast('🌾 Farmer Dev Bypass Activated!');
+                          }}
+                          className="h-[38px] bg-emerald-950/80 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-extrabold flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-sm"
+                        >
+                          <UserCheck className="w-4 h-4 text-emerald-400" />
+                          <span>🌾 Farmer</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRegMobileNumber('9822114455');
+                            setRegStep(4);
+                            setRegSuccessMsg('✅ Dev Bypass Active: Entrepreneur Profile Loaded');
+                            setIsRegWizardOpen(true);
+                            setWizardSection(1);
+                            setPhase1FormData((prev: any) => ({ ...prev, registrationType: 'entrepreneur' }));
+                            triggerToast('🚜 Entrepreneur Dev Bypass Activated!');
+                          }}
+                          className="h-[38px] bg-amber-950/80 hover:bg-amber-900/80 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-extrabold flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-sm"
+                        >
+                          <Tractor className="w-4 h-4 text-amber-400" />
+                          <span>🚜 Entrepreneur</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRegMobileNumber('9812441088');
+                            setRegStep(4);
+                            setRegSuccessMsg('✅ Dev Bypass Active: Both Profiles Loaded');
+                            setIsRegWizardOpen(true);
+                            setWizardSection(1);
+                            setPhase1FormData((prev: any) => ({ ...prev, registrationType: 'both' }));
+                            triggerToast('👥 Both Dev Bypass Activated!');
+                          }}
+                          className="h-[38px] bg-purple-950/80 hover:bg-purple-900/80 text-purple-300 border border-purple-500/40 rounded-xl text-xs font-extrabold flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-sm"
+                        >
+                          <Users className="w-4 h-4 text-purple-400" />
+                          <span>👥 Both</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-4 gap-1 text-center text-[9px] font-bold py-1">
                     <div className={`p-2 rounded-xl border flex flex-col items-center justify-center space-y-1 ${regStep >= 1 ? 'bg-blue-600/20 text-blue-300 border-blue-500/40' : 'bg-slate-900 text-slate-500 border-slate-800'}`}>
                       <Smartphone className="w-4 h-4" />
@@ -2361,27 +2429,66 @@ export const MahaAgridootFieldApp: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex space-x-2 pt-1 text-xs">
-                    <input
-                      type="tel"
-                      maxLength={10}
-                      value={regMobileNumber}
-                      onChange={e => setRegMobileNumber(e.target.value)}
-                      placeholder="Enter 10-digit Mobile Number"
-                      className={`flex-1 ${subCardBg} border rounded-xl px-3 py-2 font-mono font-bold ${textPrimary} focus:outline-none focus:border-emerald-500`}
-                    />
-                    <button
-                      onClick={() => {
-                        if (!regMobileNumber) return;
-                        setRegStep(2);
-                        setRegSuccessMsg(`✅ OTP sent to +91 ${regMobileNumber}. Profile Verification Active.`);
-                        triggerToast('OTP Dispatched to Mobile!');
-                      }}
-                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-4 py-2 rounded-xl transition-all shrink-0"
-                    >
-                      VERIFY &amp; CONTINUE ➔
-                    </button>
-                  </div>
+                  {regStep === 4 ? (
+                    <div className="p-3.5 bg-emerald-950/40 border border-emerald-500/40 rounded-2xl space-y-2.5 animate-in fade-in">
+                      <div className="flex justify-between items-center">
+                        <span className="font-extrabold text-emerald-300 text-xs flex items-center space-x-1.5">
+                          <UserCheck className="w-4 h-4 text-emerald-400" />
+                          <span>Existing Profile Found!</span>
+                        </span>
+                        <span className="text-[10px] font-mono font-bold bg-emerald-900/80 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/40">
+                          ID: MH-DOT-0025
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-300 font-medium">
+                        Profile registered for <strong className="text-white font-bold">VIKAS PANBUDE</strong> (+91 {regMobileNumber || '9812441088'}).
+                      </p>
+
+                      <div className="flex space-x-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setIsViewCompleteProfileModalOpen(true)}
+                          className="flex-1 py-2.5 bg-[#182234] hover:bg-[#223046] border border-[#2A3952] text-slate-200 font-bold rounded-xl text-xs flex items-center justify-center space-x-1.5 cursor-pointer"
+                        >
+                          <Eye className="w-4 h-4 text-cyan-400" />
+                          <span>View Profile</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsRegWizardOpen(true);
+                            setWizardSection(1);
+                          }}
+                          className="flex-1 py-2.5 bg-[#059669] hover:bg-[#047857] text-white font-bold rounded-xl text-xs flex items-center justify-center space-x-1.5 cursor-pointer shadow-md"
+                        >
+                          <span>Field Activity ➔</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex space-x-2 pt-1 text-xs">
+                      <input
+                        type="tel"
+                        maxLength={10}
+                        value={regMobileNumber}
+                        onChange={e => setRegMobileNumber(e.target.value)}
+                        placeholder="Enter 10-digit Mobile Number"
+                        className={`flex-1 ${subCardBg} border rounded-xl px-3 py-2 font-mono font-bold ${textPrimary} focus:outline-none focus:border-emerald-500`}
+                      />
+                      <button
+                        onClick={() => {
+                          if (!regMobileNumber) return;
+                          setRegStep(2);
+                          setRegSuccessMsg(`✅ OTP sent to +91 ${regMobileNumber}. Profile Verification Active.`);
+                          triggerToast('OTP Dispatched to Mobile!');
+                        }}
+                        className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-4 py-2 rounded-xl transition-all shrink-0"
+                      >
+                        VERIFY &amp; CONTINUE ➔
+                      </button>
+                    </div>
+                  )}
 
                   {regSuccessMsg && (
                     <div className="p-2.5 bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs font-bold">
