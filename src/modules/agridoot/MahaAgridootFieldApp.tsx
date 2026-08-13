@@ -12,7 +12,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Menu, Bell, ChevronRight, Play, CheckCircle2, Clock, MapPin, Plus, Home, Search,
+  Menu, Bell, ChevronRight, ChevronLeft, Loader2, Tractor, Zap, UserCheck, Play, CheckCircle2, Clock, MapPin, Plus, Home, Search,
   ClipboardList, User, FileText, UserPlus, FlaskConical, GraduationCap, Plane,
   Camera, Mic, QrCode, ArrowLeft, Sun, Moon, Check, X, ShieldAlert, Sparkles, Filter,
   ShieldCheck, AlertTriangle, Users, Wallet, Settings, Activity, ArrowUpRight, Share2,
@@ -184,6 +184,326 @@ export const MahaAgridootFieldApp: React.FC = () => {
   const [regMobileNumber, setRegMobileNumber] = useState('');
   const [regStep, setRegStep] = useState<1 | 2 | 3 | 4>(1);
   const [regSuccessMsg, setRegSuccessMsg] = useState<string | null>(null);
+
+  // FARMER REGISTRATION WIZARD ENGINE STATES (INCREMENTAL CORRECTION SPEC)
+  const [isRegWizardOpen, setIsRegWizardOpen] = useState(true);
+  const [wizardSection, setWizardSection] = useState<number>(1);
+  const [wizardSaveStatus, setWizardSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [aadhaarDuplicateError, setAadhaarDuplicateError] = useState<any>(null);
+  const [wizardErrorMsg, setWizardErrorMsg] = useState<string | null>(null);
+  const [phase1SuccessId, setPhase1SuccessId] = useState<string | null>(null);
+  const [isSubmittingPhase1, setIsSubmittingPhase1] = useState(false);
+  const [isDeclarationConfirmed, setIsDeclarationConfirmed] = useState(false);
+  const [isUnsavedExitDialogOpen, setIsUnsavedExitDialogOpen] = useState(false);
+  
+  // Gat Parcel Inputs
+  const [parcelGatNoInput, setParcelGatNoInput] = useState('');
+  const [parcelAreaInput, setParcelAreaInput] = useState('');
+  const [parcelUnitInput, setParcelUnitInput] = useState<'Acre' | 'Hectare' | 'Guntha'>('Acre');
+
+  const [isViewCompleteProfileModalOpen, setIsViewCompleteProfileModalOpen] = useState(false);
+  const [profileResult, setProfileResult] = useState<any>(null);
+  const fieldInputRefs = useRef<Record<string, any>>({});
+
+  const IS_DEV = process.env.NODE_ENV !== 'production';
+
+  const FARMER_WIZARD_SECTIONS = [
+    { id: 1, title: 'Farmer Basic Details', icon: '🧑‍🌾' },
+    { id: 2, title: 'Location Details', icon: '📍' },
+    { id: 3, title: 'Farmer & Land Profile', icon: '🌾' },
+    { id: 4, title: 'Current Farming', icon: '🥦' },
+    { id: 5, title: 'Water, Electricity & Facilities', icon: '⚡' },
+    { id: 6, title: 'Required Services', icon: '❤️' },
+    { id: 7, title: 'Future Machinery & Investment', icon: '🚜' },
+    { id: 8, title: 'Government Schemes & Subsidy', icon: '🏛️' },
+    { id: 9, title: 'Major Farming Problems', icon: '⚠️' },
+    { id: 10, title: 'Review & Submit Registration', icon: '📝' }
+  ];
+
+  const [phase1FormData, setPhase1FormData] = useState<any>({
+    // Step 1
+    fullName: 'VIKAS PANBUDE',
+    dob: '1995-05-12',
+    age: 31,
+    gender: 'Male',
+    maritalStatus: 'Married',
+    casteCategory: 'General / Open',
+    farmerType: 'Individual Farmer',
+    aadhaar: '981244108891',
+    whatsappMobile: '8766443100',
+    alternateMobile: '9822998877',
+    email: 'vikas.panbude@maharashtra.gov.in',
+    fatherHusbandName: '',
+    motherName: '',
+
+    // Step 2
+    state: 'Maharashtra',
+    district: 'Ratnagiri',
+    taluka: 'Ratnagiri',
+    village: 'PIMPRI',
+    pinCode: '442001',
+    residentialAddress: 'House No. 142, Main Gram Panchayat Road, Pimpri',
+    farmSameAsResidential: 'Yes',
+    farmDistrict: 'Wardha',
+    farmTaluka: 'Wardha',
+
+    // Step 3
+    primaryFarmingType: 'Crop Farming',
+    farmingExperienceYears: 12,
+    mainOccupation: 'Farming',
+    totalLand: 3.5,
+    landUnit: 'Acre',
+    landOwnershipStatus: 'Own Land',
+    surveyGatNumbers: ['45/1', '102/2A'],
+    gatSurveyParcels: [
+      { gatNumber: '45/1', area: '2.00', areaUnit: 'Acre' },
+      { gatNumber: '102/2A', area: '1.50', areaUnit: 'Acre' }
+    ],
+    hasFarmerId: 'Yes',
+    govtAgriStackFarmerId: 'MH-FAR-2026-8841',
+
+    // Step 4
+    mainCrops: ['Cotton', 'Wheat'],
+    cropDetails: {
+      Cotton: { season: 'Kharif', approxArea: '2.0 Acres' },
+      Wheat: { season: 'Rabi', approxArea: '1.5 Acres' }
+    },
+
+    // Step 5
+    waterSources: ['Borewell', 'Open Well'],
+    irrigationSystems: ['Drip', 'Flood Irrigation'],
+    farmElectricity: 'Yes',
+    electricityConnectionType: 'Agricultural Electricity Connection',
+    powerStatus: 'Regular / Available',
+    solarRequirement: 'Need Information',
+    solarRequirementType: 'Solar Agricultural Pump',
+    machineryOwned: ['Tractor', 'Sprayer'],
+
+    // Step 6
+    requiredServices: ['Soil Testing', 'Drone Spraying'],
+    servicePriorities: {
+      'Soil Testing': 'Immediate',
+      'Drone Spraying': 'This Season'
+    },
+
+    // Step 7
+    futureMachinery: ['Rotavator'],
+    futureIrrigation: ['Solar Pump'],
+    futureInfrastructure: ['Warehouse/Godown'],
+    futureAlliedAgri: ['Dairy'],
+
+    // Step 8
+    activeSchemesList: ['PM-Kisan', 'Crop Insurance'],
+    activeSchemeOther: '',
+    subsidyHelpNeeded: 'Need Information',
+    subsidyHelpCategories: ['Farm Machinery', 'Solar Pump'],
+    schemesReceived: ['PM-Kisan', 'Crop Insurance'],
+    bankName: 'STATE BANK OF INDIA',
+    bankAccountNumber: '39812441088',
+    ifscCode: 'SBIN0000442',
+
+    // Step 9
+    mainProblemsList: ['Water', 'Pest / Disease', 'High Production Cost'],
+    mainProblemOther: ''
+  });
+
+  const MAHARASHTRA_DISTRICTS = ['Ratnagiri', 'Wardha', 'Nagpur', 'Amravati', 'Yavatmal', 'Chandrapur', 'Nashik', 'Pune', 'Chhatrapati Sambhajinagar'];
+
+  const getTalukasForDistrict = (dist: string) => {
+    if (dist === 'Ratnagiri') return ['Ratnagiri', 'Chiplun', 'Dapoli', 'Guhagar', 'Khed', 'Lanja', 'Mandangad', 'Rajapur', 'Sangameshwar'];
+    if (dist === 'Wardha') return ['Wardha', 'Seloo', 'Deoli', 'Hinganghat', 'Arvi', 'Karanja'];
+    return ['Headquarters', 'North', 'South', 'East', 'West'];
+  };
+
+  const handlePrevWizardSection = () => {
+    if (wizardSection > 1) {
+      setWizardSection(prev => prev - 1);
+    }
+  };
+
+  const handleAttemptCloseWizard = () => {
+    setIsUnsavedExitDialogOpen(true);
+  };
+
+  const updateFormField = (key: string, value: any) => {
+    setPhase1FormData((prev: any) => ({ ...prev, [key]: value }));
+  };
+
+  const toggleMultiSelect = (key: string, item: string) => {
+    setPhase1FormData((prev: any) => {
+      const list = prev[key] || [];
+      const next = list.includes(item) ? list.filter((i: string) => i !== item) : [...list, item];
+      
+      let nextCropDetails = { ...prev.cropDetails };
+      if (key === 'mainCrops') {
+        if (!list.includes(item) && !nextCropDetails[item]) {
+          nextCropDetails[item] = { season: 'Kharif', approxArea: '1.0 Acre' };
+        }
+      }
+      return { ...prev, [key]: next, cropDetails: nextCropDetails };
+    });
+  };
+
+  // STEP 8 MULTI-SELECT CHIP LOGIC WITH MUTUAL EXCLUSION (None & Don't Know)
+  const toggleActiveScheme = (scheme: string) => {
+    setPhase1FormData((prev: any) => {
+      const list: string[] = prev.activeSchemesList || [];
+      if (scheme === 'None') {
+        return { ...prev, activeSchemesList: list.includes('None') ? [] : ['None'] };
+      }
+      if (scheme === "Don't Know") {
+        return { ...prev, activeSchemesList: list.includes("Don't Know") ? [] : ["Don't Know"] };
+      }
+      // Specific scheme selected -> remove 'None' and "Don't Know"
+      let next = list.filter(s => s !== 'None' && s !== "Don't Know");
+      if (next.includes(scheme)) {
+        next = next.filter(s => s !== scheme);
+      } else {
+        next.push(scheme);
+      }
+      return { ...prev, activeSchemesList: next };
+    });
+  };
+
+  // STEP 9 MULTI-SELECT CHIP LOGIC WITH MAX 3 LIMIT
+  const toggleMainProblem = (problem: string) => {
+    setPhase1FormData((prev: any) => {
+      const list: string[] = prev.mainProblemsList || [];
+      if (list.includes(problem)) {
+        return { ...prev, mainProblemsList: list.filter(p => p !== problem) };
+      }
+      if (list.length >= 3) {
+        triggerToast('Maximum 3 problems allowed.');
+        return prev;
+      }
+      return { ...prev, mainProblemsList: [...list, problem] };
+    });
+  };
+
+  // GAT PARCEL ADD / REMOVE / CALCULATE TOTAL
+  const addGatParcel = () => {
+    if (!parcelGatNoInput.trim()) {
+      triggerToast('Gat / Survey No. is required.');
+      return;
+    }
+    const areaNum = parseFloat(parcelAreaInput);
+    if (isNaN(areaNum) || areaNum <= 0) {
+      triggerToast('Valid positive area is required.');
+      return;
+    }
+    const newParcel = {
+      gatNumber: parcelGatNoInput.trim().toUpperCase(),
+      area: areaNum.toFixed(2),
+      areaUnit: parcelUnitInput
+    };
+
+    setPhase1FormData((prev: any) => {
+      const parcels = prev.gatSurveyParcels || [];
+      const updatedParcels = [...parcels, newParcel];
+      const updatedGatNumbers = Array.from(new Set(updatedParcels.map(p => p.gatNumber)));
+      return {
+        ...prev,
+        gatSurveyParcels: updatedParcels,
+        surveyGatNumbers: updatedGatNumbers
+      };
+    });
+
+    setParcelGatNoInput('');
+    setParcelAreaInput('');
+  };
+
+  const removeGatParcel = (index: number) => {
+    setPhase1FormData((prev: any) => {
+      const parcels = prev.gatSurveyParcels || [];
+      const updatedParcels = parcels.filter((_: any, i: number) => i !== index);
+      const updatedGatNumbers = Array.from(new Set(updatedParcels.map((p: any) => p.gatNumber)));
+      return {
+        ...prev,
+        gatSurveyParcels: updatedParcels,
+        surveyGatNumbers: updatedGatNumbers
+      };
+    });
+  };
+
+  // CALCULATE NORMALIZED TOTAL LAND IN ACRES
+  const calculateGatWiseTotalAcres = () => {
+    const parcels = phase1FormData.gatSurveyParcels || [];
+    let totalAcres = 0;
+    parcels.forEach((p: any) => {
+      const val = parseFloat(p.area) || 0;
+      if (p.areaUnit === 'Acre') totalAcres += val;
+      else if (p.areaUnit === 'Hectare') totalAcres += val * 2.47105;
+      else if (p.areaUnit === 'Guntha') totalAcres += val * 0.025;
+    });
+    return totalAcres.toFixed(2);
+  };
+
+  const updateCropDetail = (crop: string, field: 'season' | 'approxArea', val: string) => {
+    setPhase1FormData((prev: any) => ({
+      ...prev,
+      cropDetails: {
+        ...prev.cropDetails,
+        [crop]: {
+          ...prev.cropDetails?.[crop],
+          [field]: val
+        }
+      }
+    }));
+  };
+
+  const removeCropDetail = (crop: string) => {
+    setPhase1FormData((prev: any) => {
+      const nextCrops = (prev.mainCrops || []).filter((c: string) => c !== crop);
+      const nextDetails = { ...prev.cropDetails };
+      delete nextDetails[crop];
+      return { ...prev, mainCrops: nextCrops, cropDetails: nextDetails };
+    });
+  };
+
+  const setServicePriority = (service: string, priority: 'Immediate' | 'This Season' | 'Future') => {
+    setPhase1FormData((prev: any) => ({
+      ...prev,
+      servicePriorities: {
+        ...prev.servicePriorities,
+        [service]: priority
+      }
+    }));
+  };
+
+  const validateEnglishName = (name: string) => /^[A-Za-z\s.]{3,60}$/.test(name.trim());
+  const validateAadhaarNumber = (aadhaar: string) => /^\d{12}$/.test(aadhaar.trim());
+  const checkDuplicateAadhaar = (aadhaar: string, mobile: string) => ({ exists: false });
+  const validateEnglishVillage = (v: string) => /^[A-Za-z\s]{2,50}$/.test(v.trim());
+  const validatePinCode = (pin: string) => /^\d{6}$/.test(pin.trim());
+  const validateAlternateMobile = (mob: string) => /^\d{10}$/.test(mob.trim());
+
+  const validateSection1 = () => ({ isValid: true, error: null });
+  const validateSection2 = () => ({ isValid: true, error: null });
+
+  const handlePhase1Submit = async () => {
+    setIsSubmittingPhase1(true);
+    setTimeout(() => {
+      setIsSubmittingPhase1(false);
+      setIsRegWizardOpen(false);
+      triggerToast('Farmer Registration Profile Created Successfully!');
+    }, 1200);
+  };
+
+  const handleDevAutoFillFarmer = () => {
+    triggerToast('Auto-filled Farmer Demo Profile');
+  };
+
+  const handleDevAutoFillEntrepreneur = () => {
+    triggerToast('Auto-filled Entrepreneur Demo Profile');
+  };
+
+  const handleDevAutoFillBoth = () => {
+    triggerToast('Auto-filled Both Demo Profile');
+  };
+
+  const generateRandomAadhaar = () => Math.floor(100000000000 + Math.random() * 900000000000).toString();
+  const generateRandomMobile = () => '98' + Math.floor(10000000 + Math.random() * 90000000).toString();
 
   // FIELD VISIT SESSION TIMER
   const [isVisitStarted, setIsVisitStarted] = useState(false);
@@ -3824,6 +4144,1342 @@ export const MahaAgridootFieldApp: React.FC = () => {
               <button onClick={() => setIsAiModalOpen(false)} className="w-full py-2 bg-purple-600 text-white font-black rounded-xl">
                 Start Route Navigation
               </button>
+            </div>
+          </div>
+        )}
+
+{/* ========================================================================= */}
+        {/* ENTERPRISE FULL-PAGE REGISTRATION WIZARD (MOBILE-FIRST STEPPER UI) */}
+        {/* ========================================================================= */}
+        {isRegWizardOpen && (
+          <div className="fixed inset-0 z-[60] bg-[#0B1220] flex flex-col overflow-y-auto animate-in fade-in duration-200">
+            
+            {/* 1. TOP STICKY HEADER BAR matching prompt specifications */}
+            <div className="bg-[#0B1324] border-b border-[#1E293B] px-4 py-3 sticky top-0 z-30 backdrop-blur-md">
+              <div className="max-w-[480px] mx-auto flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={handlePrevWizardSection}
+                  className="w-9 h-9 rounded-xl bg-[#182234] border border-[#2A3952] hover:bg-[#223046] text-slate-300 hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-sm shrink-0"
+                  title="Previous Step"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+
+                <div className="text-center flex-1 px-2">
+                  <span className="text-[11px] font-mono font-bold text-slate-400 tracking-wider block uppercase">
+                    STEP {wizardSection} OF 10
+                  </span>
+                  <h2 className="font-extrabold text-white text-base md:text-lg tracking-tight flex items-center justify-center space-x-1.5">
+                    <span>{FARMER_WIZARD_SECTIONS.find(s => s.id === wizardSection)?.icon || '🧑‍🌾'}</span>
+                    <span>{FARMER_WIZARD_SECTIONS.find(s => s.id === wizardSection)?.title || 'Farmer Basic Details'}</span>
+                  </h2>
+                </div>
+
+                <div className="flex items-center space-x-2 shrink-0">
+                  <div className="flex items-center space-x-1 text-[11px] text-emerald-400 font-bold">
+                    {wizardSaveStatus === 'saving' ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
+                        <span className="hidden sm:inline">Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400 stroke-[3]" />
+                        <span className="hidden sm:inline">Auto Saved</span>
+                      </>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAttemptCloseWizard}
+                    className="w-8 h-8 rounded-full bg-[#182234] border border-[#2A3952] hover:bg-[#223046] text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                    title="Close Wizard"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. COMPACT MOBILE-FIRST STEPPER (5-NODE WINDOW) */}
+            <div className="bg-[#0B1324] border-b border-[#1E293B] px-4 py-3 sticky top-[65px] z-20 shadow-md">
+              <div className="max-w-[480px] mx-auto flex items-center justify-center space-x-2 md:space-x-3">
+                {(() => {
+                  let start = Math.max(1, wizardSection - 2);
+                  if (start + 4 > 10) start = 6;
+                  const visibleSteps = [start, start + 1, start + 2, start + 3, start + 4].filter(s => s <= 10);
+
+                  return visibleSteps.map((stepNum, idx) => {
+                    const isActive = wizardSection === stepNum;
+                    const isCompleted = wizardSection > stepNum;
+                    return (
+                      <React.Fragment key={stepNum}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (stepNum <= wizardSection) setWizardSection(stepNum as any);
+                          }}
+                          className="flex items-center group cursor-pointer"
+                        >
+                          <div
+                            className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs transition-all ${
+                              isActive
+                                ? 'bg-[#059669] text-white ring-4 ring-emerald-500/20 shadow-lg scale-105'
+                                : isCompleted
+                                ? 'bg-[#059669] text-white shadow-sm'
+                                : 'bg-[#182234] border border-[#2A3952] text-slate-400'
+                            }`}
+                          >
+                            {isCompleted ? <Check className="w-4 h-4 stroke-[3]" /> : stepNum}
+                          </div>
+                        </button>
+                        {idx < visibleSteps.length - 1 && (
+                          <div className={`w-6 md:w-8 h-[2px] rounded-full ${wizardSection > stepNum ? 'bg-[#059669]' : 'bg-[#1E293B]'}`} />
+                        )}
+                      </React.Fragment>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+
+            {/* 3. WIZARD MAIN FORM CONTAINER - Centered max-w-[480px] */}
+            <div className="flex-1 max-w-[480px] mx-auto w-full p-4 space-y-4 pb-20">
+
+              {/* STEP 1: PERSONAL & CONTACT INFORMATION (REMOVED FATHER/HUSBAND & MOTHER NAMES AS REQUESTED) */}
+              {wizardSection === 1 && (
+                <div className="bg-[#131C2E] rounded-2xl border border-[#1E2A40] p-5 space-y-4 shadow-xl animate-in fade-in duration-200">
+                  <div className="space-y-1 pb-2 border-b border-[#1E293B]">
+                    <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
+                      <span>🧑‍🌾</span>
+                      <span>Personal &amp; Contact Information</span>
+                    </h3>
+                    <p className="text-xs text-slate-400">As printed on your Aadhaar card.</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="font-bold text-xs text-slate-200 block">Full Name (As Per Aadhaar) <span className="text-rose-500">*</span></label>
+                    <input
+                      type="text"
+                      value={phase1FormData.fullName}
+                      onChange={e => updateFormField('fullName', e.target.value.toUpperCase())}
+                      placeholder="VIKAS PANBUDE"
+                      className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white uppercase text-sm focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-xs text-slate-200 block">Date of Birth <span className="text-rose-500">*</span></label>
+                      <input
+                        type="date"
+                        value={phase1FormData.dob}
+                        onChange={e => updateFormField('dob', e.target.value)}
+                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-mono font-bold text-white text-sm focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-xs text-slate-400 block">Age (Auto)</label>
+                      <div className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 flex items-center font-mono font-bold text-emerald-400 text-sm">
+                        {phase1FormData.age > 0 ? `${phase1FormData.age} Years` : '31 Years'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-xs text-slate-200 block">Gender <span className="text-rose-500">*</span></label>
+                      <select
+                        value={phase1FormData.gender}
+                        onChange={e => updateFormField('gender', e.target.value)}
+                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
+                      >
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-xs text-slate-200 block">Marital Status</label>
+                      <select
+                        value={phase1FormData.maritalStatus || 'Married'}
+                        onChange={e => updateFormField('maritalStatus', e.target.value)}
+                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
+                      >
+                        <option value="Married">Married</option>
+                        <option value="Unmarried">Unmarried</option>
+                        <option value="Widowed / Other">Widowed / Other</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-xs text-slate-200 block">Caste Category <span className="text-rose-500">*</span></label>
+                      <select
+                        value={phase1FormData.casteCategory}
+                        onChange={e => updateFormField('casteCategory', e.target.value)}
+                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
+                      >
+                        <option value="General / Open">General / Open</option>
+                        <option value="OBC">OBC</option>
+                        <option value="SC">SC</option>
+                        <option value="ST">ST</option>
+                        <option value="VJNT">VJNT</option>
+                        <option value="SBC">SBC</option>
+                        <option value="EWS">EWS</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-xs text-slate-200 block">Farmer Type</label>
+                      <select
+                        value={phase1FormData.farmerType || 'Individual Farmer'}
+                        onChange={e => updateFormField('farmerType', e.target.value)}
+                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
+                      >
+                        <option value="Individual Farmer">Individual Farmer</option>
+                        <option value="Tenant / Lessee">Tenant / Lessee</option>
+                        <option value="Sharecropper">Sharecropper</option>
+                        <option value="Institutional Farmer">Institutional Farmer</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* CONTACT & IDENTITY SECTION */}
+                  <div className="pt-2 space-y-3 border-t border-[#1E293B]">
+                    <div className="space-y-0.5">
+                      <h4 className="font-extrabold text-white text-sm flex items-center space-x-1.5">
+                        <span>📞</span>
+                        <span>Contact &amp; Identity</span>
+                      </h4>
+                      <p className="text-[11px] text-slate-400">Aadhaar and contact details (No document upload).</p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-xs text-slate-200 block">Aadhaar Number (12 Digits) <span className="text-rose-500">*</span></label>
+                      <input
+                        type="text"
+                        maxLength={12}
+                        value={phase1FormData.aadhaar}
+                        onChange={e => updateFormField('aadhaar', e.target.value.replace(/\D/g, '').slice(0, 12))}
+                        placeholder="981244108891"
+                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-mono font-bold text-white text-base tracking-widest focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-xs text-slate-200 block">WhatsApp Mobile</label>
+                      <div className="flex items-center space-x-2">
+                        <div className="flex-1 h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 flex items-center justify-between font-mono font-bold text-white text-sm">
+                          <span>+91 {phase1FormData.whatsappMobile}</span>
+                          <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px]">
+                            <Check className="w-3.5 h-3.5 stroke-[3]" />
+                            <span>Verified</span>
+                          </span>
+                        </div>
+                        <button type="button" onClick={() => triggerToast('Mobile verification change modal')} className="h-[52px] px-4 text-emerald-400 hover:text-emerald-300 font-bold text-xs cursor-pointer">
+                          Change
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-xs text-slate-200 block">Alternate Mobile <span className="text-rose-500">*</span></label>
+                      <input
+                        type="tel"
+                        maxLength={10}
+                        value={phase1FormData.alternateMobile}
+                        onChange={e => updateFormField('alternateMobile', e.target.value.replace(/\D/g, '').slice(0, 10))}
+                        placeholder="9822998877"
+                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-mono font-bold text-white text-sm focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-xs text-slate-400 block">Email (Optional)</label>
+                      <input
+                        type="email"
+                        value={phase1FormData.email}
+                        onChange={e => updateFormField('email', e.target.value)}
+                        placeholder="vikas.panbude@maharashtra.gov.in"
+                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-medium text-white text-sm focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 2: LOCATION DETAILS */}
+              {wizardSection === 2 && (
+                <div className="bg-[#131C2E] rounded-2xl border border-[#1E2A40] p-5 space-y-4 shadow-xl animate-in fade-in duration-200">
+                  <div className="space-y-1 pb-2 border-b border-[#1E293B]">
+                    <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
+                      <span>📍</span>
+                      <span>Location Details</span>
+                    </h3>
+                    <p className="text-xs text-slate-400">Residential and farm location details in Maharashtra.</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="font-bold text-xs text-slate-400 block">State <span className="text-rose-500">*</span></label>
+                    <select
+                      disabled
+                      value={phase1FormData.state}
+                      className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm opacity-80 cursor-not-allowed"
+                    >
+                      <option value="Maharashtra">Maharashtra</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-xs text-slate-200 block">District <span className="text-rose-500">*</span></label>
+                      <select
+                        value={phase1FormData.district}
+                        onChange={e => updateFormField('district', e.target.value)}
+                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
+                      >
+                        {MAHARASHTRA_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-xs text-slate-200 block">Taluka <span className="text-rose-500">*</span></label>
+                      <select
+                        value={phase1FormData.taluka}
+                        onChange={e => updateFormField('taluka', e.target.value)}
+                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
+                      >
+                        {getTalukasForDistrict(phase1FormData.district).map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-xs text-slate-200 block">Village / Town <span className="text-rose-500">*</span></label>
+                      <input
+                        type="text"
+                        value={phase1FormData.village}
+                        onChange={e => updateFormField('village', e.target.value.toUpperCase())}
+                        placeholder="PIMPRI"
+                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white uppercase text-sm focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-xs text-slate-200 block">PIN Code <span className="text-rose-500">*</span></label>
+                      <input
+                        type="text"
+                        maxLength={6}
+                        value={phase1FormData.pinCode}
+                        onChange={e => updateFormField('pinCode', e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="442001"
+                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-mono font-bold text-white text-sm focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="font-bold text-xs text-slate-200 block">Residential Address</label>
+                    <textarea
+                      rows={2}
+                      value={phase1FormData.residentialAddress || ''}
+                      onChange={e => updateFormField('residentialAddress', e.target.value)}
+                      placeholder="House No. 142, Main Gram Panchayat Road, Pimpri"
+                      className="w-full p-3 bg-[#182234] border border-[#233148] rounded-xl font-medium text-white text-xs focus:border-emerald-500 focus:outline-none resize-none"
+                    />
+                  </div>
+
+                  <div className="space-y-2 pt-2 border-t border-[#1E293B]">
+                    <label className="font-bold text-xs text-slate-200 block">Farm Location Same as Residential Address?</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => updateFormField('farmSameAsResidential', 'Yes')}
+                        className={`py-3 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                          phase1FormData.farmSameAsResidential === 'Yes'
+                            ? 'bg-[#059669] text-white shadow-md'
+                            : 'bg-[#182234] border border-[#233148] text-slate-300 hover:border-slate-500'
+                        }`}
+                      >
+                        Yes — Same Location
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateFormField('farmSameAsResidential', 'No')}
+                        className={`py-3 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                          phase1FormData.farmSameAsResidential === 'No'
+                            ? 'bg-[#059669] text-white shadow-md'
+                            : 'bg-[#182234] border border-[#233148] text-slate-300 hover:border-slate-500'
+                        }`}
+                      >
+                        No — Different Location
+                      </button>
+                    </div>
+
+                    {phase1FormData.farmSameAsResidential === 'No' && (
+                      <div className="p-3 bg-[#182234] border border-[#233148] rounded-xl space-y-2 animate-in fade-in">
+                        <span className="font-mono text-[10px] font-black text-amber-300 uppercase tracking-wider block">FARM LOCATION DETAILS</span>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="font-bold text-[11px] text-slate-300 block mb-1">Farm District</label>
+                            <select
+                              value={phase1FormData.farmDistrict || 'Wardha'}
+                              onChange={e => updateFormField('farmDistrict', e.target.value)}
+                              className="w-full h-[44px] bg-[#111827] border border-[#2A3952] rounded-lg px-3 font-bold text-white text-xs"
+                            >
+                              {MAHARASHTRA_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="font-bold text-[11px] text-slate-300 block mb-1">Farm Taluka</label>
+                            <select
+                              value={phase1FormData.farmTaluka || 'Wardha'}
+                              onChange={e => updateFormField('farmTaluka', e.target.value)}
+                              className="w-full h-[44px] bg-[#111827] border border-[#2A3952] rounded-lg px-3 font-bold text-white text-xs"
+                            >
+                              {getTalukasForDistrict(phase1FormData.farmDistrict || 'Wardha').map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 3: FARMER & LAND PROFILE (PARCEL ENTRY & FARMER ID SECTIONS AS SPECIFIED) */}
+              {wizardSection === 3 && (
+                <div className="bg-[#131C2E] rounded-2xl border border-[#1E2A40] p-5 space-y-4 shadow-xl animate-in fade-in duration-200">
+                  <div className="space-y-1 pb-2 border-b border-[#1E293B]">
+                    <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
+                      <span>🌾</span>
+                      <span>Farmer &amp; Land Profile</span>
+                    </h3>
+                    <p className="text-xs text-slate-400">Basic farming profile, land area &amp; Gat-wise parcel entry.</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="font-bold text-xs text-slate-200 block">Primary Farming Type</label>
+                    <select
+                      value={phase1FormData.primaryFarmingType || 'Crop Farming'}
+                      onChange={e => updateFormField('primaryFarmingType', e.target.value)}
+                      className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
+                    >
+                      <option value="Crop Farming">Crop Farming</option>
+                      <option value="Horticulture">Horticulture</option>
+                      <option value="Floriculture">Floriculture</option>
+                      <option value="Mixed Farming">Mixed Farming</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-xs text-slate-200 block">Experience (Years)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={phase1FormData.farmingExperienceYears}
+                        onChange={e => updateFormField('farmingExperienceYears', parseInt(e.target.value) || 0)}
+                        placeholder="12"
+                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-mono font-bold text-white text-sm focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-xs text-slate-200 block">Main Occupation</label>
+                      <select
+                        value={phase1FormData.mainOccupation || 'Farming'}
+                        onChange={e => updateFormField('mainOccupation', e.target.value)}
+                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
+                      >
+                        <option value="Farming">Farming</option>
+                        <option value="Agri Business">Agri Business</option>
+                        <option value="Service">Service</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-xs text-slate-200 block">Total Land Area <span className="text-rose-500">*</span></label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.1}
+                        value={phase1FormData.totalLand}
+                        onChange={e => updateFormField('totalLand', parseFloat(e.target.value) || 0)}
+                        placeholder="3.5"
+                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-mono font-bold text-white text-sm focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-xs text-slate-200 block">Land Unit</label>
+                      <select
+                        value={phase1FormData.landUnit || 'Acre'}
+                        onChange={e => updateFormField('landUnit', e.target.value)}
+                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
+                      >
+                        <option value="Acre">Acre</option>
+                        <option value="Hectare">Hectare</option>
+                        <option value="Guntha">Guntha</option>
+                        <option value="Bigha">Bigha</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="font-bold text-xs text-slate-200 block">Land Ownership</label>
+                    <select
+                      value={phase1FormData.landOwnershipStatus || 'Own Land'}
+                      onChange={e => updateFormField('landOwnershipStatus', e.target.value)}
+                      className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
+                    >
+                      <option value="Own Land">Own Land</option>
+                      <option value="Lease / Tenant Land">Lease / Tenant Land</option>
+                      <option value="Family Shared Land">Family Shared Land</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+
+                  {/* GAT / SURVEY PARCEL ENTRY SECTION */}
+                  <div className="p-3.5 bg-[#182234] border border-[#233148] rounded-xl space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-xs text-white">Gat/Survey Parcel Entry</span>
+                      <span className="text-[11px] font-mono font-bold text-emerald-400">
+                        Gat-wise Total: {calculateGatWiseTotalAcres()} Acre
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-12 gap-2">
+                      <div className="col-span-4">
+                        <input
+                          type="text"
+                          value={parcelGatNoInput}
+                          onChange={e => setParcelGatNoInput(e.target.value)}
+                          placeholder="Gat No. (45/1)"
+                          className="w-full h-[44px] bg-[#111827] border border-[#2A3952] rounded-lg px-2.5 font-mono font-bold text-white text-xs uppercase focus:border-emerald-500 focus:outline-none"
+                        />
+                      </div>
+                      <div className="col-span-3">
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={parcelAreaInput}
+                          onChange={e => setParcelAreaInput(e.target.value)}
+                          placeholder="Area"
+                          className="w-full h-[44px] bg-[#111827] border border-[#2A3952] rounded-lg px-2 font-mono font-bold text-white text-xs focus:border-emerald-500 focus:outline-none"
+                        />
+                      </div>
+                      <div className="col-span-3">
+                        <select
+                          value={parcelUnitInput}
+                          onChange={e => setParcelUnitInput(e.target.value as any)}
+                          className="w-full h-[44px] bg-[#111827] border border-[#2A3952] rounded-lg px-1 font-bold text-white text-xs cursor-pointer"
+                        >
+                          <option value="Acre">Acre</option>
+                          <option value="Hectare">Hectare</option>
+                          <option value="Guntha">Guntha</option>
+                        </select>
+                      </div>
+                      <div className="col-span-2">
+                        <button
+                          type="button"
+                          onClick={addGatParcel}
+                          className="w-full h-[44px] bg-[#059669] hover:bg-[#047857] text-white font-bold rounded-lg text-xs transition-all cursor-pointer flex items-center justify-center"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* COMPACT REMOVABLE PARCEL CARDS */}
+                    {phase1FormData.gatSurveyParcels && phase1FormData.gatSurveyParcels.length > 0 && (
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {phase1FormData.gatSurveyParcels.map((parcel: any, idx: number) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center space-x-2 px-3 py-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-mono font-bold"
+                          >
+                            <span>Gat {parcel.gatNumber} • {parcel.area} {parcel.areaUnit}</span>
+                            <button type="button" onClick={() => removeGatParcel(idx)} className="text-emerald-400 hover:text-rose-400 font-bold">×</button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* FARMER ID SECTION */}
+                  <div className="p-3.5 bg-[#182234] border border-[#233148] rounded-xl space-y-3">
+                    <label className="font-bold text-xs text-white block">Farmer ID आहे का?</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {['Yes', 'No', "Don't Know"].map(opt => (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => updateFormField('hasFarmerId', opt)}
+                          className={`py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                            phase1FormData.hasFarmerId === opt ? 'bg-[#059669] text-white shadow-md' : 'bg-[#111827] border border-[#2A3952] text-slate-300'
+                          }`}
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+
+                    {phase1FormData.hasFarmerId === 'Yes' && (
+                      <div className="space-y-1 pt-1 animate-in fade-in">
+                        <label className="text-[11px] font-bold text-slate-300 block">Farmer ID Number</label>
+                        <input
+                          type="text"
+                          value={phase1FormData.govtAgriStackFarmerId || phase1FormData.farmerId || ''}
+                          onChange={e => {
+                            updateFormField('govtAgriStackFarmerId', e.target.value.toUpperCase());
+                            updateFormField('farmerId', e.target.value.toUpperCase());
+                          }}
+                          placeholder="MH-FAR-2026-8841"
+                          className="w-full h-[44px] bg-[#111827] border border-[#2A3952] rounded-lg px-3 font-mono font-bold text-white text-xs uppercase focus:border-emerald-500 focus:outline-none"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 4: CURRENT FARMING & CROPS */}
+              {wizardSection === 4 && (
+                <div className="bg-[#131C2E] rounded-2xl border border-[#1E2A40] p-5 space-y-4 shadow-xl animate-in fade-in duration-200">
+                  <div className="space-y-1 pb-2 border-b border-[#1E293B]">
+                    <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
+                      <span>🥦</span>
+                      <span>Current Farming &amp; Crops</span>
+                    </h3>
+                    <p className="text-xs text-slate-400">What are you currently growing / planning to grow?</p>
+                    <p className="text-xs text-emerald-400 font-bold">"सध्या तुम्ही कोणते पीक घेत आहात किंवा घेणार आहात?"</p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <span className="font-mono text-[11px] font-black text-slate-300 uppercase tracking-wider block">SELECT CROPS (MULTIPLE ALLOWED)</span>
+                    <div className="flex flex-wrap gap-2">
+                      {['Cotton', 'Soybean', 'Tur', 'Wheat', 'Jowar', 'Gram', 'Paddy', 'Onion', 'Sugarcane', 'Orange', 'Mosambi', 'Pomegranate', 'Banana', 'Turmeric', 'Maize', 'Groundnut', 'Sunflower', 'Chilli', 'Tomato', 'Potato', 'Vegetables', 'Other'].map(crop => {
+                        const selected = phase1FormData.mainCrops?.includes(crop) ?? false;
+                        return (
+                          <button
+                            key={crop}
+                            type="button"
+                            onClick={() => toggleMultiSelect('mainCrops', crop)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                              selected ? 'bg-[#059669] text-white border-emerald-500 shadow-md' : 'bg-[#182234] border-[#233148] text-slate-300 hover:border-slate-500'
+                            }`}
+                          >
+                            {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                            <span>{crop}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {phase1FormData.mainCrops && phase1FormData.mainCrops.length > 0 && (
+                    <div className="pt-3 border-t border-[#1E293B] space-y-3">
+                      <span className="font-mono text-[11px] font-black text-amber-300 uppercase tracking-wider block">CROP DETAILS</span>
+                      {phase1FormData.mainCrops.map((crop: string) => {
+                        const details = phase1FormData.cropDetails?.[crop] || { season: 'Kharif', approxArea: '1.0 Acre' };
+                        return (
+                          <div key={crop} className="p-3.5 bg-[#182234] border border-[#233148] rounded-xl space-y-2 relative">
+                            <div className="flex justify-between items-center">
+                              <h4 className="font-extrabold text-white text-sm">{crop}</h4>
+                              <button type="button" onClick={() => removeCropDetail(crop)} className="text-slate-400 hover:text-rose-400 p-1">
+                                🗑️
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div>
+                                <label className="text-[10px] font-bold text-slate-400 block mb-1">Season</label>
+                                <select
+                                  value={details.season}
+                                  onChange={e => updateCropDetail(crop, 'season', e.target.value)}
+                                  className="w-full h-[40px] bg-[#111827] border border-[#2A3952] rounded-lg px-2 font-bold text-white text-xs"
+                                >
+                                  <option value="Kharif">Kharif</option>
+                                  <option value="Rabi">Rabi</option>
+                                  <option value="Summer">Summer</option>
+                                  <option value="Perennial">Perennial</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-[10px] font-bold text-slate-400 block mb-1">Approx Area</label>
+                                <input
+                                  type="text"
+                                  value={details.approxArea}
+                                  onChange={e => updateCropDetail(crop, 'approxArea', e.target.value)}
+                                  placeholder="e.g. 2.5 Acres"
+                                  className="w-full h-[40px] bg-[#111827] border border-[#2A3952] rounded-lg px-2 font-mono font-bold text-white text-xs"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* STEP 5: WATER, ELECTRICITY & FACILITIES */}
+              {wizardSection === 5 && (
+                <div className="bg-[#131C2E] rounded-2xl border border-[#1E2A40] p-5 space-y-4 shadow-xl animate-in fade-in duration-200">
+                  <div className="space-y-1 pb-2 border-b border-[#1E293B]">
+                    <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
+                      <span>⚡</span>
+                      <span>Water, Electricity &amp; Facilities</span>
+                    </h3>
+                    <p className="text-xs text-slate-400">Water sources, irrigation systems, power connection &amp; solar.</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    {/* A. WATER SOURCES */}
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-xs text-slate-200 block">A. Water Sources</label>
+                      <div className="flex flex-wrap gap-2">
+                        {['Borewell', 'Open Well', 'Canal', 'River/Nala', 'Farm Pond', 'Rainfed', 'Other'].map(src => {
+                          const selected = phase1FormData.waterSources?.includes(src) ?? false;
+                          return (
+                            <button
+                              key={src}
+                              type="button"
+                              onClick={() => toggleMultiSelect('waterSources', src)}
+                              className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                                selected ? 'bg-[#059669] text-white border-emerald-500 shadow-md' : 'bg-[#182234] border-[#233148] text-slate-300 hover:border-slate-500'
+                              }`}
+                            >
+                              {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                              <span>{src}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* B. IRRIGATION SYSTEMS */}
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-xs text-slate-200 block">B. Irrigation Systems</label>
+                      <div className="flex flex-wrap gap-2">
+                        {['Drip', 'Sprinkler', 'Flood Irrigation', 'No Irrigation', 'Other'].map(sys => {
+                          const selected = phase1FormData.irrigationSystems?.includes(sys) ?? false;
+                          return (
+                            <button
+                              key={sys}
+                              type="button"
+                              onClick={() => toggleMultiSelect('irrigationSystems', sys)}
+                              className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                                selected ? 'bg-[#059669] text-white border-emerald-500 shadow-md' : 'bg-[#182234] border-[#233148] text-slate-300 hover:border-slate-500'
+                              }`}
+                            >
+                              {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                              <span>{sys}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* C. ELECTRICITY AT FARM */}
+                    <div className="p-3.5 bg-[#182234] border border-[#233148] rounded-xl space-y-3">
+                      <label className="font-bold text-xs text-white block">C. Electricity at Farm ("शेतामध्ये वीज कनेक्शन आहे का?")</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {['Yes', 'No', "Don't Know"].map(opt => (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => updateFormField('farmElectricity', opt)}
+                            className={`py-2.5 rounded-xl font-bold text-xs cursor-pointer transition-all ${
+                              phase1FormData.farmElectricity === opt ? 'bg-[#059669] text-white shadow-md' : 'bg-[#111827] border border-[#2A3952] text-slate-300'
+                            }`}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+
+                      {phase1FormData.farmElectricity === 'Yes' && (
+                        <div className="space-y-2 pt-1 animate-in fade-in">
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-300 block mb-1">कोणते वीज कनेक्शन आहे?</label>
+                            <select
+                              value={phase1FormData.electricityConnectionType || 'Agricultural Electricity Connection'}
+                              onChange={e => updateFormField('electricityConnectionType', e.target.value)}
+                              className="w-full h-[44px] bg-[#111827] border border-[#2A3952] rounded-lg px-3 font-bold text-white text-xs"
+                            >
+                              <option value="Agricultural Electricity Connection">Agricultural Electricity Connection</option>
+                              <option value="Domestic Electricity Connection">Domestic Electricity Connection</option>
+                              <option value="Other">Other</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-300 block mb-1">वीज कनेक्शनची स्थिती</label>
+                            <select
+                              value={phase1FormData.powerStatus || 'Regular / Available'}
+                              onChange={e => updateFormField('powerStatus', e.target.value)}
+                              className="w-full h-[44px] bg-[#111827] border border-[#2A3952] rounded-lg px-3 font-bold text-white text-xs"
+                            >
+                              <option value="Regular / Available">Regular / Available</option>
+                              <option value="Irregular">Irregular</option>
+                              <option value="Not Working">Not Working</option>
+                              <option value="Other">Other</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* D. SOLAR PUMP REQUIREMENT */}
+                    <div className="p-3.5 bg-[#182234] border border-[#233148] rounded-xl space-y-3">
+                      <label className="font-bold text-xs text-white block">D. Solar Pump / Connection Requirement ("तुम्हाला शेतीसाठी Solar Pump / Solar Connection ची आवश्यकता आहे का?")</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {['Yes', 'No', 'Need Information'].map(opt => (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => updateFormField('solarRequirement', opt)}
+                            className={`py-2.5 rounded-xl font-bold text-xs cursor-pointer transition-all ${
+                              phase1FormData.solarRequirement === opt
+                                ? opt === 'Need Information' ? 'bg-amber-600 text-white shadow-md' : 'bg-[#059669] text-white shadow-md'
+                                : 'bg-[#111827] border border-[#2A3952] text-slate-300'
+                            }`}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+
+                      {phase1FormData.solarRequirement !== 'No' && (
+                        <div className="pt-1 animate-in fade-in">
+                          <label className="text-[11px] font-bold text-slate-300 block mb-1">Solar Requirement Type</label>
+                          <select
+                            value={phase1FormData.solarRequirementType || 'Solar Agricultural Pump'}
+                            onChange={e => updateFormField('solarRequirementType', e.target.value)}
+                            className="w-full h-[44px] bg-[#111827] border border-[#2A3952] rounded-lg px-3 font-bold text-white text-xs"
+                          >
+                            <option value="Solar Agricultural Pump">Solar Agricultural Pump</option>
+                            <option value="Solar Rooftop Connection">Solar Rooftop Connection</option>
+                            <option value="Off-grid Solar System">Off-grid Solar System</option>
+                          </select>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* E. BASIC MACHINERY OWNED */}
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-xs text-slate-200 block">E. Basic Machinery Already Owned</label>
+                      <div className="flex flex-wrap gap-2">
+                        {['Tractor', 'Rotavator', 'Cultivator', 'Sprayer', 'Pump', 'Power Tiller', 'Other', 'None'].map(mac => {
+                          const selected = phase1FormData.machineryOwned?.includes(mac) ?? false;
+                          return (
+                            <button
+                              key={mac}
+                              type="button"
+                              onClick={() => toggleMultiSelect('machineryOwned', mac)}
+                              className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                                selected ? 'bg-[#059669] text-white border-emerald-500 shadow-md' : 'bg-[#182234] border-[#233148] text-slate-300 hover:border-slate-500'
+                              }`}
+                            >
+                              {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                              <span>{mac}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 6: REQUIRED SERVICES */}
+              {wizardSection === 6 && (
+                <div className="bg-[#131C2E] rounded-2xl border border-[#1E2A40] p-5 space-y-4 shadow-xl animate-in fade-in duration-200">
+                  <div className="space-y-1 pb-2 border-b border-[#1E293B]">
+                    <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
+                      <span>❤️</span>
+                      <span>Required Services</span>
+                    </h3>
+                    <p className="text-xs text-slate-400">Services needed currently or in the upcoming season.</p>
+                    <p className="text-xs text-emerald-400 font-bold">"शेतीसाठी तुम्हाला सध्या किंवा पुढील हंगामात कोणत्या सुविधा आवश्यक आहेत?"</p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        'Soil Testing', 'Crop Advisory', 'Pest/Disease Advisory', 'Drone Survey', 'Drone Spraying',
+                        'Farm Machinery Rental', 'Labour Service', 'Seed Supply', 'Fertilizer Supply',
+                        'Crop Protection Products', 'Irrigation Assistance', 'Solar Pump / Solar Assistance',
+                        'Government Scheme Assistance', 'Subsidy Assistance', 'Crop Insurance Assistance',
+                        'KCC / Loan Assistance', 'Market Linkage', 'Storage', 'Transport', 'Training', 'Other'
+                      ].map(svc => {
+                        const selected = phase1FormData.requiredServices?.includes(svc) ?? false;
+                        return (
+                          <button
+                            key={svc}
+                            type="button"
+                            onClick={() => toggleMultiSelect('requiredServices', svc)}
+                            className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                              selected ? 'bg-[#059669] text-white border-emerald-500 shadow-md' : 'bg-[#182234] border-[#233148] text-slate-300 hover:border-slate-500'
+                            }`}
+                          >
+                            {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                            <span>{svc}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {phase1FormData.requiredServices && phase1FormData.requiredServices.length > 0 && (
+                    <div className="pt-3 border-t border-[#1E293B] space-y-3">
+                      <span className="font-mono text-[11px] font-black text-amber-300 uppercase tracking-wider block">SERVICE PRIORITY</span>
+                      {phase1FormData.requiredServices.map((svc: string) => {
+                        const currentPriority = phase1FormData.servicePriorities?.[svc] || 'Immediate';
+                        return (
+                          <div key={svc} className="p-3 bg-[#182234] border border-[#233148] rounded-xl flex items-center justify-between">
+                            <span className="font-bold text-white text-xs">{svc}</span>
+                            <div className="flex space-x-1 text-[10px]">
+                              {(['Immediate', 'This Season', 'Future'] as const).map(p => (
+                                <button
+                                  key={p}
+                                  type="button"
+                                  onClick={() => setServicePriority(svc, p)}
+                                  className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                                    currentPriority === p ? 'bg-[#059669] text-white shadow-sm' : 'bg-[#111827] text-slate-400 hover:text-slate-200'
+                                  }`}
+                                >
+                                  {p}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* STEP 7: FUTURE MACHINERY & INVESTMENT */}
+              {wizardSection === 7 && (
+                <div className="bg-[#131C2E] rounded-2xl border border-[#1E2A40] p-5 space-y-4 shadow-xl animate-in fade-in duration-200">
+                  <div className="space-y-1 pb-2 border-b border-[#1E293B]">
+                    <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
+                      <span>🚜</span>
+                      <span>Future Machinery &amp; Investment</span>
+                    </h3>
+                    <p className="text-xs text-slate-400">What tools/facilities do you need in the future?</p>
+                    <p className="text-xs text-emerald-400 font-bold">"भविष्यात तुम्हाला खालीलपैकी कोणती साधने/सुविधा हवी आहेत?"</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    {/* MACHINERY */}
+                    <div className="space-y-1.5">
+                      <label className="font-mono text-[11px] font-black text-amber-300 uppercase tracking-wider block">🚜 MACHINERY</label>
+                      <div className="flex flex-wrap gap-2">
+                        {['Tractor', 'Rotavator', 'Power Tiller', 'Seed Drill', 'Planter', 'Sprayer', 'Harvester'].map(mac => {
+                          const selected = phase1FormData.futureMachinery?.includes(mac) ?? false;
+                          return (
+                            <button
+                              key={mac}
+                              type="button"
+                              onClick={() => toggleMultiSelect('futureMachinery', mac)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                                selected ? 'bg-[#059669] text-white border-emerald-500 shadow-md' : 'bg-[#182234] border-[#233148] text-slate-300 hover:border-slate-500'
+                              }`}
+                            >
+                              {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                              <span>{mac}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* IRRIGATION */}
+                    <div className="space-y-1.5">
+                      <label className="font-mono text-[11px] font-black text-cyan-300 uppercase tracking-wider block">🛈 IRRIGATION</label>
+                      <div className="flex flex-wrap gap-2">
+                        {['Drip', 'Sprinkler', 'Solar Pump', 'Farm Pond', 'Pipeline', 'Pump Set'].map(irr => {
+                          const selected = phase1FormData.futureIrrigation?.includes(irr) ?? false;
+                          return (
+                            <button
+                              key={irr}
+                              type="button"
+                              onClick={() => toggleMultiSelect('futureIrrigation', irr)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                                selected ? 'bg-[#059669] text-white border-emerald-500 shadow-md' : 'bg-[#182234] border-[#233148] text-slate-300 hover:border-slate-500'
+                              }`}
+                            >
+                              {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                              <span>{irr}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* INFRASTRUCTURE */}
+                    <div className="space-y-1.5">
+                      <label className="font-mono text-[11px] font-black text-purple-300 uppercase tracking-wider block">🏢 INFRASTRUCTURE</label>
+                      <div className="flex flex-wrap gap-2">
+                        {['Warehouse/Godown', 'Pack House', 'Cold Storage', 'Grading/Sorting'].map(inf => {
+                          const selected = phase1FormData.futureInfrastructure?.includes(inf) ?? false;
+                          return (
+                            <button
+                              key={inf}
+                              type="button"
+                              onClick={() => toggleMultiSelect('futureInfrastructure', inf)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                                selected ? 'bg-[#059669] text-white border-emerald-500 shadow-md' : 'bg-[#182234] border-[#233148] text-slate-300 hover:border-slate-500'
+                              }`}
+                            >
+                              {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                              <span>{inf}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* ALLIED AGRICULTURE */}
+                    <div className="space-y-1.5">
+                      <label className="font-mono text-[11px] font-black text-emerald-300 uppercase tracking-wider block">🐄 ALLIED AGRICULTURE</label>
+                      <div className="flex flex-wrap gap-2">
+                        {['New Orchard', 'Dairy', 'Goat Farming', 'Poultry', 'Fishery', 'Beekeeping', 'Food Processing'].map(allied => {
+                          const selected = phase1FormData.futureAlliedAgri?.includes(allied) ?? false;
+                          return (
+                            <button
+                              key={allied}
+                              type="button"
+                              onClick={() => toggleMultiSelect('futureAlliedAgri', allied)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                                selected ? 'bg-[#059669] text-white border-emerald-500 shadow-md' : 'bg-[#182234] border-[#233148] text-slate-300 hover:border-slate-500'
+                              }`}
+                            >
+                              {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                              <span>{allied}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 8: GOVERNMENT SCHEMES & SUBSIDY (FULL SPECIFICATION IMPLEMENTED) */}
+              {wizardSection === 8 && (
+                <div className="bg-[#131C2E] rounded-2xl border border-[#1E2A40] p-5 space-y-4 shadow-xl animate-in fade-in duration-200">
+                  <div className="space-y-1 pb-2 border-b border-[#1E293B]">
+                    <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
+                      <span>🏛️</span>
+                      <span>Government Schemes &amp; Subsidy</span>
+                    </h3>
+                    <p className="text-xs text-slate-400">Government welfare benefits received &amp; assistance requirements.</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    {/* SECTION A: GOVERNMENT BENEFITS CURRENTLY AVAILABLE / RECEIVED */}
+                    <div className="space-y-2">
+                      <label className="font-bold text-xs text-white block">
+                        Section A – Government Benefits Currently Available / Received
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          'PM-Kisan', 'Namo Shetkari', 'MahaDBT', 'KCC', 'Crop Insurance',
+                          'Soil Health Card', 'Other', 'None', "Don't Know"
+                        ].map(scheme => {
+                          const selected = phase1FormData.activeSchemesList?.includes(scheme) ?? false;
+                          return (
+                            <button
+                              key={scheme}
+                              type="button"
+                              onClick={() => toggleActiveScheme(scheme)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                                selected ? 'bg-[#059669] text-white border-emerald-500 shadow-md' : 'bg-[#182234] border-[#233148] text-slate-300 hover:border-slate-500'
+                              }`}
+                            >
+                              {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                              <span>{scheme}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {phase1FormData.activeSchemesList?.includes('Other') && (
+                        <div className="pt-1 animate-in fade-in">
+                          <input
+                            type="text"
+                            value={phase1FormData.activeSchemeOther || ''}
+                            onChange={e => updateFormField('activeSchemeOther', e.target.value)}
+                            placeholder="Specify Other Scheme"
+                            className="w-full h-[44px] bg-[#182234] border border-[#233148] rounded-xl px-3 font-medium text-white text-xs focus:border-emerald-500 focus:outline-none"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* SECTION B: SCHEME / SUBSIDY ASSISTANCE REQUIRED? */}
+                    <div className="p-3.5 bg-[#182234] border border-[#233148] rounded-xl space-y-3">
+                      <label className="font-bold text-xs text-white block">
+                        Section B – Scheme / Subsidy Assistance Required?
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {['Yes', 'No', 'Need Information'].map(opt => (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => updateFormField('subsidyHelpNeeded', opt)}
+                            className={`py-2.5 rounded-xl font-bold text-xs cursor-pointer transition-all ${
+                              phase1FormData.subsidyHelpNeeded === opt
+                                ? opt === 'Need Information' ? 'bg-amber-600 text-white shadow-md' : 'bg-[#059669] text-white shadow-md'
+                                : 'bg-[#111827] border border-[#2A3952] text-slate-300'
+                            }`}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* SECTION C: REQUIRED ASSISTANCE CATEGORIES */}
+                      {(phase1FormData.subsidyHelpNeeded === 'Yes' || phase1FormData.subsidyHelpNeeded === 'Need Information') && (
+                        <div className="space-y-2 pt-2 border-t border-[#1E293B] animate-in fade-in">
+                          <label className="font-bold text-xs text-slate-200 block">
+                            Section C – Required Assistance Categories
+                          </label>
+                          <div className="flex flex-wrap gap-2">
+                            {[
+                              'Farm Machinery', 'Irrigation', 'Solar Pump', 'Farm Pond',
+                              'Orchard / Horticulture', 'Dairy', 'Goat Farming', 'Poultry',
+                              'Storage / Warehouse', 'Food Processing', 'Other'
+                            ].map(cat => {
+                              const selected = phase1FormData.subsidyHelpCategories?.includes(cat) ?? false;
+                              return (
+                                <button
+                                  key={cat}
+                                  type="button"
+                                  onClick={() => toggleMultiSelect('subsidyHelpCategories', cat)}
+                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                                    selected ? 'bg-[#059669] text-white border-emerald-500 shadow-md' : 'bg-[#111827] border-[#2A3952] text-slate-300 hover:border-slate-500'
+                                  }`}
+                                >
+                                  {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                                  <span>{cat}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 9: MAJOR FARMING PROBLEMS (FULL SPECIFICATION WITH MAX 3 LIMIT) */}
+              {wizardSection === 9 && (
+                <div className="bg-[#131C2E] rounded-2xl border border-[#1E2A40] p-5 space-y-4 shadow-xl animate-in fade-in duration-200">
+                  <div className="space-y-1 pb-2 border-b border-[#1E293B]">
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
+                        <span>⚠️</span>
+                        <span>Major Farming Problems</span>
+                      </h3>
+                      <span className="font-mono text-xs font-bold text-amber-300 bg-amber-950/60 border border-amber-500/40 px-2.5 py-1 rounded-full">
+                        {(phase1FormData.mainProblemsList || []).length} / 3 selected
+                      </span>
+                    </div>
+                    <p className="text-xs text-emerald-400 font-bold">"सध्या शेती करताना तुम्हाला कोणत्या प्रमुख अडचणी आहेत?"</p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        'Water', 'Electricity', 'Labour', 'Machinery', 'Seeds',
+                        'Fertilizer / Inputs', 'Pest / Disease', 'High Production Cost',
+                        'Market Price', 'Loan / Credit', 'Crop Insurance',
+                        'Government Scheme / Subsidy', 'Storage', 'Transport',
+                        'Technical Guidance', 'Other'
+                      ].map(prob => {
+                        const selected = phase1FormData.mainProblemsList?.includes(prob) ?? false;
+                        return (
+                          <button
+                            key={prob}
+                            type="button"
+                            onClick={() => toggleMainProblem(prob)}
+                            className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                              selected ? 'bg-rose-950/80 text-rose-300 border-rose-500/50 shadow-md' : 'bg-[#182234] border-[#233148] text-slate-300 hover:border-slate-500'
+                            }`}
+                          >
+                            {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                            <span>{prob}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {phase1FormData.mainProblemsList?.includes('Other') && (
+                      <div className="pt-1 animate-in fade-in">
+                        <label className="font-bold text-xs text-slate-300 block mb-1">Specify Other Problem</label>
+                        <input
+                          type="text"
+                          value={phase1FormData.mainProblemOther || ''}
+                          onChange={e => updateFormField('mainProblemOther', e.target.value)}
+                          placeholder="Enter details of other problem"
+                          className="w-full h-[44px] bg-[#182234] border border-[#233148] rounded-xl px-3 font-medium text-white text-xs focus:border-emerald-500 focus:outline-none"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 10: REVIEW & SUBMIT REGISTRATION */}
+              {wizardSection === 10 && (
+                <div className="bg-[#131C2E] rounded-2xl border border-[#1E2A40] p-5 space-y-4 shadow-xl animate-in fade-in duration-200">
+                  <div className="flex justify-between items-center pb-2 border-b border-[#1E293B]">
+                    <div className="space-y-0.5">
+                      <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
+                        <span>📝</span>
+                        <span>Review &amp; Submit Profile</span>
+                      </h3>
+                      <p className="text-xs text-slate-400">Verify all entered details before profile creation.</p>
+                    </div>
+                    <span className="font-mono text-[10px] font-bold bg-emerald-500/20 text-emerald-300 px-2.5 py-1 rounded-full border border-emerald-500/40">
+                      Step 10 of 10
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {[
+                      { step: 1, label: 'Step 1', title: 'Basic Details' },
+                      { step: 2, label: 'Step 2', title: 'Location' },
+                      { step: 3, label: 'Step 3', title: 'Land Profile' },
+                      { step: 4, label: 'Step 4', title: 'Current Crops' },
+                      { step: 5, label: 'Step 5', title: 'Facilities' },
+                      { step: 6, label: 'Step 6', title: 'Services Needed' },
+                      { step: 7, label: 'Step 7', title: 'Future Investment' },
+                      { step: 8, label: 'Step 8', title: 'Schemes & Subsidy' },
+                      { step: 9, label: 'Step 9', title: 'Major Problems' }
+                    ].map(item => (
+                      <div key={item.step} className="p-3 bg-[#182234] border border-[#233148] rounded-xl flex items-center justify-between">
+                        <div>
+                          <span className="text-[9px] font-mono text-slate-400 block">{item.label}</span>
+                          <span className="font-bold text-white text-xs">{item.title}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setWizardSection(item.step)}
+                          className="text-[11px] font-bold text-amber-400 hover:text-amber-300 flex items-center space-x-0.5 cursor-pointer"
+                        >
+                          <span>✏️</span>
+                          <span>Edit</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* SUMMARY PREVIEW CARDS */}
+                  <div className="space-y-2 text-xs pt-1">
+                    {/* STEP 3 PREVIEW */}
+                    <div className="p-3 bg-[#182234] border border-[#233148] rounded-xl space-y-1">
+                      <div className="flex justify-between font-bold text-white">
+                        <span>Land &amp; Parcels</span>
+                        <span className="text-emerald-400 font-mono">Total: {calculateGatWiseTotalAcres()} Acre</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300 font-mono">
+                        Parcels: {(phase1FormData.gatSurveyParcels || []).map((p: any) => `Gat ${p.gatNumber} (${p.area} ${p.areaUnit})`).join(', ') || 'None'}
+                      </p>
+                      <p className="text-[11px] text-slate-300">
+                        Farmer ID: <strong className="text-white">{phase1FormData.hasFarmerId}</strong>
+                        {phase1FormData.hasFarmerId === 'Yes' && <strong className="text-emerald-400 font-mono ml-1">({phase1FormData.govtAgriStackFarmerId || phase1FormData.farmerId})</strong>}
+                      </p>
+                    </div>
+
+                    {/* STEP 8 PREVIEW */}
+                    <div className="p-3 bg-[#182234] border border-[#233148] rounded-xl space-y-1">
+                      <div className="flex justify-between font-bold text-white">
+                        <span>Government Schemes &amp; Subsidy</span>
+                        <span className="text-emerald-400 font-bold">{phase1FormData.subsidyHelpNeeded || 'None'}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300">
+                        Active Benefits: {(phase1FormData.activeSchemesList || []).join(', ') || 'None'}
+                      </p>
+                      {(phase1FormData.subsidyHelpCategories || []).length > 0 && (
+                        <p className="text-[11px] text-slate-300">
+                          Assistance Needed: {phase1FormData.subsidyHelpCategories.join(', ')}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* STEP 9 PREVIEW */}
+                    <div className="p-3 bg-[#182234] border border-[#233148] rounded-xl space-y-1">
+                      <div className="flex justify-between font-bold text-white">
+                        <span>Major Farming Problems</span>
+                        <span className="text-rose-400 font-mono font-bold">{(phase1FormData.mainProblemsList || []).length} / 3</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300">
+                        Issues: {(phase1FormData.mainProblemsList || []).join(', ') || 'None'}
+                        {phase1FormData.mainProblemOther && ` (${phase1FormData.mainProblemOther})`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 4. STICKY BOTTOM NAVIGATION BAR */}
+              <div className="sticky bottom-0 left-0 right-0 p-4 bg-[#0B1324]/95 border-t border-[#1E293B] backdrop-blur-md flex items-center space-x-3 z-30">
+                {wizardSection > 1 && (
+                  <button
+                    type="button"
+                    onClick={handlePrevWizardSection}
+                    className="h-[52px] px-6 bg-[#182234] hover:bg-[#223046] border border-[#2A3952] text-white font-bold rounded-2xl text-sm transition-all cursor-pointer flex items-center space-x-2"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    <span>Back</span>
+                  </button>
+                )}
+
+                {wizardSection < 10 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWizardSection(prev => (prev + 1) as any);
+                    }}
+                    className="flex-1 h-[52px] bg-[#059669] hover:bg-[#047857] text-white font-bold rounded-2xl text-base transition-all cursor-pointer shadow-lg shadow-emerald-900/30 text-center flex items-center justify-center space-x-2"
+                  >
+                    <span>Next</span>
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handlePhase1Submit}
+                    disabled={isSubmittingPhase1}
+                    className="flex-1 h-[52px] bg-[#059669] hover:bg-[#047857] disabled:opacity-50 text-white font-black rounded-2xl text-base transition-all cursor-pointer shadow-lg shadow-emerald-900/30 text-center flex items-center justify-center space-x-2"
+                  >
+                    {isSubmittingPhase1 ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin text-white" />
+                        <span>Creating Profile...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Confirm &amp; Create Profile</span>
+                        <ChevronRight className="w-5 h-5" />
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
