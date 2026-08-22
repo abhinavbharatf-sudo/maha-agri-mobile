@@ -247,6 +247,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
     farmSameAsResidential: 'Yes',
     farmDistrict: 'Wardha',
     farmTaluka: 'Wardha',
+    farmVillage: 'PAVANAR',
 
     // Step 3
     primaryFarmingType: 'Crop Farming',
@@ -4764,6 +4765,18 @@ export const MahaAgridootFieldApp: React.FC = () => {
                               {getTalukasForDistrict(phase1FormData.farmDistrict || 'Wardha').map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                           </div>
+                        </div>
+
+                        <div>
+                          <label className="font-bold text-[11px] text-slate-300 block mb-1">Farm Village / Town</label>
+                          <input
+                            type="text"
+                            ref={el => (fieldInputRefs.current['farmVillage'] = el)} id="field-input-farmVillage"
+                            value={phase1FormData.farmVillage || ''}
+                            onChange={e => updateFormField('farmVillage', e.target.value.toUpperCase())}
+                            placeholder="e.g. PAVANAR"
+                            className="w-full h-[44px] bg-[#111827] border border-[#2A3952] rounded-lg px-3 font-bold text-white uppercase text-xs focus:border-emerald-500 focus:outline-none"
+                          />
                         </div>
                       </div>
                     )}
