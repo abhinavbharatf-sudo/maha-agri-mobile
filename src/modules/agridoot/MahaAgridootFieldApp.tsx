@@ -4509,6 +4509,69 @@ export const MahaAgridootFieldApp: React.FC = () => {
               {/* STEP 1: PERSONAL & CONTACT INFORMATION (REMOVED FATHER/HUSBAND & MOTHER NAMES AS REQUESTED) */}
               {wizardSection === 1 && (
                 <div className="bg-[#131C2E] rounded-2xl border border-[#1E2A40] p-5 space-y-4 shadow-xl animate-in fade-in duration-200">
+                  <div className="p-4 bg-[#182234] border border-[#233148] rounded-2xl space-y-3 shadow-md mb-4">
+                    <div className="space-y-1">
+                      <label className="font-extrabold text-sm text-white flex items-center space-x-1.5">
+                        <span>Select Registration Category</span>
+                        <span className="text-rose-500">*</span>
+                      </label>
+                      <p className="text-xs text-slate-400">Choose candidate type to load the corresponding registration &amp; assessment form.</p>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      {[
+                        {
+                          type: 'farmer',
+                          title: 'Farmer Registration',
+                          desc: 'Register as an agricultural crop farmer',
+                          icon: '🧑‍🌾'
+                        },
+                        {
+                          type: 'entrepreneur',
+                          title: 'Agri Entrepreneur Registration',
+                          desc: 'Register as an agri business or custom service provider',
+                          icon: '🚜'
+                        },
+                        {
+                          type: 'both',
+                          title: 'Both (Farmer & Agri Entrepreneur)',
+                          desc: 'Dual registration for farming and agri enterprise',
+                          icon: '👥'
+                        }
+                      ].map(opt => {
+                        const isSelected = phase1FormData.registrationType === opt.type;
+                        return (
+                          <div
+                            key={opt.type}
+                            onClick={() => {
+                              updateFormField('registrationType', opt.type);
+                              triggerToast(`Selected: ${opt.title}`);
+                            }}
+                            className={`p-3.5 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between ${
+                              isSelected
+                                ? 'bg-emerald-950/40 border-emerald-500 text-white shadow-lg ring-2 ring-emerald-500/20'
+                                : 'bg-[#111827] border-[#233148] text-slate-300 hover:border-slate-500'
+                            }`}
+                          >
+                            <div className="flex items-center space-x-3">
+                              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? 'border-emerald-400 bg-emerald-500' : 'border-slate-500 bg-transparent'}`}>
+                                {isSelected && <div className="w-2 h-2 rounded-full bg-slate-950" />}
+                              </div>
+                              <div>
+                                <h4 className="font-extrabold text-sm text-white flex items-center space-x-1.5">
+                                  <span>{opt.icon}</span>
+                                  <span>{opt.title}</span>
+                                </h4>
+                                <p className="text-xs text-slate-400 font-medium mt-0.5">{opt.desc}</p>
+                              </div>
+                            </div>
+                            <ChevronRight className={`w-5 h-5 ${isSelected ? 'text-emerald-400' : 'text-slate-500'}`} />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   <div className="space-y-1 pb-2 border-b border-[#1E293B]">
                     <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
                       <span>🧑‍🌾</span>
