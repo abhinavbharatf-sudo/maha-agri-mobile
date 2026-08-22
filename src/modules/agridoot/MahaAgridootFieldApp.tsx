@@ -408,9 +408,25 @@ export const MahaAgridootFieldApp: React.FC = () => {
 
     setFieldErrors(errors);
 
-    if (Object.keys(errors).length > 0) {
-      const firstErrorMsg = Object.values(errors)[0];
+    const errorKeys = Object.keys(errors);
+    if (errorKeys.length > 0) {
+      const firstKey = errorKeys[0];
+      const firstErrorMsg = errors[firstKey];
       triggerToast(`⚠️ ${firstErrorMsg}`);
+
+      // AUTOMATIC CURSOR FOCUS & SMOOTH SCROLL TO INVALID FIELD
+      setTimeout(() => {
+        const targetElem = fieldInputRefs.current[firstKey] || document.getElementById(`field-input-${firstKey}`);
+        if (targetElem) {
+          if (typeof targetElem.focus === 'function') {
+            targetElem.focus();
+          }
+          if (typeof targetElem.scrollIntoView === 'function') {
+            targetElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }
+      }, 50);
+
       return false;
     }
 
@@ -4456,6 +4472,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
                     <label className="font-bold text-xs text-slate-200 block">Full Name (As Per Aadhaar) <span className="text-rose-500">*</span></label>
                     <input
                       type="text"
+                      ref={el => (fieldInputRefs.current['fullName'] = el)} id="field-input-fullName"
                       value={phase1FormData.fullName}
                       onChange={e => updateFormField('fullName', e.target.value.toUpperCase())}
                       placeholder="VIKAS PANBUDE"
@@ -4469,6 +4486,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
                       <label className="font-bold text-xs text-slate-200 block">Date of Birth <span className="text-rose-500">*</span></label>
                       <input
                         type="date"
+                        ref={el => (fieldInputRefs.current['dob'] = el)} id="field-input-dob"
                         value={phase1FormData.dob}
                         onChange={e => updateFormField('dob', e.target.value)}
                         className={`w-full h-[52px] bg-[#182234] border ${fieldErrors.dob ? 'border-rose-500 bg-rose-950/30' : 'border-[#233148]'} rounded-xl px-4 font-mono font-bold text-white text-sm focus:border-emerald-500 focus:outline-none`}
@@ -4557,6 +4575,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
                       <input
                         type="text"
                         maxLength={12}
+                        ref={el => (fieldInputRefs.current['aadhaar'] = el)} id="field-input-aadhaar"
                         value={phase1FormData.aadhaar}
                         onChange={e => updateFormField('aadhaar', e.target.value.replace(/\D/g, '').slice(0, 12))}
                         placeholder="981244108891"
@@ -4586,6 +4605,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
                       <input
                         type="tel"
                         maxLength={10}
+                        ref={el => (fieldInputRefs.current['alternateMobile'] = el)} id="field-input-alternateMobile"
                         value={phase1FormData.alternateMobile}
                         onChange={e => updateFormField('alternateMobile', e.target.value.replace(/\D/g, '').slice(0, 10))}
                         placeholder="9822998877"
@@ -4659,6 +4679,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
                       <label className="font-bold text-xs text-slate-200 block">Village / Town <span className="text-rose-500">*</span></label>
                       <input
                         type="text"
+                        ref={el => (fieldInputRefs.current['village'] = el)} id="field-input-village"
                         value={phase1FormData.village}
                         onChange={e => updateFormField('village', e.target.value.toUpperCase())}
                         placeholder="PIMPRI"
@@ -4671,6 +4692,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
                       <input
                         type="text"
                         maxLength={6}
+                        ref={el => (fieldInputRefs.current['pinCode'] = el)} id="field-input-pinCode"
                         value={phase1FormData.pinCode}
                         onChange={e => updateFormField('pinCode', e.target.value.replace(/\D/g, '').slice(0, 6))}
                         placeholder="442001"
@@ -4808,6 +4830,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
                         type="number"
                         min={0}
                         step={0.1}
+                        ref={el => (fieldInputRefs.current['totalLand'] = el)} id="field-input-totalLand"
                         value={phase1FormData.totalLand}
                         onChange={e => updateFormField('totalLand', parseFloat(e.target.value) || 0)}
                         placeholder="3.5"
@@ -4935,6 +4958,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
                         <label className="text-[11px] font-bold text-slate-300 block">Farmer ID Number</label>
                         <input
                           type="text"
+                          ref={el => (fieldInputRefs.current['govtAgriStackFarmerId'] = el)} id="field-input-govtAgriStackFarmerId"
                           value={phase1FormData.govtAgriStackFarmerId || phase1FormData.farmerId || ''}
                           onChange={e => {
                             updateFormField('govtAgriStackFarmerId', e.target.value.toUpperCase());
