@@ -328,6 +328,93 @@ export const MahaAgridootFieldApp: React.FC = () => {
 
   const updateFormField = (key: string, value: any) => {
     setPhase1FormData((prev: any) => ({ ...prev, [key]: value }));
+    if (fieldErrors[key]) {
+      setFieldErrors((prev: any) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
+  };
+
+  const validateCurrentStep = (section: number): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (section === 1) {
+      if (!phase1FormData.fullName || !validateEnglishName(phase1FormData.fullName)) {
+        errors.fullName = 'Full Name (3-60 letters) is required';
+      }
+      if (!phase1FormData.dob) {
+        errors.dob = 'Date of Birth is required';
+      }
+      if (!phase1FormData.gender) {
+        errors.gender = 'Gender selection is required';
+      }
+      if (!phase1FormData.casteCategory) {
+        errors.casteCategory = 'Caste Category is required';
+      }
+      if (!phase1FormData.aadhaar || !validateAadhaarNumber(phase1FormData.aadhaar)) {
+        errors.aadhaar = 'Valid 12-digit Aadhaar number required';
+      }
+      if (!phase1FormData.alternateMobile || !validateAlternateMobile(phase1FormData.alternateMobile)) {
+        errors.alternateMobile = 'Valid 10-digit alternate mobile required';
+      }
+    } else if (section === 2) {
+      if (!phase1FormData.district) {
+        errors.district = 'District is required';
+      }
+      if (!phase1FormData.taluka) {
+        errors.taluka = 'Taluka is required';
+      }
+      if (!phase1FormData.village || !validateEnglishVillage(phase1FormData.village)) {
+        errors.village = 'Valid village name (2-50 letters) required';
+      }
+      if (!phase1FormData.pinCode || !validatePinCode(phase1FormData.pinCode)) {
+        errors.pinCode = 'Valid 6-digit PIN code required';
+      }
+    } else if (section === 3) {
+      if (!phase1FormData.totalLand || phase1FormData.totalLand <= 0) {
+        errors.totalLand = 'Total Land Area must be greater than 0';
+      }
+      if (phase1FormData.hasFarmerId === 'Yes' && (!phase1FormData.govtAgriStackFarmerId || !phase1FormData.govtAgriStackFarmerId.trim())) {
+        errors.govtAgriStackFarmerId = 'Farmer ID Number is required when Farmer ID is Yes';
+      }
+    } else if (section === 4) {
+      if (!phase1FormData.mainCrops || phase1FormData.mainCrops.length === 0) {
+        errors.mainCrops = 'Please select at least one crop';
+      }
+    } else if (section === 5) {
+      if (!phase1FormData.waterSources || phase1FormData.waterSources.length === 0) {
+        errors.waterSources = 'Please select at least one water source';
+      }
+    } else if (section === 8) {
+      if (!phase1FormData.activeSchemesList || phase1FormData.activeSchemesList.length === 0) {
+        errors.activeSchemesList = 'Please select at least one option under Section A';
+      }
+      if (phase1FormData.activeSchemesList?.includes('Other') && (!phase1FormData.activeSchemeOther || !phase1FormData.activeSchemeOther.trim())) {
+        errors.activeSchemeOther = 'Please specify the other scheme';
+      }
+    } else if (section === 9) {
+      if (!phase1FormData.mainProblemsList || phase1FormData.mainProblemsList.length === 0) {
+        errors.mainProblemsList = 'Please select at least one major farming problem';
+      }
+      if (phase1FormData.mainProblemsList?.length > 3) {
+        errors.mainProblemsList = 'Maximum 3 problems allowed';
+      }
+      if (phase1FormData.mainProblemsList?.includes('Other') && (!phase1FormData.mainProblemOther || !phase1FormData.mainProblemOther.trim())) {
+        errors.mainProblemOther = 'Please specify the other problem';
+      }
+    }
+
+    setFieldErrors(errors);
+
+    if (Object.keys(errors).length > 0) {
+      const firstErrorMsg = Object.values(errors)[0];
+      triggerToast(`⚠️ ${firstErrorMsg}`);
+      return false;
+    }
+
+    return true;
   };
 
   const toggleMultiSelect = (key: string, item: string) => {
@@ -4372,8 +4459,9 @@ export const MahaAgridootFieldApp: React.FC = () => {
                       value={phase1FormData.fullName}
                       onChange={e => updateFormField('fullName', e.target.value.toUpperCase())}
                       placeholder="VIKAS PANBUDE"
-                      className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white uppercase text-sm focus:border-emerald-500 focus:outline-none"
+                      className={`w-full h-[52px] bg-[#182234] border ${fieldErrors.fullName ? 'border-rose-500 bg-rose-950/30' : 'border-[#233148]'} rounded-xl px-4 font-bold text-white uppercase text-sm focus:border-emerald-500 focus:outline-none`}
                     />
+                    {fieldErrors.fullName && <p className="text-rose-400 text-xs font-bold pt-1 flex items-center space-x-1"><span>⚠️</span><span>{fieldErrors.fullName}</span></p>}
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -4383,8 +4471,9 @@ export const MahaAgridootFieldApp: React.FC = () => {
                         type="date"
                         value={phase1FormData.dob}
                         onChange={e => updateFormField('dob', e.target.value)}
-                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-mono font-bold text-white text-sm focus:border-emerald-500 focus:outline-none"
+                        className={`w-full h-[52px] bg-[#182234] border ${fieldErrors.dob ? 'border-rose-500 bg-rose-950/30' : 'border-[#233148]'} rounded-xl px-4 font-mono font-bold text-white text-sm focus:border-emerald-500 focus:outline-none`}
                       />
+                      {fieldErrors.dob && <p className="text-rose-400 text-xs font-bold pt-1 flex items-center space-x-1"><span>⚠️</span><span>{fieldErrors.dob}</span></p>}
                     </div>
                     <div className="space-y-1.5">
                       <label className="font-bold text-xs text-slate-400 block">Age (Auto)</label>
@@ -4471,8 +4560,9 @@ export const MahaAgridootFieldApp: React.FC = () => {
                         value={phase1FormData.aadhaar}
                         onChange={e => updateFormField('aadhaar', e.target.value.replace(/\D/g, '').slice(0, 12))}
                         placeholder="981244108891"
-                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-mono font-bold text-white text-base tracking-widest focus:border-emerald-500 focus:outline-none"
+                        className={`w-full h-[52px] bg-[#182234] border ${fieldErrors.aadhaar ? 'border-rose-500 bg-rose-950/30' : 'border-[#233148]'} rounded-xl px-4 font-mono font-bold text-white text-base tracking-widest focus:border-emerald-500 focus:outline-none`}
                       />
+                      {fieldErrors.aadhaar && <p className="text-rose-400 text-xs font-bold pt-1 flex items-center space-x-1"><span>⚠️</span><span>{fieldErrors.aadhaar}</span></p>}
                     </div>
 
                     <div className="space-y-1.5">
@@ -4499,8 +4589,9 @@ export const MahaAgridootFieldApp: React.FC = () => {
                         value={phase1FormData.alternateMobile}
                         onChange={e => updateFormField('alternateMobile', e.target.value.replace(/\D/g, '').slice(0, 10))}
                         placeholder="9822998877"
-                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-mono font-bold text-white text-sm focus:border-emerald-500 focus:outline-none"
+                        className={`w-full h-[52px] bg-[#182234] border ${fieldErrors.alternateMobile ? 'border-rose-500 bg-rose-950/30' : 'border-[#233148]'} rounded-xl px-4 font-mono font-bold text-white text-sm focus:border-emerald-500 focus:outline-none`}
                       />
+                      {fieldErrors.alternateMobile && <p className="text-rose-400 text-xs font-bold pt-1 flex items-center space-x-1"><span>⚠️</span><span>{fieldErrors.alternateMobile}</span></p>}
                     </div>
 
                     <div className="space-y-1.5">
@@ -4571,8 +4662,9 @@ export const MahaAgridootFieldApp: React.FC = () => {
                         value={phase1FormData.village}
                         onChange={e => updateFormField('village', e.target.value.toUpperCase())}
                         placeholder="PIMPRI"
-                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white uppercase text-sm focus:border-emerald-500 focus:outline-none"
+                        className={`w-full h-[52px] bg-[#182234] border ${fieldErrors.village ? 'border-rose-500 bg-rose-950/30' : 'border-[#233148]'} rounded-xl px-4 font-bold text-white uppercase text-sm focus:border-emerald-500 focus:outline-none`}
                       />
+                      {fieldErrors.village && <p className="text-rose-400 text-xs font-bold pt-1 flex items-center space-x-1"><span>⚠️</span><span>{fieldErrors.village}</span></p>}
                     </div>
                     <div className="space-y-1.5">
                       <label className="font-bold text-xs text-slate-200 block">PIN Code <span className="text-rose-500">*</span></label>
@@ -4582,8 +4674,9 @@ export const MahaAgridootFieldApp: React.FC = () => {
                         value={phase1FormData.pinCode}
                         onChange={e => updateFormField('pinCode', e.target.value.replace(/\D/g, '').slice(0, 6))}
                         placeholder="442001"
-                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-mono font-bold text-white text-sm focus:border-emerald-500 focus:outline-none"
+                        className={`w-full h-[52px] bg-[#182234] border ${fieldErrors.pinCode ? 'border-rose-500 bg-rose-950/30' : 'border-[#233148]'} rounded-xl px-4 font-mono font-bold text-white text-sm focus:border-emerald-500 focus:outline-none`}
                       />
+                      {fieldErrors.pinCode && <p className="text-rose-400 text-xs font-bold pt-1 flex items-center space-x-1"><span>⚠️</span><span>{fieldErrors.pinCode}</span></p>}
                     </div>
                   </div>
 
@@ -4718,8 +4811,9 @@ export const MahaAgridootFieldApp: React.FC = () => {
                         value={phase1FormData.totalLand}
                         onChange={e => updateFormField('totalLand', parseFloat(e.target.value) || 0)}
                         placeholder="3.5"
-                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-mono font-bold text-white text-sm focus:border-emerald-500 focus:outline-none"
+                        className={`w-full h-[52px] bg-[#182234] border ${fieldErrors.totalLand ? 'border-rose-500 bg-rose-950/30' : 'border-[#233148]'} rounded-xl px-4 font-mono font-bold text-white text-sm focus:border-emerald-500 focus:outline-none`}
                       />
+                      {fieldErrors.totalLand && <p className="text-rose-400 text-xs font-bold pt-1 flex items-center space-x-1"><span>⚠️</span><span>{fieldErrors.totalLand}</span></p>}
                     </div>
                     <div className="space-y-1.5">
                       <label className="font-bold text-xs text-slate-200 block">Land Unit</label>
@@ -4847,8 +4941,9 @@ export const MahaAgridootFieldApp: React.FC = () => {
                             updateFormField('farmerId', e.target.value.toUpperCase());
                           }}
                           placeholder="MH-FAR-2026-8841"
-                          className="w-full h-[44px] bg-[#111827] border border-[#2A3952] rounded-lg px-3 font-mono font-bold text-white text-xs uppercase focus:border-emerald-500 focus:outline-none"
+                          className={`w-full h-[44px] bg-[#111827] border ${fieldErrors.govtAgriStackFarmerId ? 'border-rose-500 bg-rose-950/30' : 'border-[#2A3952]'} rounded-lg px-3 font-mono font-bold text-white text-xs uppercase focus:border-emerald-500 focus:outline-none`}
                         />
+                        {fieldErrors.govtAgriStackFarmerId && <p className="text-rose-400 text-xs font-bold pt-1 flex items-center space-x-1"><span>⚠️</span><span>{fieldErrors.govtAgriStackFarmerId}</span></p>}
                       </div>
                     )}
                   </div>
@@ -5559,7 +5654,9 @@ export const MahaAgridootFieldApp: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      setWizardSection(prev => (prev + 1) as any);
+                      if (validateCurrentStep(wizardSection)) {
+                        setWizardSection(prev => (prev + 1) as any);
+                      }
                     }}
                     className="flex-1 h-[52px] bg-[#059669] hover:bg-[#047857] text-white font-bold rounded-2xl text-base transition-all cursor-pointer shadow-lg shadow-emerald-900/30 text-center flex items-center justify-center space-x-2"
                   >
