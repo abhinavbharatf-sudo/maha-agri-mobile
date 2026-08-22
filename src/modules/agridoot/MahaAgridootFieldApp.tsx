@@ -1,3 +1,4 @@
+import { EntrepreneurAssessmentWizard } from '../edp/components/EntrepreneurAssessmentWizard';
 /**
  * MAHA-AGRIDOOT World-Class Enterprise Mobile Operating System (`/maha-agri/agridoot`, `/agridoot`, `/field`)
  * COMPLETE ENTERPRISE ATTENDANCE MODULE INTEGRATED IN `DAILY_ATTENDANCE` VIEW:
@@ -4390,10 +4391,27 @@ export const MahaAgridootFieldApp: React.FC = () => {
         )}
 
 {/* ========================================================================= */}
-        {/* ENTERPRISE FULL-PAGE REGISTRATION WIZARD (MOBILE-FIRST STEPPER UI) */}
+        {/* ENTERPRISE FULL-PAGE REGISTRATION WIZARD (FARMER vs ENTREPRENEUR) */}
         {/* ========================================================================= */}
         {isRegWizardOpen && (
-          <div className="fixed inset-0 z-[60] bg-[#0B1220] flex flex-col overflow-y-auto animate-in fade-in duration-200">
+          phase1FormData.registrationType === 'entrepreneur' ? (
+            <div className="fixed inset-0 z-[60] bg-[#0B1220] flex flex-col overflow-y-auto animate-in fade-in duration-200">
+              <EntrepreneurAssessmentWizard
+                initialCandidateName={phase1FormData.fullName || 'Rahul Patil'}
+                initialMobile={phase1FormData.whatsappMobile || '8765432109'}
+                initialDistrict={phase1FormData.district || 'Nashik'}
+                initialTaluka={phase1FormData.taluka || 'Niphad'}
+                initialVillage={phase1FormData.village || 'Pimplas'}
+                onBack={() => setIsRegWizardOpen(false)}
+                onSubmitSuccess={() => {
+                  setIsRegWizardOpen(false);
+                  triggerToast('🎉 Entrepreneur Assessment Profile Submitted Successfully!');
+                }}
+                triggerToast={triggerToast}
+              />
+            </div>
+          ) : (
+            <div className="fixed inset-0 z-[60] bg-[#0B1220] flex flex-col overflow-y-auto animate-in fade-in duration-200">
             
             {/* 1. TOP STICKY HEADER BAR matching prompt specifications */}
             <div className="bg-[#0B1324] border-b border-[#1E293B] px-4 py-3 sticky top-0 z-30 backdrop-blur-md">
@@ -5760,6 +5778,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
               </div>
             </div>
           </div>
+          )
         )}
 
         {/* BOTTOM NAVIGATION BAR */}

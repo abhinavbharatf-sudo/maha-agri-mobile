@@ -1,3 +1,4 @@
+import { EntrepreneurAssessmentWizard } from './modules/edp/components/EntrepreneurAssessmentWizard';
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Layout from './components/layout/Layout';
@@ -115,6 +116,11 @@ function App() {
         <Route path="/maha-agri/farmer" element={<MahaAgriEnterpriseAdminPortal />} />
         <Route path="/maha-agri/edp" element={<Training />} />
         <Route path="/candidate/training" element={<Training />} />
+        {/* Entrepreneur Wizard Direct Routes */}
+        <Route path="/entrepreneur" element={<EntrepreneurAssessmentWizard onBack={() => window.history.back()} />} />
+        <Route path="/maha-agri/entrepreneur" element={<EntrepreneurAssessmentWizard onBack={() => window.history.back()} />} />
+        <Route path="/edp-wizard" element={<EntrepreneurAssessmentWizard onBack={() => window.history.back()} />} />
+
         {/* Field App Routes & Aliases */}
         <Route path="/maha-agri/agridoot" element={<MahaAgridootFieldApp />} />
         <Route path="/agridoot font-mono" element={<MahaAgridootFieldApp />} />

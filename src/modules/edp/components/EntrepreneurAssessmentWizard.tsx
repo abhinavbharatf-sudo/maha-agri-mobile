@@ -3107,8 +3107,6 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                           </div>
                         </div>
                       </div>
-                    </div>
-                  )}
                       <div className="space-y-1.5">
                         <label className="font-medium text-[13px] text-slate-300 block">Purchase Funding Mode</label>
                         <select
