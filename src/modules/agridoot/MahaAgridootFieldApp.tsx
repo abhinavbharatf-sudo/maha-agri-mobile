@@ -341,9 +341,14 @@ export const MahaAgridootFieldApp: React.FC = () => {
   const validateCurrentStep = (section: number): boolean => {
     const errors: Record<string, string> = {};
 
+    const isMarathiScript = (str: string) => /[\u0900-\u097F]/.test(str || '');
+
     if (section === 1) {
       if (!phase1FormData.fullName || !validateEnglishName(phase1FormData.fullName)) {
         errors.fullName = 'Full Name (3-60 letters) is required';
+      }
+      if (isMarathiScript(phase1FormData.fullName)) {
+        errors.fullName = 'Full Name must be in English (Marathi script not allowed)';
       }
       if (!phase1FormData.dob) {
         errors.dob = 'Date of Birth is required';
@@ -370,18 +375,28 @@ export const MahaAgridootFieldApp: React.FC = () => {
       if (!phase1FormData.village || !validateEnglishVillage(phase1FormData.village)) {
         errors.village = 'Valid village name (2-50 letters) required';
       }
+      if (isMarathiScript(phase1FormData.village)) {
+        errors.village = 'Village name must be in English (Marathi script not allowed)';
+      }
       if (!phase1FormData.pinCode || !validatePinCode(phase1FormData.pinCode)) {
         errors.pinCode = 'Valid 6-digit PIN code required';
       }
-      if (phase1FormData.residentialAddress && /[\u0900-\u097F]/.test(phase1FormData.residentialAddress)) {
+      if (isMarathiScript(phase1FormData.residentialAddress)) {
         errors.residentialAddress = 'Residential Address must be in English (Marathi script not allowed)';
+      }
+      if (phase1FormData.farmSameAsResidential === 'No' && isMarathiScript(phase1FormData.farmVillage)) {
+        errors.farmVillage = 'Farm Village must be in English (Marathi script not allowed)';
       }
     } else if (section === 3) {
       if (!phase1FormData.totalLand || phase1FormData.totalLand <= 0) {
         errors.totalLand = 'Total Land Area must be greater than 0';
       }
-      if (phase1FormData.hasFarmerId === 'Yes' && (!phase1FormData.govtAgriStackFarmerId || !phase1FormData.govtAgriStackFarmerId.trim())) {
-        errors.govtAgriStackFarmerId = 'Farmer ID Number is required when Farmer ID is Yes';
+      if (phase1FormData.hasFarmerId === 'Yes') {
+        if (!phase1FormData.govtAgriStackFarmerId || !phase1FormData.govtAgriStackFarmerId.trim()) {
+          errors.govtAgriStackFarmerId = 'Farmer ID Number is required when Farmer ID is Yes';
+        } else if (isMarathiScript(phase1FormData.govtAgriStackFarmerId)) {
+          errors.govtAgriStackFarmerId = 'Farmer ID must be in English (Marathi script not allowed)';
+        }
       }
     } else if (section === 4) {
       if (!phase1FormData.mainCrops || phase1FormData.mainCrops.length === 0) {
@@ -395,8 +410,12 @@ export const MahaAgridootFieldApp: React.FC = () => {
       if (!phase1FormData.activeSchemesList || phase1FormData.activeSchemesList.length === 0) {
         errors.activeSchemesList = 'Please select at least one option under Section A';
       }
-      if (phase1FormData.activeSchemesList?.includes('Other') && (!phase1FormData.activeSchemeOther || !phase1FormData.activeSchemeOther.trim())) {
-        errors.activeSchemeOther = 'Please specify the other scheme';
+      if (phase1FormData.activeSchemesList?.includes('Other')) {
+        if (!phase1FormData.activeSchemeOther || !phase1FormData.activeSchemeOther.trim()) {
+          errors.activeSchemeOther = 'Please specify the other scheme';
+        } else if (isMarathiScript(phase1FormData.activeSchemeOther)) {
+          errors.activeSchemeOther = 'Specified scheme must be in English (Marathi script not allowed)';
+        }
       }
     } else if (section === 9) {
       if (!phase1FormData.mainProblemsList || phase1FormData.mainProblemsList.length === 0) {
@@ -405,8 +424,12 @@ export const MahaAgridootFieldApp: React.FC = () => {
       if (phase1FormData.mainProblemsList?.length > 3) {
         errors.mainProblemsList = 'Maximum 3 problems allowed';
       }
-      if (phase1FormData.mainProblemsList?.includes('Other') && (!phase1FormData.mainProblemOther || !phase1FormData.mainProblemOther.trim())) {
-        errors.mainProblemOther = 'Please specify the other problem';
+      if (phase1FormData.mainProblemsList?.includes('Other')) {
+        if (!phase1FormData.mainProblemOther || !phase1FormData.mainProblemOther.trim()) {
+          errors.mainProblemOther = 'Please specify the other problem';
+        } else if (isMarathiScript(phase1FormData.mainProblemOther)) {
+          errors.mainProblemOther = 'Specified problem must be in English (Marathi script not allowed)';
+        }
       }
     }
 
@@ -492,6 +515,10 @@ export const MahaAgridootFieldApp: React.FC = () => {
   const addGatParcel = () => {
     if (!parcelGatNoInput.trim()) {
       triggerToast('Gat / Survey No. is required.');
+      return;
+    }
+    if (/[\u0900-\u097F]/.test(parcelGatNoInput)) {
+      triggerToast('⚠️ Gat No. must be in English (Marathi script not allowed).');
       return;
     }
     const areaNum = parseFloat(parcelAreaInput);
@@ -4780,8 +4807,9 @@ export const MahaAgridootFieldApp: React.FC = () => {
                             value={phase1FormData.farmVillage || ''}
                             onChange={e => updateFormField('farmVillage', e.target.value.toUpperCase())}
                             placeholder="e.g. PAVANAR"
-                            className="w-full h-[44px] bg-[#111827] border border-[#2A3952] rounded-lg px-3 font-bold text-white uppercase text-xs focus:border-emerald-500 focus:outline-none"
+                            className={`w-full h-[44px] bg-[#111827] border ${fieldErrors.farmVillage ? 'border-rose-500 bg-rose-950/30' : 'border-[#2A3952]'} rounded-lg px-3 font-bold text-white uppercase text-xs focus:border-emerald-500 focus:outline-none`}
                           />
+                          {fieldErrors.farmVillage && <p className="text-rose-400 text-xs font-bold pt-1 flex items-center space-x-1"><span>⚠️</span><span>{fieldErrors.farmVillage}</span></p>}
                         </div>
                       </div>
                     )}
@@ -4899,7 +4927,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
                         <input
                           type="text"
                           value={parcelGatNoInput}
-                          onChange={e => setParcelGatNoInput(e.target.value)}
+                          onChange={e => setParcelGatNoInput(e.target.value.toUpperCase())}
                           placeholder="Gat No. (45/1)"
                           className="w-full h-[44px] bg-[#111827] border border-[#2A3952] rounded-lg px-2.5 font-mono font-bold text-white text-xs uppercase focus:border-emerald-500 focus:outline-none"
                         />
@@ -5462,11 +5490,13 @@ export const MahaAgridootFieldApp: React.FC = () => {
                         <div className="pt-1 animate-in fade-in">
                           <input
                             type="text"
+                            ref={el => (fieldInputRefs.current['activeSchemeOther'] = el)} id="field-input-activeSchemeOther"
                             value={phase1FormData.activeSchemeOther || ''}
-                            onChange={e => updateFormField('activeSchemeOther', e.target.value)}
-                            placeholder="Specify Other Scheme"
-                            className="w-full h-[44px] bg-[#182234] border border-[#233148] rounded-xl px-3 font-medium text-white text-xs focus:border-emerald-500 focus:outline-none"
+                            onChange={e => updateFormField('activeSchemeOther', e.target.value.toUpperCase())}
+                            placeholder="SPECIFY OTHER SCHEME"
+                            className={`w-full h-[44px] bg-[#182234] border ${fieldErrors.activeSchemeOther ? 'border-rose-500 bg-rose-950/30' : 'border-[#233148]'} rounded-xl px-3 font-bold text-white uppercase text-xs focus:border-emerald-500 focus:outline-none`}
                           />
+                          {fieldErrors.activeSchemeOther && <p className="text-rose-400 text-xs font-bold pt-1 flex items-center space-x-1"><span>⚠️</span><span>{fieldErrors.activeSchemeOther}</span></p>}
                         </div>
                       )}
                     </div>
@@ -5575,11 +5605,13 @@ export const MahaAgridootFieldApp: React.FC = () => {
                         <label className="font-bold text-xs text-slate-300 block mb-1">Specify Other Problem</label>
                         <input
                           type="text"
+                          ref={el => (fieldInputRefs.current['mainProblemOther'] = el)} id="field-input-mainProblemOther"
                           value={phase1FormData.mainProblemOther || ''}
-                          onChange={e => updateFormField('mainProblemOther', e.target.value)}
-                          placeholder="Enter details of other problem"
-                          className="w-full h-[44px] bg-[#182234] border border-[#233148] rounded-xl px-3 font-medium text-white text-xs focus:border-emerald-500 focus:outline-none"
+                          onChange={e => updateFormField('mainProblemOther', e.target.value.toUpperCase())}
+                          placeholder="ENTER DETAILS OF OTHER PROBLEM"
+                          className={`w-full h-[44px] bg-[#182234] border ${fieldErrors.mainProblemOther ? 'border-rose-500 bg-rose-950/30' : 'border-[#233148]'} rounded-xl px-3 font-bold text-white uppercase text-xs focus:border-emerald-500 focus:outline-none`}
                         />
+                        {fieldErrors.mainProblemOther && <p className="text-rose-400 text-xs font-bold pt-1 flex items-center space-x-1"><span>⚠️</span><span>{fieldErrors.mainProblemOther}</span></p>}
                       </div>
                     )}
                   </div>
