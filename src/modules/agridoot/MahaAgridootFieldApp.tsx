@@ -320,7 +320,10 @@ export const MahaAgridootFieldApp: React.FC = () => {
 
   const handlePrevWizardSection = () => {
     if (wizardSection > 1) {
-      setWizardSection(prev => prev - 1);
+      setWizardSection(prev => (prev - 1) as any);
+    } else {
+      setIsRegWizardOpen(false);
+      triggerToast('Exited Farmer Registration Wizard');
     }
   };
 
@@ -5811,16 +5814,14 @@ export const MahaAgridootFieldApp: React.FC = () => {
 
               {/* 4. STICKY BOTTOM NAVIGATION BAR */}
               <div className="sticky bottom-0 left-0 right-0 p-4 bg-[#0B1324]/95 border-t border-[#1E293B] backdrop-blur-md flex items-center space-x-3 z-30">
-                {wizardSection > 1 && (
-                  <button
-                    type="button"
-                    onClick={handlePrevWizardSection}
-                    className="h-[52px] px-6 bg-[#182234] hover:bg-[#223046] border border-[#2A3952] text-white font-bold rounded-2xl text-sm transition-all cursor-pointer flex items-center space-x-2"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                    <span>Back</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={handlePrevWizardSection}
+                  className="h-[52px] px-6 bg-[#182234] hover:bg-[#223046] border border-[#2A3952] text-white font-bold rounded-2xl text-sm transition-all cursor-pointer flex items-center space-x-2 shrink-0"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <span>Back</span>
+                </button>
 
                 {wizardSection < 10 ? (
                   <button
