@@ -191,6 +191,8 @@ export const MahaAgridootFieldApp: React.FC = () => {
   const [wizardSection, setWizardSection] = useState<number>(1);
   const [wizardSaveStatus, setWizardSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  // Entrepreneur wizard: opened AFTER Candidate Type Step 3 selects 'entrepreneur' or 'both'
+  const [isEntrepreneurWizardOpen, setIsEntrepreneurWizardOpen] = useState(false);
   const [aadhaarDuplicateError, setAadhaarDuplicateError] = useState<any>(null);
   const [wizardErrorMsg, setWizardErrorMsg] = useState<string | null>(null);
   const [phase1SuccessId, setPhase1SuccessId] = useState<string | null>(null);
@@ -210,16 +212,17 @@ export const MahaAgridootFieldApp: React.FC = () => {
   const IS_DEV = process.env.NODE_ENV !== 'production';
 
   const FARMER_WIZARD_SECTIONS = [
-    { id: 1, title: 'Farmer Basic Details', icon: '🧑‍🌾' },
+    { id: 1, title: 'Basic Details', icon: '🧑‍🌾' },
     { id: 2, title: 'Location Details', icon: '📍' },
-    { id: 3, title: 'Farmer & Land Profile', icon: '🌾' },
-    { id: 4, title: 'Current Farming', icon: '🥦' },
-    { id: 5, title: 'Water, Electricity & Facilities', icon: '⚡' },
-    { id: 6, title: 'Required Services', icon: '❤️' },
-    { id: 7, title: 'Future Machinery & Investment', icon: '🚜' },
-    { id: 8, title: 'Government Schemes & Subsidy', icon: '🏛️' },
-    { id: 9, title: 'Major Farming Problems', icon: '⚠️' },
-    { id: 10, title: 'Review & Submit Registration', icon: '📝' }
+    { id: 3, title: 'Candidate Type', icon: '🏷️' },
+    { id: 4, title: 'Farmer & Land Profile', icon: '🌾' },
+    { id: 5, title: 'Current Farming', icon: '🥦' },
+    { id: 6, title: 'Water, Electricity & Facilities', icon: '⚡' },
+    { id: 7, title: 'Required Services', icon: '❤️' },
+    { id: 8, title: 'Future Machinery & Investment', icon: '🚜' },
+    { id: 9, title: 'Government Schemes & Subsidy', icon: '🏛️' },
+    { id: 10, title: 'Major Farming Problems', icon: '⚠️' },
+    { id: 11, title: 'Review & Submit Registration', icon: '📝' }
   ];
 
   const [phase1FormData, setPhase1FormData] = useState<any>({
@@ -319,11 +322,18 @@ export const MahaAgridootFieldApp: React.FC = () => {
   };
 
   const handlePrevWizardSection = () => {
+    if (isEntrepreneurWizardOpen) {
+      // Back from Entrepreneur Wizard → return to Candidate Type selection (Step 3)
+      setIsEntrepreneurWizardOpen(false);
+      setIsRegWizardOpen(true);
+      setWizardSection(3);
+      return;
+    }
     if (wizardSection > 1) {
       setWizardSection(prev => (prev - 1) as any);
     } else {
       setIsRegWizardOpen(false);
-      triggerToast('Exited Farmer Registration Wizard');
+      triggerToast('Exited Registration Wizard');
     }
   };
 
@@ -4396,24 +4406,31 @@ export const MahaAgridootFieldApp: React.FC = () => {
 {/* ========================================================================= */}
         {/* ENTERPRISE FULL-PAGE REGISTRATION WIZARD (FARMER vs ENTREPRENEUR) */}
         {/* ========================================================================= */}
+        {/* ENTREPRENEUR ASSESSMENT WIZARD — opens when user selects Entrepreneur in Candidate Type step */}
+        {isEntrepreneurWizardOpen && (
+          <div className="fixed inset-0 z-[70] bg-[#0B1220] flex flex-col overflow-y-auto animate-in fade-in duration-200">
+            <EntrepreneurAssessmentWizard
+              initialCandidateName={phase1FormData.fullName || 'Rahul Patil'}
+              initialMobile={phase1FormData.whatsappMobile || '8765432109'}
+              initialDistrict={phase1FormData.district || 'Nashik'}
+              initialTaluka={phase1FormData.taluka || 'Niphad'}
+              initialVillage={phase1FormData.village || 'Pimplas'}
+              onBack={() => {
+                setIsEntrepreneurWizardOpen(false);
+                setIsRegWizardOpen(true);
+                setWizardSection(3);
+              }}
+              onSubmitSuccess={() => {
+                setIsEntrepreneurWizardOpen(false);
+                setIsRegWizardOpen(false);
+                triggerToast('🎉 Entrepreneur Assessment Profile Submitted Successfully!');
+              }}
+              triggerToast={triggerToast}
+            />
+          </div>
+        )}
+
         {isRegWizardOpen && (
-          phase1FormData.registrationType === 'entrepreneur' ? (
-            <div className="fixed inset-0 z-[60] bg-[#0B1220] flex flex-col overflow-y-auto animate-in fade-in duration-200">
-              <EntrepreneurAssessmentWizard
-                initialCandidateName={phase1FormData.fullName || 'Rahul Patil'}
-                initialMobile={phase1FormData.whatsappMobile || '8765432109'}
-                initialDistrict={phase1FormData.district || 'Nashik'}
-                initialTaluka={phase1FormData.taluka || 'Niphad'}
-                initialVillage={phase1FormData.village || 'Pimplas'}
-                onBack={() => setIsRegWizardOpen(false)}
-                onSubmitSuccess={() => {
-                  setIsRegWizardOpen(false);
-                  triggerToast('🎉 Entrepreneur Assessment Profile Submitted Successfully!');
-                }}
-                triggerToast={triggerToast}
-              />
-            </div>
-          ) : (
             <div className="fixed inset-0 z-[60] bg-[#0B1220] flex flex-col overflow-y-auto animate-in fade-in duration-200">
             
             {/* 1. TOP STICKY HEADER BAR matching prompt specifications */}
@@ -4469,8 +4486,8 @@ export const MahaAgridootFieldApp: React.FC = () => {
               <div className="max-w-[480px] mx-auto flex items-center justify-center space-x-2 md:space-x-3">
                 {(() => {
                   let start = Math.max(1, wizardSection - 2);
-                  if (start + 4 > 10) start = 6;
-                  const visibleSteps = [start, start + 1, start + 2, start + 3, start + 4].filter(s => s <= 10);
+                  if (start + 4 > 11) start = 7;
+                  const visibleSteps = [start, start + 1, start + 2, start + 3, start + 4].filter(s => s <= 11);
 
                   return visibleSteps.map((stepNum, idx) => {
                     const isActive = wizardSection === stepNum;
@@ -4921,6 +4938,12 @@ export const MahaAgridootFieldApp: React.FC = () => {
                       })}
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* STEP 4: FARMER & LAND PROFILE (only for farmer or both; entrepreneur is routed separately) */}
+              {wizardSection === 4 && (
+                <div className="bg-[#131C2E] rounded-2xl border border-[#1E2A40] p-5 space-y-4 shadow-xl animate-in fade-in duration-200">
                   <div className="space-y-1 pb-2 border-b border-[#1E293B]">
                     <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
                       <span>🌾</span>
@@ -5121,8 +5144,8 @@ export const MahaAgridootFieldApp: React.FC = () => {
                 </div>
               )}
 
-              {/* STEP 4: CURRENT FARMING & CROPS */}
-              {wizardSection === 4 && (
+              {/* STEP 5: CURRENT FARMING & CROPS */}
+              {wizardSection === 11 && (
                 <div className="bg-[#131C2E] rounded-2xl border border-[#1E2A40] p-5 space-y-4 shadow-xl animate-in fade-in duration-200">
                   <div className="space-y-1 pb-2 border-b border-[#1E293B]">
                     <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
@@ -5823,13 +5846,28 @@ export const MahaAgridootFieldApp: React.FC = () => {
                   <span>Back</span>
                 </button>
 
-                {wizardSection < 10 ? (
+                {wizardSection < 11 ? (
                   <button
                     type="button"
                     onClick={() => {
                       if (validateCurrentStep(wizardSection)) {
-                        if (wizardSection === 3 && phase1FormData.registrationType === 'entrepreneur') {
-                          triggerToast('🚜 Opening Agri Entrepreneur Assessment Wizard...');
+                        if (wizardSection === 3) {
+                          const regType = phase1FormData.registrationType;
+                          if (regType === 'entrepreneur') {
+                            // Close farmer wizard, open entrepreneur wizard
+                            setIsRegWizardOpen(false);
+                            setIsEntrepreneurWizardOpen(true);
+                            triggerToast('🚜 Opening Agri Entrepreneur Assessment Wizard...');
+                            return;
+                          }
+                          if (regType === 'both') {
+                            // Go to farmer wizard first, entrepreneur will open after submit
+                            setWizardSection(4);
+                            triggerToast('👥 Farmer form first, Entrepreneur form will follow.');
+                            return;
+                          }
+                          // farmer → go to Step 4 Farmer Land Profile
+                          setWizardSection(4);
                           return;
                         }
                         setWizardSection(prev => (prev + 1) as any);
@@ -5863,7 +5901,6 @@ export const MahaAgridootFieldApp: React.FC = () => {
               </div>
             </div>
           </div>
-          )
         )}
 
         {/* BOTTOM NAVIGATION BAR */}
