@@ -243,7 +243,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
     taluka: 'Ratnagiri',
     village: 'PIMPRI',
     pinCode: '442001',
-    residentialAddress: 'House No. 142, Main Gram Panchayat Road, Pimpri',
+    residentialAddress: 'HOUSE NO. 142, MAIN GRAM PANCHAYAT ROAD, PIMPRI',
     farmSameAsResidential: 'Yes',
     farmDistrict: 'Wardha',
     farmTaluka: 'Wardha',
@@ -372,6 +372,9 @@ export const MahaAgridootFieldApp: React.FC = () => {
       }
       if (!phase1FormData.pinCode || !validatePinCode(phase1FormData.pinCode)) {
         errors.pinCode = 'Valid 6-digit PIN code required';
+      }
+      if (phase1FormData.residentialAddress && /[\u0900-\u097F]/.test(phase1FormData.residentialAddress)) {
+        errors.residentialAddress = 'Residential Address must be in English (Marathi script not allowed)';
       }
     } else if (section === 3) {
       if (!phase1FormData.totalLand || phase1FormData.totalLand <= 0) {
@@ -4707,11 +4710,13 @@ export const MahaAgridootFieldApp: React.FC = () => {
                     <label className="font-bold text-xs text-slate-200 block">Residential Address</label>
                     <textarea
                       rows={2}
+                      ref={el => (fieldInputRefs.current['residentialAddress'] = el)} id="field-input-residentialAddress"
                       value={phase1FormData.residentialAddress || ''}
-                      onChange={e => updateFormField('residentialAddress', e.target.value)}
-                      placeholder="House No. 142, Main Gram Panchayat Road, Pimpri"
-                      className="w-full p-3 bg-[#182234] border border-[#233148] rounded-xl font-medium text-white text-xs focus:border-emerald-500 focus:outline-none resize-none"
+                      onChange={e => updateFormField('residentialAddress', e.target.value.toUpperCase())}
+                      placeholder="HOUSE NO. 142, MAIN GRAM PANCHAYAT ROAD, PIMPRI"
+                      className={`w-full p-3 bg-[#182234] border ${fieldErrors.residentialAddress ? 'border-rose-500 bg-rose-950/30' : 'border-[#233148]'} rounded-xl font-bold text-white uppercase text-xs focus:border-emerald-500 focus:outline-none resize-none`}
                     />
+                    {fieldErrors.residentialAddress && <p className="text-rose-400 text-xs font-bold pt-1 flex items-center space-x-1"><span>⚠️</span><span>{fieldErrors.residentialAddress}</span></p>}
                   </div>
 
                   <div className="space-y-2 pt-2 border-t border-[#1E293B]">
