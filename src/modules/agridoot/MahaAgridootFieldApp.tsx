@@ -4686,39 +4686,39 @@ export const MahaAgridootFieldApp: React.FC = () => {
                     <p className="text-xs text-slate-400">Residential and farm location details in Maharashtra.</p>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="font-bold text-xs text-slate-400 block">State <span className="text-rose-500">*</span></label>
-                    <select
-                      disabled
-                      value={phase1FormData.state}
-                      className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm opacity-80 cursor-not-allowed"
-                    >
-                      <option value="Maharashtra">Maharashtra</option>
-                    </select>
-                  </div>
+                  <WizardSelect
+                    label="State" required
+                    value={phase1FormData.state}
+                    onChange={v => updateFormField('state', v)}
+                    options={[{ value: 'Maharashtra', label: 'Maharashtra', icon: '🗺️' }]}
+                  />
 
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <label className="font-bold text-xs text-slate-200 block">District <span className="text-rose-500">*</span></label>
-                      <select
-                        value={phase1FormData.district}
-                        onChange={e => updateFormField('district', e.target.value)}
-                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
-                      >
-                        {MAHARASHTRA_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
-                      </select>
-                    </div>
+                    <WizardSelect
+                      label="District" required
+                      value={phase1FormData.district}
+                      onChange={v => {
+                        updateFormField('district', v);
+                        const talukas = getTalukasForDistrict(v);
+                        if (talukas.length > 0 && !talukas.includes(phase1FormData.taluka)) {
+                          updateFormField('taluka', talukas[0]);
+                        }
+                      }}
+                      options={MAHARASHTRA_DISTRICTS.map(d => ({ value: d, label: d, icon: '📍' }))}
+                      error={fieldErrors.district}
+                      fieldRef={el => (fieldInputRefs.current['district'] = el)}
+                      fieldId="field-input-district"
+                    />
 
-                    <div className="space-y-1.5">
-                      <label className="font-bold text-xs text-slate-200 block">Taluka <span className="text-rose-500">*</span></label>
-                      <select
-                        value={phase1FormData.taluka}
-                        onChange={e => updateFormField('taluka', e.target.value)}
-                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
-                      >
-                        {getTalukasForDistrict(phase1FormData.district).map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                    </div>
+                    <WizardSelect
+                      label="Taluka" required
+                      value={phase1FormData.taluka}
+                      onChange={v => updateFormField('taluka', v)}
+                      options={getTalukasForDistrict(phase1FormData.district).map(t => ({ value: t, label: t, icon: '🏘️' }))}
+                      error={fieldErrors.taluka}
+                      fieldRef={el => (fieldInputRefs.current['taluka'] = el)}
+                      fieldId="field-input-taluka"
+                    />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -4793,26 +4793,26 @@ export const MahaAgridootFieldApp: React.FC = () => {
                       <div className="p-3 bg-[#182234] border border-[#233148] rounded-xl space-y-2 animate-in fade-in">
                         <span className="font-mono text-[10px] font-black text-amber-300 uppercase tracking-wider block">FARM LOCATION DETAILS</span>
                         <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="font-bold text-[11px] text-slate-300 block mb-1">Farm District</label>
-                            <select
-                              value={phase1FormData.farmDistrict || 'Wardha'}
-                              onChange={e => updateFormField('farmDistrict', e.target.value)}
-                              className="w-full h-[44px] bg-[#111827] border border-[#2A3952] rounded-lg px-3 font-bold text-white text-xs"
-                            >
-                              {MAHARASHTRA_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="font-bold text-[11px] text-slate-300 block mb-1">Farm Taluka</label>
-                            <select
-                              value={phase1FormData.farmTaluka || 'Wardha'}
-                              onChange={e => updateFormField('farmTaluka', e.target.value)}
-                              className="w-full h-[44px] bg-[#111827] border border-[#2A3952] rounded-lg px-3 font-bold text-white text-xs"
-                            >
-                              {getTalukasForDistrict(phase1FormData.farmDistrict || 'Wardha').map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
-                          </div>
+                          <WizardSelect
+                            label="Farm District"
+                            value={phase1FormData.farmDistrict || 'Wardha'}
+                            onChange={v => {
+                              updateFormField('farmDistrict', v);
+                              const talukas = getTalukasForDistrict(v);
+                              if (talukas.length > 0 && !talukas.includes(phase1FormData.farmTaluka)) {
+                                updateFormField('farmTaluka', talukas[0]);
+                              }
+                            }}
+                            options={MAHARASHTRA_DISTRICTS.map(d => ({ value: d, label: d, icon: '📍' }))}
+                            small
+                          />
+                          <WizardSelect
+                            label="Farm Taluka"
+                            value={phase1FormData.farmTaluka || 'Wardha'}
+                            onChange={v => updateFormField('farmTaluka', v)}
+                            options={getTalukasForDistrict(phase1FormData.farmDistrict || 'Wardha').map(t => ({ value: t, label: t, icon: '🏘️' }))}
+                            small
+                          />
                         </div>
 
                         <div>
@@ -5165,16 +5165,17 @@ export const MahaAgridootFieldApp: React.FC = () => {
                             <div className="grid grid-cols-2 gap-2 text-xs">
                               <div>
                                 <label className="text-[10px] font-bold text-slate-400 block mb-1">Season</label>
-                                <select
+                                <WizardSelect
                                   value={details.season}
-                                  onChange={e => updateCropDetail(crop, 'season', e.target.value)}
-                                  className="w-full h-[40px] bg-[#111827] border border-[#2A3952] rounded-lg px-2 font-bold text-white text-xs"
-                                >
-                                  <option value="Kharif">Kharif</option>
-                                  <option value="Rabi">Rabi</option>
-                                  <option value="Summer">Summer</option>
-                                  <option value="Perennial">Perennial</option>
-                                </select>
+                                  onChange={v => updateCropDetail(crop, 'season', v)}
+                                  options={[
+                                    { value: 'Kharif', label: 'Kharif', icon: '🌧️' },
+                                    { value: 'Rabi', label: 'Rabi', icon: '❄️' },
+                                    { value: 'Summer', label: 'Summer', icon: '☀️' },
+                                    { value: 'Perennial', label: 'Perennial', icon: '🌳' },
+                                  ]}
+                                  small
+                                />
                               </div>
                               <div>
                                 <label className="text-[10px] font-bold text-slate-400 block mb-1">Approx Area</label>
@@ -5273,32 +5274,30 @@ export const MahaAgridootFieldApp: React.FC = () => {
 
                       {phase1FormData.farmElectricity === 'Yes' && (
                         <div className="space-y-2 pt-1 animate-in fade-in">
-                          <div>
-                            <label className="text-[11px] font-bold text-slate-300 block mb-1">कोणते वीज कनेक्शन आहे?</label>
-                            <select
-                              value={phase1FormData.electricityConnectionType || 'Agricultural Electricity Connection'}
-                              onChange={e => updateFormField('electricityConnectionType', e.target.value)}
-                              className="w-full h-[44px] bg-[#111827] border border-[#2A3952] rounded-lg px-3 font-bold text-white text-xs"
-                            >
-                              <option value="Agricultural Electricity Connection">Agricultural Electricity Connection</option>
-                              <option value="Domestic Electricity Connection">Domestic Electricity Connection</option>
-                              <option value="Other">Other</option>
-                            </select>
-                          </div>
+                          <WizardSelect
+                            label="कोणते वीज कनेक्शन आहे?"
+                            value={phase1FormData.electricityConnectionType || 'Agricultural Electricity Connection'}
+                            onChange={v => updateFormField('electricityConnectionType', v)}
+                            options={[
+                              { value: 'Agricultural Electricity Connection', label: 'Agricultural Electricity', icon: '⚡' },
+                              { value: 'Domestic Electricity Connection', label: 'Domestic Electricity', icon: '🏠' },
+                              { value: 'Other', label: 'Other', icon: '🔄' },
+                            ]}
+                            small
+                          />
 
-                          <div>
-                            <label className="text-[11px] font-bold text-slate-300 block mb-1">वीज कनेक्शनची स्थिती</label>
-                            <select
-                              value={phase1FormData.powerStatus || 'Regular / Available'}
-                              onChange={e => updateFormField('powerStatus', e.target.value)}
-                              className="w-full h-[44px] bg-[#111827] border border-[#2A3952] rounded-lg px-3 font-bold text-white text-xs"
-                            >
-                              <option value="Regular / Available">Regular / Available</option>
-                              <option value="Irregular">Irregular</option>
-                              <option value="Not Working">Not Working</option>
-                              <option value="Other">Other</option>
-                            </select>
-                          </div>
+                          <WizardSelect
+                            label="वीज कनेक्शनची स्थिती"
+                            value={phase1FormData.powerStatus || 'Regular / Available'}
+                            onChange={v => updateFormField('powerStatus', v)}
+                            options={[
+                              { value: 'Regular / Available', label: 'Regular / Available', icon: '✅' },
+                              { value: 'Irregular', label: 'Irregular', icon: '⚠️' },
+                              { value: 'Not Working', label: 'Not Working', icon: '❌' },
+                              { value: 'Other', label: 'Other', icon: '🔄' },
+                            ]}
+                            small
+                          />
                         </div>
                       )}
                     </div>
@@ -5325,16 +5324,17 @@ export const MahaAgridootFieldApp: React.FC = () => {
 
                       {phase1FormData.solarRequirement !== 'No' && (
                         <div className="pt-1 animate-in fade-in">
-                          <label className="text-[11px] font-bold text-slate-300 block mb-1">Solar Requirement Type</label>
-                          <select
+                          <WizardSelect
+                            label="Solar Requirement Type"
                             value={phase1FormData.solarRequirementType || 'Solar Agricultural Pump'}
-                            onChange={e => updateFormField('solarRequirementType', e.target.value)}
-                            className="w-full h-[44px] bg-[#111827] border border-[#2A3952] rounded-lg px-3 font-bold text-white text-xs"
-                          >
-                            <option value="Solar Agricultural Pump">Solar Agricultural Pump</option>
-                            <option value="Solar Rooftop Connection">Solar Rooftop Connection</option>
-                            <option value="Off-grid Solar System">Off-grid Solar System</option>
-                          </select>
+                            onChange={v => updateFormField('solarRequirementType', v)}
+                            options={[
+                              { value: 'Solar Agricultural Pump', label: 'Solar Agricultural Pump', icon: '☀️' },
+                              { value: 'Solar Rooftop Connection', label: 'Solar Rooftop Connection', icon: '🏠' },
+                              { value: 'Off-grid Solar System', label: 'Off-grid Solar System', icon: '🔋' },
+                            ]}
+                            small
+                          />
                         </div>
                       )}
                     </div>
