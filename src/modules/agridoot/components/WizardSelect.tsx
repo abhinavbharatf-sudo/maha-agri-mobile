@@ -4,6 +4,7 @@ import { ChevronDown, Check } from 'lucide-react';
 export interface WizardSelectOption {
   value: string;
   label: string;
+  sublabel?: string;
   icon?: React.ReactNode;
 }
 
@@ -61,7 +62,7 @@ const WizardSelect: React.FC<WizardSelectProps> = ({
         onClick={() => setOpen(o => !o)}
         className={[
           'w-full flex items-center justify-between px-4 rounded-xl font-bold text-sm transition-all cursor-pointer border-2',
-          small ? 'h-[44px]' : 'h-[52px]',
+          small ? 'min-h-[44px] py-1.5' : selected?.sublabel ? 'min-h-[56px] py-1.5' : 'h-[52px]',
           error
             ? 'bg-rose-950/30 border-rose-500 text-white'
             : open
@@ -69,11 +70,18 @@ const WizardSelect: React.FC<WizardSelectProps> = ({
             : 'bg-[#182234] border-[#233148] text-white hover:border-slate-500',
         ].join(' ')}
       >
-        <span className='flex items-center space-x-2.5 overflow-hidden text-ellipsis whitespace-nowrap'>
+        <span className='flex items-center space-x-2.5 overflow-hidden text-ellipsis whitespace-nowrap min-w-0'>
           {selected?.icon && <span className='shrink-0 flex items-center justify-center'>{selected.icon}</span>}
-          <span className={selected ? 'text-white truncate' : 'text-slate-500 truncate'}>
-            {selected ? selected.label : placeholder}
-          </span>
+          <div className="flex flex-col text-left truncate min-w-0">
+            <span className={selected ? 'text-white text-sm font-bold truncate leading-tight' : 'text-slate-500 text-sm font-bold truncate'}>
+              {selected ? selected.label : placeholder}
+            </span>
+            {selected?.sublabel && (
+              <span className="text-[10.5px] text-slate-400 font-normal truncate leading-tight mt-0.5">
+                {selected.sublabel}
+              </span>
+            )}
+          </div>
         </span>
         <ChevronDown className={`w-4 h-4 shrink-0 transition-transform duration-200 ${open ? 'rotate-180 text-emerald-400' : 'text-slate-400'}`} />
       </button>
@@ -88,18 +96,23 @@ const WizardSelect: React.FC<WizardSelectProps> = ({
                 type='button'
                 onClick={() => { onChange(opt.value); setOpen(false); }}
                 className={[
-                  'w-full flex items-center justify-between px-4 py-3 text-sm font-bold text-left transition-all cursor-pointer',
+                  'w-full flex items-center justify-between px-4 py-2.5 text-sm font-bold text-left transition-all cursor-pointer',
                   isSelected
                     ? 'bg-gradient-to-r from-emerald-900/90 to-teal-900/70 text-emerald-300 border-l-4 border-emerald-500 shadow-inner'
                     : 'text-slate-300 hover:bg-[#182234] hover:text-white border-l-4 border-transparent',
                   idx !== 0 ? 'border-t border-[#1E293B]/60' : '',
                 ].join(' ')}
               >
-                <span className='flex items-center space-x-3'>
+                <div className='flex items-center space-x-3 min-w-0'>
                   {opt.icon && <span className='shrink-0 flex items-center justify-center'>{opt.icon}</span>}
-                  <span>{opt.label}</span>
-                </span>
-                {isSelected && <Check className='w-4 h-4 text-emerald-400 stroke-[3] shrink-0' />}
+                  <div className="flex flex-col text-left min-w-0">
+                    <span className={`text-sm font-bold leading-tight ${isSelected ? 'text-emerald-300' : 'text-slate-200'}`}>{opt.label}</span>
+                    {opt.sublabel && (
+                      <span className={`text-[11px] font-normal leading-tight mt-0.5 ${isSelected ? 'text-emerald-400/90' : 'text-slate-400'}`}>{opt.sublabel}</span>
+                    )}
+                  </div>
+                </div>
+                {isSelected && <Check className='w-4 h-4 text-emerald-400 stroke-[3] shrink-0 ml-2' />}
               </button>
             );
           })}

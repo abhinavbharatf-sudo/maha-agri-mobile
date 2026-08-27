@@ -4911,7 +4911,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
                 </div>
               )}
 
-              {/* STEP 4: FARMER & LAND PROFILE (only for farmer or both; entrepreneur is routed separately) */}
+              {/* STEP 4: FARMER & LAND PROFILE */}
               {wizardSection === 4 && (
                 <div className="bg-[#131C2E] rounded-2xl border border-[#1E2A40] p-5 space-y-4 shadow-xl animate-in fade-in duration-200">
                   <div className="space-y-1 pb-2 border-b border-[#1E293B]">
@@ -4920,30 +4920,32 @@ export const MahaAgridootFieldApp: React.FC = () => {
                       <span>Farmer &amp; Land Profile</span>
                     </h3>
                     <span className="text-xs text-emerald-400 font-bold block">शेतकरी व जमीन प्रोफाइल</span>
-                    <p className="text-xs text-slate-400">Basic farming profile, land area &amp; Gat-wise parcel entry.</p>
-                    <p className="text-[11px] text-slate-500">शेतीचा मूलभूत तपशील, जमीन क्षेत्रफळ व गटनिहाय जमीन नोंद.</p>
+                    <p className="text-xs text-slate-300 font-medium">Basic farming profile, land area &amp; Gat-wise parcel entry.</p>
+                    <p className="text-[11px] text-slate-400">शेतीचा मूलभूत तपशील, जमीन क्षेत्रफळ व गटनिहाय जमीन नोंद.</p>
                   </div>
 
                   <WizardSelect
                     label={
-                      <span>
-                        Primary Farming Type <span className="text-[11px] text-slate-400 font-normal ml-1">| मुख्य शेतीचा प्रकार</span>
-                      </span>
+                      <div>
+                        <span className="font-bold text-xs text-slate-200 block leading-tight">Primary Farming Type</span>
+                        <span className="text-[10px] text-slate-400 block font-normal leading-tight">मुख्य शेतीचा प्रकार</span>
+                      </div>
                     }
                     value={phase1FormData.primaryFarmingType || 'Crop Farming'}
                     onChange={v => updateFormField('primaryFarmingType', v)}
                     options={[
-                      { value: 'Crop Farming', label: 'Crop Farming — पिकांची शेती', icon: '🌾' },
-                      { value: 'Horticulture', label: 'Horticulture — बागायती शेती', icon: '🍎' },
-                      { value: 'Floriculture', label: 'Floriculture — फूलशेती', icon: '🌸' },
-                      { value: 'Mixed Farming', label: 'Mixed Farming — मिश्र शेती', icon: '🌿' },
+                      { value: 'Crop Farming', label: 'Crop Farming', sublabel: 'पिकांची शेती', icon: '🌾' },
+                      { value: 'Horticulture', label: 'Horticulture', sublabel: 'बागायती शेती / फळबाग', icon: '🍎' },
+                      { value: 'Floriculture', label: 'Floriculture', sublabel: 'फूलशेती', icon: '🌸' },
+                      { value: 'Mixed Farming', label: 'Mixed Farming', sublabel: 'मिश्र शेती', icon: '🌿' },
                     ]}
                   />
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <label className="font-bold text-xs text-slate-200 block">
-                        Experience (Years) <span className="text-[11px] text-slate-400 font-normal ml-1">| शेतीचा अनुभव (वर्षे)</span>
+                      <label className="block">
+                        <span className="font-bold text-xs text-slate-200 block leading-tight">Experience (Years)</span>
+                        <span className="text-[10px] text-slate-400 block font-normal leading-tight">शेतीचा अनुभव (वर्षे)</span>
                       </label>
                       <input
                         type="number"
@@ -4956,25 +4958,27 @@ export const MahaAgridootFieldApp: React.FC = () => {
                     </div>
                     <WizardSelect
                       label={
-                        <span>
-                          Main Occupation <span className="text-[11px] text-slate-400 font-normal ml-1">| मुख्य व्यवसाय</span>
-                        </span>
+                        <div>
+                          <span className="font-bold text-xs text-slate-200 block leading-tight">Main Occupation</span>
+                          <span className="text-[10px] text-slate-400 block font-normal leading-tight">मुख्य व्यवसाय</span>
+                        </div>
                       }
                       value={phase1FormData.mainOccupation || 'Farming'}
                       onChange={v => updateFormField('mainOccupation', v)}
                       options={[
-                        { value: 'Farming', label: 'Farming — शेती', icon: '🧑‍🌾' },
-                        { value: 'Agri Business', label: 'Agri Business — कृषी व्यवसाय', icon: '🚜' },
-                        { value: 'Service', label: 'Service — नोकरी', icon: '💼' },
-                        { value: 'Other', label: 'Other — इतर', icon: '🔄' },
+                        { value: 'Farming', label: 'Farming', sublabel: 'शेती', icon: '🧑‍🌾' },
+                        { value: 'Agri Business', label: 'Agri Business', sublabel: 'कृषी व्यवसाय', icon: '🚜' },
+                        { value: 'Service', label: 'Service', sublabel: 'नोकरी', icon: '💼' },
+                        { value: 'Other', label: 'Other', sublabel: 'इतर', icon: '🔄' },
                       ]}
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <label className="font-bold text-xs text-slate-200 block">
-                        Total Land Area <span className="text-rose-500">*</span> <span className="text-[11px] text-slate-400 font-normal ml-1">| एकूण जमीन क्षेत्रफळ</span>
+                      <label className="block">
+                        <span className="font-bold text-xs text-slate-200 block leading-tight">Total Land Area <span className="text-rose-500">*</span></span>
+                        <span className="text-[10px] text-slate-400 block font-normal leading-tight">एकूण जमीन क्षेत्रफळ</span>
                       </label>
                       <input
                         type="number"
@@ -4990,34 +4994,36 @@ export const MahaAgridootFieldApp: React.FC = () => {
                     </div>
                     <WizardSelect
                       label={
-                        <span>
-                          Land Unit <span className="text-[11px] text-slate-400 font-normal ml-1">| जमिनीचे एकक</span>
-                        </span>
+                        <div>
+                          <span className="font-bold text-xs text-slate-200 block leading-tight">Land Unit</span>
+                          <span className="text-[10px] text-slate-400 block font-normal leading-tight">जमिनीचे एकक</span>
+                        </div>
                       }
                       value={phase1FormData.landUnit || 'Acre'}
                       onChange={v => updateFormField('landUnit', v)}
                       options={[
-                        { value: 'Acre', label: 'Acre — एकर', icon: '📐' },
-                        { value: 'Hectare', label: 'Hectare — हेक्टर', icon: '📐' },
-                        { value: 'Guntha', label: 'Guntha — गुंठा', icon: '📐' },
-                        { value: 'Bigha', label: 'Bigha — बिघा', icon: '📐' },
+                        { value: 'Acre', label: 'Acre', sublabel: 'एकर', icon: '📐' },
+                        { value: 'Hectare', label: 'Hectare', sublabel: 'हेक्टर', icon: '📐' },
+                        { value: 'Guntha', label: 'Guntha', sublabel: 'गुंठा', icon: '📐' },
+                        { value: 'Bigha', label: 'Bigha', sublabel: 'बिघा', icon: '📐' },
                       ]}
                     />
                   </div>
 
                   <WizardSelect
                     label={
-                      <span>
-                        Land Ownership <span className="text-[11px] text-slate-400 font-normal ml-1">| जमिनीचा मालकी हक्क</span>
-                      </span>
+                      <div>
+                        <span className="font-bold text-xs text-slate-200 block leading-tight">Land Ownership</span>
+                        <span className="text-[10px] text-slate-400 block font-normal leading-tight">जमिनीचा मालकी हक्क</span>
+                      </div>
                     }
                     value={phase1FormData.landOwnershipStatus || 'Own Land'}
                     onChange={v => updateFormField('landOwnershipStatus', v)}
                     options={[
-                      { value: 'Own Land', label: 'Own Land — स्वतःची जमीन', icon: '🏡' },
-                      { value: 'Lease / Tenant Land', label: 'Lease / Tenant Land — भाडेपट्टा / कुळ जमीन', icon: '📋' },
-                      { value: 'Family Shared Land', label: 'Family Shared Land — कौटुंबिक सामायिक जमीन', icon: '👨‍👩‍👧‍👦' },
-                      { value: 'Other', label: 'Other — इतर', icon: '🔄' },
+                      { value: 'Own Land', label: 'Own Land', sublabel: 'स्वतःची जमीन', icon: '🏡' },
+                      { value: 'Lease / Tenant Land', label: 'Lease / Tenant Land', sublabel: 'भाडेपट्टा / कुळ जमीन', icon: '📋' },
+                      { value: 'Family Shared Land', label: 'Family Shared Land', sublabel: 'कौटुंबिक सामायिक जमीन', icon: '👨‍👩‍👧‍👦' },
+                      { value: 'Other', label: 'Other', sublabel: 'इतर', icon: '🔄' },
                     ]}
                   />
 
@@ -5025,14 +5031,14 @@ export const MahaAgridootFieldApp: React.FC = () => {
                   <div className="p-3.5 bg-[#182234] border border-[#233148] rounded-xl space-y-3">
                     <div className="flex justify-between items-center">
                       <div>
-                        <span className="font-bold text-xs text-white block">Gat/Survey Parcel Entry</span>
-                        <span className="text-[11px] text-slate-400 font-normal">गट/सर्वे जमीन नोंद</span>
+                        <span className="font-bold text-xs text-white block leading-tight">Gat/Survey Parcel Entry</span>
+                        <span className="text-[10px] text-slate-400 font-normal block leading-tight">गट/सर्वे जमीन नोंद</span>
                       </div>
                       <div className="text-right">
-                        <span className="text-[11px] font-mono font-bold text-emerald-400 block">
+                        <span className="text-[11px] font-mono font-bold text-emerald-400 block leading-tight">
                           Gat-wise Total: {calculateGatWiseTotalAcres()} Acre
                         </span>
-                        <span className="text-[10px] text-emerald-500/80">
+                        <span className="text-[10px] text-emerald-400/80 block leading-tight">
                           गटनिहाय एकूण: {calculateGatWiseTotalAcres()} एकर
                         </span>
                       </div>
@@ -5044,7 +5050,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
                           type="text"
                           value={parcelGatNoInput}
                           onChange={e => setParcelGatNoInput(e.target.value.toUpperCase())}
-                          placeholder="GAT NO. (45/1)"
+                          placeholder="Gat (45/1)"
                           className="w-full h-[44px] bg-[#111827] border border-[#2A3952] rounded-lg px-2.5 font-mono font-bold text-white text-xs uppercase focus:border-emerald-500 focus:outline-none"
                         />
                       </div>
@@ -5065,9 +5071,9 @@ export const MahaAgridootFieldApp: React.FC = () => {
                           onChange={v => setParcelUnitInput(v as any)}
                           small
                           options={[
-                            { value: 'Acre', label: 'Acre' },
-                            { value: 'Hectare', label: 'Hectare' },
-                            { value: 'Guntha', label: 'Guntha' },
+                            { value: 'Acre', label: 'Acre', sublabel: 'एकर' },
+                            { value: 'Hectare', label: 'Hectare', sublabel: 'हेक्टर' },
+                            { value: 'Guntha', label: 'Guntha', sublabel: 'गुंठा' },
                           ]}
                         />
                       </div>
@@ -5075,9 +5081,10 @@ export const MahaAgridootFieldApp: React.FC = () => {
                         <button
                           type="button"
                           onClick={addGatParcel}
-                          className="w-full h-[44px] bg-[#059669] hover:bg-[#047857] text-white font-bold rounded-lg text-xs transition-all cursor-pointer flex items-center justify-center"
+                          className="w-full h-[44px] bg-[#059669] hover:bg-[#047857] text-white font-bold rounded-lg text-xs transition-all cursor-pointer flex flex-col items-center justify-center leading-none"
                         >
-                          + Add
+                          <span className="text-xs font-bold">+ Add</span>
+                          <span className="text-[9px] opacity-85 font-normal">+ जोडा</span>
                         </button>
                       </div>
                     </div>
@@ -5101,8 +5108,8 @@ export const MahaAgridootFieldApp: React.FC = () => {
                   {/* FARMER ID SECTION */}
                   <div className="p-3.5 bg-[#182234] border border-[#233148] rounded-xl space-y-3">
                     <div>
-                      <label className="font-bold text-xs text-white block">Farmer ID Available?</label>
-                      <span className="text-[11px] text-slate-400 font-normal">Farmer ID आहे का?</span>
+                      <label className="font-bold text-xs text-white block leading-tight">Farmer ID Available?</label>
+                      <span className="text-[10px] text-slate-400 font-normal block leading-tight">Farmer ID उपलब्ध आहे का?</span>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                       {[
@@ -5114,20 +5121,21 @@ export const MahaAgridootFieldApp: React.FC = () => {
                           key={opt.key}
                           type="button"
                           onClick={() => updateFormField('hasFarmerId', opt.key)}
-                          className={`py-2 rounded-xl font-bold text-xs transition-all cursor-pointer text-center ${
+                          className={`py-2 rounded-xl font-bold text-xs transition-all cursor-pointer text-center flex flex-col items-center justify-center leading-tight ${
                             phase1FormData.hasFarmerId === opt.key ? 'bg-[#059669] text-white shadow-md' : 'bg-[#111827] border border-[#2A3952] text-slate-300 hover:border-slate-500'
                           }`}
                         >
-                          <span className="block">{opt.labelEn}</span>
-                          <span className="block text-[10px] font-normal opacity-80">{opt.labelMr}</span>
+                          <span className="text-xs font-bold">{opt.labelEn}</span>
+                          <span className="text-[10px] font-normal opacity-80">{opt.labelMr}</span>
                         </button>
                       ))}
                     </div>
 
                     {phase1FormData.hasFarmerId === 'Yes' && (
                       <div className="space-y-1 pt-1 animate-in fade-in">
-                        <label className="text-[11px] font-bold text-slate-300 block">
-                          Farmer ID Number <span className="text-[10px] text-slate-400 font-normal ml-1">| Farmer ID क्रमांक</span>
+                        <label className="block">
+                          <span className="text-[11px] font-bold text-slate-300 block leading-tight">Farmer ID Number</span>
+                          <span className="text-[10px] text-slate-400 font-normal block leading-tight">Farmer ID क्रमांक</span>
                         </label>
                         <input
                           type="text"
@@ -5147,113 +5155,35 @@ export const MahaAgridootFieldApp: React.FC = () => {
                 </div>
               )}
 
-              {/* STEP 5: CURRENT FARMING & CROPS */}
-              {wizardSection === 11 && (
-                <div className="bg-[#131C2E] rounded-2xl border border-[#1E2A40] p-5 space-y-4 shadow-xl animate-in fade-in duration-200">
-                  <div className="space-y-1 pb-2 border-b border-[#1E293B]">
-                    <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
-                      <span>🥦</span>
-                      <span>Current Farming &amp; Crops</span>
-                    </h3>
-                    <p className="text-xs text-slate-400">What are you currently growing / planning to grow?</p>
-                    <p className="text-xs text-emerald-400 font-bold">"सध्या तुम्ही कोणते पीक घेत आहात किंवा घेणार आहात?"</p>
-                  </div>
-
-                  <div className="space-y-3">
-                    <span className="font-mono text-[11px] font-black text-slate-300 uppercase tracking-wider block">SELECT CROPS (MULTIPLE ALLOWED)</span>
-                    <div className="flex flex-wrap gap-2">
-                      {['Cotton', 'Soybean', 'Tur', 'Wheat', 'Jowar', 'Gram', 'Paddy', 'Onion', 'Sugarcane', 'Orange', 'Mosambi', 'Pomegranate', 'Banana', 'Turmeric', 'Maize', 'Groundnut', 'Sunflower', 'Chilli', 'Tomato', 'Potato', 'Vegetables', 'Other'].map(crop => {
-                        const selected = phase1FormData.mainCrops?.includes(crop) ?? false;
-                        return (
-                          <button
-                            key={crop}
-                            type="button"
-                            onClick={() => toggleMultiSelect('mainCrops', crop)}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
-                              selected ? 'bg-[#059669] text-white border-emerald-500 shadow-md' : 'bg-[#182234] border-[#233148] text-slate-300 hover:border-slate-500'
-                            }`}
-                          >
-                            {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                            <span>{crop}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {phase1FormData.mainCrops && phase1FormData.mainCrops.length > 0 && (
-                    <div className="pt-3 border-t border-[#1E293B] space-y-3">
-                      <span className="font-mono text-[11px] font-black text-amber-300 uppercase tracking-wider block">CROP DETAILS</span>
-                      {phase1FormData.mainCrops.map((crop: string) => {
-                        const details = phase1FormData.cropDetails?.[crop] || { season: 'Kharif', approxArea: '1.0 Acre' };
-                        return (
-                          <div key={crop} className="p-3.5 bg-[#182234] border border-[#233148] rounded-xl space-y-2 relative">
-                            <div className="flex justify-between items-center">
-                              <h4 className="font-extrabold text-white text-sm">{crop}</h4>
-                              <button type="button" onClick={() => removeCropDetail(crop)} className="text-slate-400 hover:text-rose-400 p-1">
-                                🗑️
-                              </button>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 text-xs">
-                              <div>
-                                <label className="text-[10px] font-bold text-slate-400 block mb-1">Season</label>
-                                <WizardSelect
-                                  value={details.season}
-                                  onChange={v => updateCropDetail(crop, 'season', v)}
-                                  options={[
-                                    { value: 'Kharif', label: 'Kharif', icon: '🌧️' },
-                                    { value: 'Rabi', label: 'Rabi', icon: '❄️' },
-                                    { value: 'Summer', label: 'Summer', icon: '☀️' },
-                                    { value: 'Perennial', label: 'Perennial', icon: '🌳' },
-                                  ]}
-                                  small
-                                />
-                              </div>
-                              <div>
-                                <label className="text-[10px] font-bold text-slate-400 block mb-1">Approx Area</label>
-                                <input
-                                  type="text"
-                                  value={details.approxArea}
-                                  onChange={e => updateCropDetail(crop, 'approxArea', e.target.value)}
-                                  placeholder="e.g. 2.5 Acres"
-                                  className="w-full h-[40px] bg-[#111827] border border-[#2A3952] rounded-lg px-2 font-mono font-bold text-white text-xs"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-
               {/* STEP 5: WATER, ELECTRICITY & FACILITIES */}
               {wizardSection === 5 && (
                 <div className="bg-[#131C2E] rounded-2xl border border-[#1E2A40] p-5 space-y-4 shadow-xl animate-in fade-in duration-200">
                   <div className="space-y-1 pb-2 border-b border-[#1E293B]">
                     <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
                       <span>⚡</span>
-                      <span>Water, Electricity &amp; Facilities / पाणी, वीज आणि सुविधा</span>
+                      <span>Water, Electricity &amp; Facilities</span>
                     </h3>
-                    <p className="text-xs text-slate-400">Water sources, irrigation systems, power connection &amp; solar / पाण्याचे स्त्रोत, सिंचन पद्धती, वीज कनेक्शन आणि सौर ऊर्जा.</p>
+                    <span className="text-xs text-emerald-400 font-bold block">पाणी, वीज आणि सुविधा</span>
+                    <p className="text-xs text-slate-300 font-medium">Water sources, irrigation systems, power connection &amp; solar.</p>
+                    <p className="text-[11px] text-slate-400">पाण्याचे स्त्रोत, सिंचन पद्धती, वीज कनेक्शन आणि सौर ऊर्जा.</p>
                   </div>
 
                   <div className="space-y-4">
                     {/* A. WATER SOURCES */}
                     <div className="space-y-1.5">
-                      <label className="font-bold text-xs text-slate-200 block">
-                        A. Water Sources / पाण्याचे स्त्रोत
+                      <label className="block">
+                        <span className="font-bold text-xs text-slate-200 block leading-tight">A. Water Sources</span>
+                        <span className="text-[10px] text-slate-400 font-normal block leading-tight">पाण्याचे स्त्रोत</span>
                       </label>
                       <div className="flex flex-wrap gap-2">
                         {[
-                          { value: 'Borewell', label: 'Borewell / बोअरवेल' },
-                          { value: 'Open Well', label: 'Open Well / विहीर' },
-                          { value: 'Canal', label: 'Canal / कालवा' },
-                          { value: 'River/Nala', label: 'River/Nala / नदी/नाला' },
-                          { value: 'Farm Pond', label: 'Farm Pond / शेततळे' },
-                          { value: 'Rainfed', label: 'Rainfed / पावसावर आधारित' },
-                          { value: 'Other', label: 'Other / इतर' },
+                          { value: 'Borewell', labelEn: 'Borewell', labelMr: 'बोअरवेल' },
+                          { value: 'Open Well', labelEn: 'Open Well', labelMr: 'विहीर' },
+                          { value: 'Canal', labelEn: 'Canal', labelMr: 'कालवा' },
+                          { value: 'River/Nala', labelEn: 'River/Nala', labelMr: 'नदी/नाला' },
+                          { value: 'Farm Pond', labelEn: 'Farm Pond', labelMr: 'शेततळे' },
+                          { value: 'Rainfed', labelEn: 'Rainfed', labelMr: 'पावसावर आधारित' },
+                          { value: 'Other', labelEn: 'Other', labelMr: 'इतर' },
                         ].map(src => {
                           const selected = phase1FormData.waterSources?.includes(src.value) ?? false;
                           return (
@@ -5261,12 +5191,15 @@ export const MahaAgridootFieldApp: React.FC = () => {
                               key={src.value}
                               type="button"
                               onClick={() => toggleMultiSelect('waterSources', src.value)}
-                              className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                              className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center space-x-1.5 ${
                                 selected ? 'bg-[#059669] text-white border-emerald-500 shadow-md' : 'bg-[#182234] border-[#233148] text-slate-300 hover:border-slate-500'
                               }`}
                             >
-                              {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                              <span>{src.label}</span>
+                              {selected && <Check className="w-3.5 h-3.5 stroke-[3] shrink-0" />}
+                              <div className="flex flex-col text-left leading-tight">
+                                <span className="text-xs font-bold">{src.labelEn}</span>
+                                <span className={`text-[10px] font-normal ${selected ? 'text-emerald-100' : 'text-slate-400'}`}>{src.labelMr}</span>
+                              </div>
                             </button>
                           );
                         })}
@@ -5275,16 +5208,17 @@ export const MahaAgridootFieldApp: React.FC = () => {
 
                     {/* B. IRRIGATION SYSTEMS */}
                     <div className="space-y-1.5">
-                      <label className="font-bold text-xs text-slate-200 block">
-                        B. Irrigation Systems / सिंचन पद्धती
+                      <label className="block">
+                        <span className="font-bold text-xs text-slate-200 block leading-tight">B. Irrigation Systems</span>
+                        <span className="text-[10px] text-slate-400 font-normal block leading-tight">सिंचन पद्धती</span>
                       </label>
                       <div className="flex flex-wrap gap-2">
                         {[
-                          { value: 'Drip', label: 'Drip / ठिबक सिंचन' },
-                          { value: 'Sprinkler', label: 'Sprinkler / तुषार सिंचन' },
-                          { value: 'Flood Irrigation', label: 'Flood Irrigation / पाट पाणी' },
-                          { value: 'No Irrigation', label: 'No Irrigation / सिंचन नाही' },
-                          { value: 'Other', label: 'Other / इतर' },
+                          { value: 'Drip', labelEn: 'Drip', labelMr: 'ठिबक सिंचन' },
+                          { value: 'Sprinkler', labelEn: 'Sprinkler', labelMr: 'तुषार सिंचन' },
+                          { value: 'Flood Irrigation', labelEn: 'Flood Irrigation', labelMr: 'पाट पाणी' },
+                          { value: 'No Irrigation', labelEn: 'No Irrigation', labelMr: 'सिंचन नाही' },
+                          { value: 'Other', labelEn: 'Other', labelMr: 'इतर' },
                         ].map(sys => {
                           const selected = phase1FormData.irrigationSystems?.includes(sys.value) ?? false;
                           return (
@@ -5292,12 +5226,15 @@ export const MahaAgridootFieldApp: React.FC = () => {
                               key={sys.value}
                               type="button"
                               onClick={() => toggleMultiSelect('irrigationSystems', sys.value)}
-                              className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                              className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center space-x-1.5 ${
                                 selected ? 'bg-[#059669] text-white border-emerald-500 shadow-md' : 'bg-[#182234] border-[#233148] text-slate-300 hover:border-slate-500'
                               }`}
                             >
-                              {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                              <span>{sys.label}</span>
+                              {selected && <Check className="w-3.5 h-3.5 stroke-[3] shrink-0" />}
+                              <div className="flex flex-col text-left leading-tight">
+                                <span className="text-xs font-bold">{sys.labelEn}</span>
+                                <span className={`text-[10px] font-normal ${selected ? 'text-emerald-100' : 'text-slate-400'}`}>{sys.labelMr}</span>
+                              </div>
                             </button>
                           );
                         })}
@@ -5306,24 +5243,26 @@ export const MahaAgridootFieldApp: React.FC = () => {
 
                     {/* C. ELECTRICITY AT FARM */}
                     <div className="p-3.5 bg-[#182234] border border-[#233148] rounded-xl space-y-3">
-                      <label className="font-bold text-xs text-white block">
-                        C. Electricity at Farm / शेतामध्ये वीज कनेक्शन आहे का?
-                      </label>
+                      <div>
+                        <label className="font-bold text-xs text-white block leading-tight">C. Electricity at Farm</label>
+                        <span className="text-[10px] text-slate-400 font-normal block leading-tight">शेतामध्ये वीज कनेक्शन आहे का?</span>
+                      </div>
                       <div className="grid grid-cols-3 gap-2">
                         {[
-                          { key: 'Yes', label: 'Yes / होय' },
-                          { key: 'No', label: 'No / नाही' },
-                          { key: "Don't Know", label: "Don't Know / माहीत नाही" },
+                          { key: 'Yes', labelEn: 'Yes', labelMr: 'होय' },
+                          { key: 'No', labelEn: 'No', labelMr: 'नाही' },
+                          { key: "Don't Know", labelEn: "Don't Know", labelMr: 'माहीत नाही' },
                         ].map(opt => (
                           <button
                             key={opt.key}
                             type="button"
                             onClick={() => updateFormField('farmElectricity', opt.key)}
-                            className={`py-2.5 rounded-xl font-bold text-xs cursor-pointer transition-all ${
-                              phase1FormData.farmElectricity === opt.key ? 'bg-[#059669] text-white shadow-md' : 'bg-[#111827] border border-[#2A3952] text-slate-300'
+                            className={`py-2 rounded-xl font-bold text-xs transition-all cursor-pointer text-center flex flex-col items-center justify-center leading-tight ${
+                              phase1FormData.farmElectricity === opt.key ? 'bg-[#059669] text-white shadow-md' : 'bg-[#111827] border border-[#2A3952] text-slate-300 hover:border-slate-500'
                             }`}
                           >
-                            {opt.label}
+                            <span className="text-xs font-bold">{opt.labelEn}</span>
+                            <span className="text-[10px] font-normal opacity-80">{opt.labelMr}</span>
                           </button>
                         ))}
                       </div>
@@ -5331,26 +5270,36 @@ export const MahaAgridootFieldApp: React.FC = () => {
                       {phase1FormData.farmElectricity === 'Yes' && (
                         <div className="space-y-2 pt-1 animate-in fade-in">
                           <WizardSelect
-                            label="Electricity Connection Type / वीज कनेक्शनचा प्रकार"
+                            label={
+                              <div>
+                                <span className="font-bold text-xs text-slate-200 block leading-tight">Electricity Connection Type</span>
+                                <span className="text-[10px] text-slate-400 block font-normal leading-tight">वीज कनेक्शनचा प्रकार</span>
+                              </div>
+                            }
                             value={phase1FormData.electricityConnectionType || 'Agricultural Electricity Connection'}
                             onChange={v => updateFormField('electricityConnectionType', v)}
                             options={[
-                              { value: 'Agricultural Electricity Connection', label: 'Agricultural Electricity / कृषी वीज', icon: '⚡' },
-                              { value: 'Domestic Electricity Connection', label: 'Domestic Electricity / घरगुती वीज', icon: '🏠' },
-                              { value: 'Other', label: 'Other / इतर', icon: '🔄' },
+                              { value: 'Agricultural Electricity Connection', label: 'Agricultural Electricity', sublabel: 'कृषी वीज कनेक्शन', icon: '⚡' },
+                              { value: 'Domestic Electricity Connection', label: 'Domestic Electricity', sublabel: 'घरगुती वीज कनेक्शन', icon: '🏠' },
+                              { value: 'Other', label: 'Other', sublabel: 'इतर', icon: '🔄' },
                             ]}
                             small
                           />
 
                           <WizardSelect
-                            label="Connection Status / वीज कनेक्शनची स्थिती"
+                            label={
+                              <div>
+                                <span className="font-bold text-xs text-slate-200 block leading-tight">Connection Status</span>
+                                <span className="text-[10px] text-slate-400 block font-normal leading-tight">वीज कनेक्शनची स्थिती</span>
+                              </div>
+                            }
                             value={phase1FormData.powerStatus || 'Regular / Available'}
                             onChange={v => updateFormField('powerStatus', v)}
                             options={[
-                              { value: 'Regular / Available', label: 'Regular / Available / नियमित / उपलब्ध', icon: '✅' },
-                              { value: 'Irregular', label: 'Irregular / अनियमित', icon: '⚠️' },
-                              { value: 'Not Working', label: 'Not Working / बंद / नादुरुस्त', icon: '❌' },
-                              { value: 'Other', label: 'Other / इतर', icon: '🔄' },
+                              { value: 'Regular / Available', label: 'Regular / Available', sublabel: 'नियमित / उपलब्ध', icon: '✅' },
+                              { value: 'Irregular', label: 'Irregular', sublabel: 'अनियमित', icon: '⚠️' },
+                              { value: 'Not Working', label: 'Not Working', sublabel: 'बंद / नादुरुस्त', icon: '❌' },
+                              { value: 'Other', label: 'Other', sublabel: 'इतर', icon: '🔄' },
                             ]}
                             small
                           />
@@ -5360,26 +5309,28 @@ export const MahaAgridootFieldApp: React.FC = () => {
 
                     {/* D. SOLAR PUMP REQUIREMENT */}
                     <div className="p-3.5 bg-[#182234] border border-[#233148] rounded-xl space-y-3">
-                      <label className="font-bold text-xs text-white block">
-                        D. Solar Pump Requirement / Solar Pump / Solar Connection ची आवश्यकता आहे का?
-                      </label>
+                      <div>
+                        <label className="font-bold text-xs text-white block leading-tight">D. Solar Pump / Connection Requirement</label>
+                        <span className="text-[10px] text-slate-400 font-normal block leading-tight">तुम्हाला Solar Pump / Solar Connection ची आवश्यकता आहे का?</span>
+                      </div>
                       <div className="grid grid-cols-3 gap-2">
                         {[
-                          { key: 'Yes', label: 'Yes / होय' },
-                          { key: 'No', label: 'No / नाही' },
-                          { key: 'Need Information', label: 'Need Info / माहिती हवी' },
+                          { key: 'Yes', labelEn: 'Yes', labelMr: 'होय' },
+                          { key: 'No', labelEn: 'No', labelMr: 'नाही' },
+                          { key: 'Need Information', labelEn: 'Need Info', labelMr: 'माहिती हवी' },
                         ].map(opt => (
                           <button
                             key={opt.key}
                             type="button"
                             onClick={() => updateFormField('solarRequirement', opt.key)}
-                            className={`py-2.5 rounded-xl font-bold text-xs cursor-pointer transition-all ${
+                            className={`py-2 rounded-xl font-bold text-xs transition-all cursor-pointer text-center flex flex-col items-center justify-center leading-tight ${
                               phase1FormData.solarRequirement === opt.key
                                 ? opt.key === 'Need Information' ? 'bg-amber-600 text-white shadow-md' : 'bg-[#059669] text-white shadow-md'
-                                : 'bg-[#111827] border border-[#2A3952] text-slate-300'
+                                : 'bg-[#111827] border border-[#2A3952] text-slate-300 hover:border-slate-500'
                             }`}
                           >
-                            {opt.label}
+                            <span className="text-xs font-bold">{opt.labelEn}</span>
+                            <span className="text-[10px] font-normal opacity-80">{opt.labelMr}</span>
                           </button>
                         ))}
                       </div>
@@ -5387,13 +5338,18 @@ export const MahaAgridootFieldApp: React.FC = () => {
                       {phase1FormData.solarRequirement !== 'No' && (
                         <div className="pt-1 animate-in fade-in">
                           <WizardSelect
-                            label="Solar Requirement Type / सोलर आवश्यकतेचा प्रकार"
+                            label={
+                              <div>
+                                <span className="font-bold text-xs text-slate-200 block leading-tight">Solar Requirement Type</span>
+                                <span className="text-[10px] text-slate-400 block font-normal leading-tight">सोलर आवश्यकतेचा प्रकार</span>
+                              </div>
+                            }
                             value={phase1FormData.solarRequirementType || 'Solar Agricultural Pump'}
                             onChange={v => updateFormField('solarRequirementType', v)}
                             options={[
-                              { value: 'Solar Agricultural Pump', label: 'Solar Agricultural Pump / सौर कृषी पंप', icon: '☀️' },
-                              { value: 'Solar Rooftop Connection', label: 'Solar Rooftop / सोलर रूफटॉप', icon: '🏠' },
-                              { value: 'Off-grid Solar System', label: 'Off-grid Solar / ऑफ-ग्रिड सोलर', icon: '🔋' },
+                              { value: 'Solar Agricultural Pump', label: 'Solar Agricultural Pump', sublabel: 'सौर कृषी पंप', icon: '☀️' },
+                              { value: 'Solar Rooftop Connection', label: 'Solar Rooftop Connection', sublabel: 'सोलर रूफटॉप कनेक्शन', icon: '🏠' },
+                              { value: 'Off-grid Solar System', label: 'Off-grid Solar System', sublabel: 'ऑफ-ग्रिड सोलर यंत्रणा', icon: '🔋' },
                             ]}
                             small
                           />
@@ -5403,19 +5359,20 @@ export const MahaAgridootFieldApp: React.FC = () => {
 
                     {/* E. BASIC MACHINERY OWNED */}
                     <div className="space-y-1.5">
-                      <label className="font-bold text-xs text-slate-200 block">
-                        E. Basic Machinery Already Owned / स्वतःची कृषी यंत्रसामग्री
+                      <label className="block">
+                        <span className="font-bold text-xs text-slate-200 block leading-tight">E. Basic Machinery Already Owned</span>
+                        <span className="text-[10px] text-slate-400 font-normal block leading-tight">स्वतःची कृषी यंत्रसामग्री</span>
                       </label>
                       <div className="flex flex-wrap gap-2">
                         {[
-                          { value: 'Tractor', label: 'Tractor / ट्रॅक्टर' },
-                          { value: 'Rotavator', label: 'Rotavator / रोटाव्हेटर' },
-                          { value: 'Cultivator', label: 'Cultivator / कल्टीव्हेटर' },
-                          { value: 'Sprayer', label: 'Sprayer / फवारणी यंत्र' },
-                          { value: 'Pump', label: 'Pump / पंप' },
-                          { value: 'Power Tiller', label: 'Power Tiller / पॉवर टिलर' },
-                          { value: 'Other', label: 'Other / इतर' },
-                          { value: 'None', label: 'None / काहीही नाही' },
+                          { value: 'Tractor', labelEn: 'Tractor', labelMr: 'ट्रॅक्टर' },
+                          { value: 'Rotavator', labelEn: 'Rotavator', labelMr: 'रोटाव्हेटर' },
+                          { value: 'Cultivator', labelEn: 'Cultivator', labelMr: 'कल्टीव्हेटर' },
+                          { value: 'Sprayer', labelEn: 'Sprayer', labelMr: 'फवारणी यंत्र' },
+                          { value: 'Pump', labelEn: 'Pump', labelMr: 'पाण्याचा पंप' },
+                          { value: 'Power Tiller', labelEn: 'Power Tiller', labelMr: 'पॉवर टिलर' },
+                          { value: 'Other', labelEn: 'Other', labelMr: 'इतर' },
+                          { value: 'None', labelEn: 'None', labelMr: 'काहीही नाही' },
                         ].map(mac => {
                           const selected = phase1FormData.machineryOwned?.includes(mac.value) ?? false;
                           return (
@@ -5423,12 +5380,15 @@ export const MahaAgridootFieldApp: React.FC = () => {
                               key={mac.value}
                               type="button"
                               onClick={() => toggleMultiSelect('machineryOwned', mac.value)}
-                              className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                              className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center space-x-1.5 ${
                                 selected ? 'bg-[#059669] text-white border-emerald-500 shadow-md' : 'bg-[#182234] border-[#233148] text-slate-300 hover:border-slate-500'
                               }`}
                             >
-                              {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                              <span>{mac.label}</span>
+                              {selected && <Check className="w-3.5 h-3.5 stroke-[3] shrink-0" />}
+                              <div className="flex flex-col text-left leading-tight">
+                                <span className="text-xs font-bold">{mac.labelEn}</span>
+                                <span className={`text-[10px] font-normal ${selected ? 'text-emerald-100' : 'text-slate-400'}`}>{mac.labelMr}</span>
+                              </div>
                             </button>
                           );
                         })}
@@ -5444,35 +5404,37 @@ export const MahaAgridootFieldApp: React.FC = () => {
                   <div className="space-y-1 pb-2 border-b border-[#1E293B]">
                     <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
                       <span>❤️</span>
-                      <span>Required Services / आवश्यक सेवा</span>
+                      <span>Required Services</span>
                     </h3>
-                    <p className="text-xs text-slate-400">Services needed currently or in the upcoming season / सध्या किंवा पुढील हंगामात आवश्यक सेवा.</p>
+                    <span className="text-xs text-emerald-400 font-bold block">आवश्यक सेवा</span>
+                    <p className="text-xs text-slate-300 font-medium">Services needed currently or in the upcoming season.</p>
+                    <p className="text-[11px] text-slate-400">शेतीसाठी तुम्हाला सध्या किंवा पुढील हंगामात कोणत्या सेवा आवश्यक आहेत?</p>
                   </div>
 
                   <div className="space-y-3">
                     <div className="flex flex-wrap gap-2">
                       {[
-                        { value: 'Soil Testing', label: 'Soil Testing / माती परीक्षण' },
-                        { value: 'Crop Advisory', label: 'Crop Advisory / पीक सल्ला' },
-                        { value: 'Pest/Disease Advisory', label: 'Pest/Disease Advisory / कीड-रोग सल्ला' },
-                        { value: 'Drone Survey', label: 'Drone Survey / ड्रोन सर्व्हे' },
-                        { value: 'Drone Spraying', label: 'Drone Spraying / ड्रोन फवारणी' },
-                        { value: 'Farm Machinery Rental', label: 'Farm Machinery Rental / यंत्रे भाड्याने' },
-                        { value: 'Labour Service', label: 'Labour Service / मजूर सेवा' },
-                        { value: 'Seed Supply', label: 'Seed Supply / बियाणे पुरवठा' },
-                        { value: 'Fertilizer Supply', label: 'Fertilizer Supply / खत पुरवठा' },
-                        { value: 'Crop Protection Products', label: 'Crop Protection / पीक संरक्षण औषधे' },
-                        { value: 'Irrigation Assistance', label: 'Irrigation Assistance / सिंचन साहाय्य' },
-                        { value: 'Solar Pump / Solar Assistance', label: 'Solar Pump / सोलर साहाय्य' },
-                        { value: 'Government Scheme Assistance', label: 'Govt Schemes / शासकीय योजना' },
-                        { value: 'Subsidy Assistance', label: 'Subsidy Assistance / अनुदान साहाय्य' },
-                        { value: 'Crop Insurance Assistance', label: 'Crop Insurance / पीक विमा साहाय्य' },
-                        { value: 'KCC / Loan Assistance', label: 'KCC / Loan / कर्ज साहाय्य' },
-                        { value: 'Market Linkage', label: 'Market Linkage / बाजारपेठ जोडणी' },
-                        { value: 'Storage', label: 'Storage / साठवणूक' },
-                        { value: 'Transport', label: 'Transport / वाहतूक' },
-                        { value: 'Training', label: 'Training / शेती प्रशिक्षण' },
-                        { value: 'Other', label: 'Other / इतर' },
+                        { value: 'Soil Testing', labelEn: 'Soil Testing', labelMr: 'माती परीक्षण' },
+                        { value: 'Crop Advisory', labelEn: 'Crop Advisory', labelMr: 'पीक सल्ला' },
+                        { value: 'Pest/Disease Advisory', labelEn: 'Pest/Disease Advisory', labelMr: 'कीड-रोग सल्ला' },
+                        { value: 'Drone Survey', labelEn: 'Drone Survey', labelMr: 'ड्रोन सर्व्हे' },
+                        { value: 'Drone Spraying', labelEn: 'Drone Spraying', labelMr: 'ड्रोन फवारणी' },
+                        { value: 'Farm Machinery Rental', labelEn: 'Machinery Rental', labelMr: 'यंत्रे भाड्याने' },
+                        { value: 'Labour Service', labelEn: 'Labour Service', labelMr: 'मजूर सेवा' },
+                        { value: 'Seed Supply', labelEn: 'Seed Supply', labelMr: 'बियाणे पुरवठा' },
+                        { value: 'Fertilizer Supply', labelEn: 'Fertilizer Supply', labelMr: 'खत पुरवठा' },
+                        { value: 'Crop Protection Products', labelEn: 'Crop Protection', labelMr: 'पीक संरक्षण औषधे' },
+                        { value: 'Irrigation Assistance', labelEn: 'Irrigation Support', labelMr: 'सिंचन साहाय्य' },
+                        { value: 'Solar Pump / Solar Assistance', labelEn: 'Solar Support', labelMr: 'सोलर साहाय्य' },
+                        { value: 'Government Scheme Assistance', labelEn: 'Govt Schemes', labelMr: 'शासकीय योजना' },
+                        { value: 'Subsidy Assistance', labelEn: 'Subsidy Help', labelMr: 'अनुदान साहाय्य' },
+                        { value: 'Crop Insurance Assistance', labelEn: 'Crop Insurance', labelMr: 'पीक विमा साहाय्य' },
+                        { value: 'KCC / Loan Assistance', labelEn: 'KCC / Loan', labelMr: 'कर्ज / केसीसी साहाय्य' },
+                        { value: 'Market Linkage', labelEn: 'Market Linkage', labelMr: 'बाजारपेठ जोडणी' },
+                        { value: 'Storage', labelEn: 'Storage', labelMr: 'साठवणूक' },
+                        { value: 'Transport', labelEn: 'Transport', labelMr: 'वाहतूक' },
+                        { value: 'Training', labelEn: 'Training', labelMr: 'शेती प्रशिक्षण' },
+                        { value: 'Other', labelEn: 'Other', labelMr: 'इतर' },
                       ].map(svc => {
                         const selected = phase1FormData.requiredServices?.includes(svc.value) ?? false;
                         return (
@@ -5480,12 +5442,15 @@ export const MahaAgridootFieldApp: React.FC = () => {
                             key={svc.value}
                             type="button"
                             onClick={() => toggleMultiSelect('requiredServices', svc.value)}
-                            className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                            className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center space-x-1.5 ${
                               selected ? 'bg-[#059669] text-white border-emerald-500 shadow-md' : 'bg-[#182234] border-[#233148] text-slate-300 hover:border-slate-500'
                             }`}
                           >
-                            {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                            <span>{svc.label}</span>
+                            {selected && <Check className="w-3.5 h-3.5 stroke-[3] shrink-0" />}
+                            <div className="flex flex-col text-left leading-tight">
+                              <span className="text-xs font-bold">{svc.labelEn}</span>
+                              <span className={`text-[10px] font-normal ${selected ? 'text-emerald-100' : 'text-slate-400'}`}>{svc.labelMr}</span>
+                            </div>
                           </button>
                         );
                       })}
@@ -5494,9 +5459,12 @@ export const MahaAgridootFieldApp: React.FC = () => {
 
                   {phase1FormData.requiredServices && phase1FormData.requiredServices.length > 0 && (
                     <div className="pt-3 border-t border-[#1E293B] space-y-3">
-                      <span className="font-mono text-[11px] font-black text-amber-300 uppercase tracking-wider block">
-                        SERVICE PRIORITY / सेवेचे प्राधान्य
-                      </span>
+                      <div>
+                        <span className="font-mono text-[11px] font-black text-amber-300 uppercase tracking-wider block leading-tight">
+                          SERVICE PRIORITY
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-normal block leading-tight">सेवेचे प्राधान्य</span>
+                      </div>
                       {phase1FormData.requiredServices.map((svc: string) => {
                         const currentPriority = phase1FormData.servicePriorities?.[svc] || 'Immediate';
                         return (
@@ -5504,19 +5472,20 @@ export const MahaAgridootFieldApp: React.FC = () => {
                             <span className="font-bold text-white text-xs">{svc}</span>
                             <div className="flex space-x-1 text-[10px]">
                               {[
-                                { value: 'Immediate', label: 'Immediate / त्वरित' },
-                                { value: 'This Season', label: 'This Season / या हंगामात' },
-                                { value: 'Future', label: 'Future / भविष्यात' },
+                                { value: 'Immediate', labelEn: 'Immediate', labelMr: 'त्वरित' },
+                                { value: 'This Season', labelEn: 'This Season', labelMr: 'या हंगामात' },
+                                { value: 'Future', labelEn: 'Future', labelMr: 'भविष्यात' },
                               ].map(p => (
                                 <button
                                   key={p.value}
                                   type="button"
                                   onClick={() => setServicePriority(svc, p.value as any)}
-                                  className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer flex flex-col items-center leading-tight ${
                                     currentPriority === p.value ? 'bg-[#059669] text-white shadow-sm' : 'bg-[#111827] text-slate-400 hover:text-slate-200'
                                   }`}
                                 >
-                                  {p.label}
+                                  <span className="font-bold text-[10px]">{p.labelEn}</span>
+                                  <span className="text-[9px] opacity-80 font-normal">{p.labelMr}</span>
                                 </button>
                               ))}
                             </div>
@@ -5534,26 +5503,31 @@ export const MahaAgridootFieldApp: React.FC = () => {
                   <div className="space-y-1 pb-2 border-b border-[#1E293B]">
                     <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
                       <span>🚜</span>
-                      <span>Future Machinery &amp; Investment / भविष्यातील यंत्रसामग्री व गुंतवणूक</span>
+                      <span>Future Machinery &amp; Investment</span>
                     </h3>
-                    <p className="text-xs text-slate-400">What tools/facilities do you need in the future? / भविष्यात तुम्हाला कोणती साधने/सुविधा हवी आहेत?</p>
+                    <span className="text-xs text-emerald-400 font-bold block">भविष्यातील यंत्रसामग्री व गुंतवणूक</span>
+                    <p className="text-xs text-slate-300 font-medium">What tools/facilities do you need in the future?</p>
+                    <p className="text-[11px] text-slate-400">भविष्यात तुम्हाला कोणती साधने/सुविधा हवी आहेत?</p>
                   </div>
 
                   <div className="space-y-4">
                     {/* MACHINERY */}
                     <div className="space-y-1.5">
-                      <label className="font-mono text-[11px] font-black text-amber-300 uppercase tracking-wider block">
-                        🚜 MACHINERY / यंत्रसामग्री
-                      </label>
+                      <div>
+                        <span className="font-mono text-[11px] font-black text-amber-300 uppercase tracking-wider block leading-tight">
+                          🚜 MACHINERY
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-normal block leading-tight">यंत्रसामग्री</span>
+                      </div>
                       <div className="flex flex-wrap gap-2">
                         {[
-                          { value: 'Tractor', label: 'Tractor / ट्रॅक्टर' },
-                          { value: 'Rotavator', label: 'Rotavator / रोटाव्हेटर' },
-                          { value: 'Power Tiller', label: 'Power Tiller / पॉवर टिलर' },
-                          { value: 'Seed Drill', label: 'Seed Drill / पेरणी यंत्र' },
-                          { value: 'Planter', label: 'Planter / प्लांटर' },
-                          { value: 'Sprayer', label: 'Sprayer / फवारणी यंत्र' },
-                          { value: 'Harvester', label: 'Harvester / हार्वेस्टर' },
+                          { value: 'Tractor', labelEn: 'Tractor', labelMr: 'ट्रॅक्टर' },
+                          { value: 'Rotavator', labelEn: 'Rotavator', labelMr: 'रोटाव्हेटर' },
+                          { value: 'Power Tiller', labelEn: 'Power Tiller', labelMr: 'पॉवर टिलर' },
+                          { value: 'Seed Drill', labelEn: 'Seed Drill', labelMr: 'पेरणी यंत्र' },
+                          { value: 'Planter', labelEn: 'Planter', labelMr: 'प्लांटर' },
+                          { value: 'Sprayer', labelEn: 'Sprayer', labelMr: 'फवारणी यंत्र' },
+                          { value: 'Harvester', labelEn: 'Harvester', labelMr: 'हार्वेस्टर' },
                         ].map(mac => {
                           const selected = phase1FormData.futureMachinery?.includes(mac.value) ?? false;
                           return (
@@ -5561,12 +5535,15 @@ export const MahaAgridootFieldApp: React.FC = () => {
                               key={mac.value}
                               type="button"
                               onClick={() => toggleMultiSelect('futureMachinery', mac.value)}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                              className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center space-x-1.5 ${
                                 selected ? 'bg-[#059669] text-white border-emerald-500 shadow-md' : 'bg-[#182234] border-[#233148] text-slate-300 hover:border-slate-500'
                               }`}
                             >
-                              {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                              <span>{mac.label}</span>
+                              {selected && <Check className="w-3.5 h-3.5 stroke-[3] shrink-0" />}
+                              <div className="flex flex-col text-left leading-tight">
+                                <span className="text-xs font-bold">{mac.labelEn}</span>
+                                <span className={`text-[10px] font-normal ${selected ? 'text-emerald-100' : 'text-slate-400'}`}>{mac.labelMr}</span>
+                              </div>
                             </button>
                           );
                         })}
@@ -5575,17 +5552,20 @@ export const MahaAgridootFieldApp: React.FC = () => {
 
                     {/* IRRIGATION */}
                     <div className="space-y-1.5">
-                      <label className="font-mono text-[11px] font-black text-cyan-300 uppercase tracking-wider block">
-                        🛈 IRRIGATION / सिंचन
-                      </label>
+                      <div>
+                        <span className="font-mono text-[11px] font-black text-cyan-300 uppercase tracking-wider block leading-tight">
+                          🛈 IRRIGATION
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-normal block leading-tight">सिंचन साधने</span>
+                      </div>
                       <div className="flex flex-wrap gap-2">
                         {[
-                          { value: 'Drip', label: 'Drip / ठिबक सिंचन' },
-                          { value: 'Sprinkler', label: 'Sprinkler / तुषार सिंचन' },
-                          { value: 'Solar Pump', label: 'Solar Pump / सौर पंप' },
-                          { value: 'Farm Pond', label: 'Farm Pond / शेततळे' },
-                          { value: 'Pipeline', label: 'Pipeline / पाइपलाइन' },
-                          { value: 'Pump Set', label: 'Pump Set / पंप संच' },
+                          { value: 'Drip', labelEn: 'Drip', labelMr: 'ठिबक सिंचन' },
+                          { value: 'Sprinkler', labelEn: 'Sprinkler', labelMr: 'तुषार सिंचन' },
+                          { value: 'Solar Pump', labelEn: 'Solar Pump', labelMr: 'सौर पंप' },
+                          { value: 'Farm Pond', labelEn: 'Farm Pond', labelMr: 'शेततळे' },
+                          { value: 'Pipeline', labelEn: 'Pipeline', labelMr: 'पाइपलाइन' },
+                          { value: 'Pump Set', labelEn: 'Pump Set', labelMr: 'पंप संच' },
                         ].map(irr => {
                           const selected = phase1FormData.futureIrrigation?.includes(irr.value) ?? false;
                           return (
@@ -5593,12 +5573,15 @@ export const MahaAgridootFieldApp: React.FC = () => {
                               key={irr.value}
                               type="button"
                               onClick={() => toggleMultiSelect('futureIrrigation', irr.value)}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                              className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center space-x-1.5 ${
                                 selected ? 'bg-[#059669] text-white border-emerald-500 shadow-md' : 'bg-[#182234] border-[#233148] text-slate-300 hover:border-slate-500'
                               }`}
                             >
-                              {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                              <span>{irr.label}</span>
+                              {selected && <Check className="w-3.5 h-3.5 stroke-[3] shrink-0" />}
+                              <div className="flex flex-col text-left leading-tight">
+                                <span className="text-xs font-bold">{irr.labelEn}</span>
+                                <span className={`text-[10px] font-normal ${selected ? 'text-emerald-100' : 'text-slate-400'}`}>{irr.labelMr}</span>
+                              </div>
                             </button>
                           );
                         })}
@@ -5607,15 +5590,18 @@ export const MahaAgridootFieldApp: React.FC = () => {
 
                     {/* INFRASTRUCTURE */}
                     <div className="space-y-1.5">
-                      <label className="font-mono text-[11px] font-black text-purple-300 uppercase tracking-wider block">
-                        🏢 INFRASTRUCTURE / पायाभूत सुविधा
-                      </label>
+                      <div>
+                        <span className="font-mono text-[11px] font-black text-purple-300 uppercase tracking-wider block leading-tight">
+                          🏢 INFRASTRUCTURE
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-normal block leading-tight">पायाभूत सुविधा</span>
+                      </div>
                       <div className="flex flex-wrap gap-2">
                         {[
-                          { value: 'Warehouse/Godown', label: 'Warehouse / गोदाम' },
-                          { value: 'Pack House', label: 'Pack House / पॅक हाऊस' },
-                          { value: 'Cold Storage', label: 'Cold Storage / शीतगृह' },
-                          { value: 'Grading/Sorting', label: 'Grading/Sorting / प्रतवारी केंद्र' },
+                          { value: 'Warehouse/Godown', labelEn: 'Warehouse', labelMr: 'गोदाम / साठवणूक' },
+                          { value: 'Pack House', labelEn: 'Pack House', labelMr: 'पॅक हाऊस' },
+                          { value: 'Cold Storage', labelEn: 'Cold Storage', labelMr: 'शीतगृह' },
+                          { value: 'Grading/Sorting', labelEn: 'Grading/Sorting', labelMr: 'प्रतवारी केंद्र' },
                         ].map(inf => {
                           const selected = phase1FormData.futureInfrastructure?.includes(inf.value) ?? false;
                           return (
@@ -5623,12 +5609,15 @@ export const MahaAgridootFieldApp: React.FC = () => {
                               key={inf.value}
                               type="button"
                               onClick={() => toggleMultiSelect('futureInfrastructure', inf.value)}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                              className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center space-x-1.5 ${
                                 selected ? 'bg-[#059669] text-white border-emerald-500 shadow-md' : 'bg-[#182234] border-[#233148] text-slate-300 hover:border-slate-500'
                               }`}
                             >
-                              {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                              <span>{inf.label}</span>
+                              {selected && <Check className="w-3.5 h-3.5 stroke-[3] shrink-0" />}
+                              <div className="flex flex-col text-left leading-tight">
+                                <span className="text-xs font-bold">{inf.labelEn}</span>
+                                <span className={`text-[10px] font-normal ${selected ? 'text-emerald-100' : 'text-slate-400'}`}>{inf.labelMr}</span>
+                              </div>
                             </button>
                           );
                         })}
@@ -5637,18 +5626,21 @@ export const MahaAgridootFieldApp: React.FC = () => {
 
                     {/* ALLIED AGRICULTURE */}
                     <div className="space-y-1.5">
-                      <label className="font-mono text-[11px] font-black text-emerald-300 uppercase tracking-wider block">
-                        🐄 ALLIED AGRICULTURE / पूरक कृषी व्यवसाय
-                      </label>
+                      <div>
+                        <span className="font-mono text-[11px] font-black text-emerald-300 uppercase tracking-wider block leading-tight">
+                          🐄 ALLIED AGRICULTURE
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-normal block leading-tight">पूरक कृषी व्यवसाय</span>
+                      </div>
                       <div className="flex flex-wrap gap-2">
                         {[
-                          { value: 'New Orchard', label: 'New Orchard / नवीन फळबाग' },
-                          { value: 'Dairy', label: 'Dairy / दुग्ध व्यवसाय' },
-                          { value: 'Goat Farming', label: 'Goat Farming / शेळीपालन' },
-                          { value: 'Poultry', label: 'Poultry / कुक्कुटपालन' },
-                          { value: 'Fishery', label: 'Fishery / मत्स्यव्यवसाय' },
-                          { value: 'Beekeeping', label: 'Beekeeping / मधमाशी पालन' },
-                          { value: 'Food Processing', label: 'Food Processing / अन्न प्रक्रिया' },
+                          { value: 'New Orchard', labelEn: 'New Orchard', labelMr: 'नवीन फळबाग' },
+                          { value: 'Dairy', labelEn: 'Dairy', labelMr: 'दुग्ध व्यवसाय' },
+                          { value: 'Goat Farming', labelEn: 'Goat Farming', labelMr: 'शेळीपालन' },
+                          { value: 'Poultry', labelEn: 'Poultry', labelMr: 'कुक्कुटपालन' },
+                          { value: 'Fishery', labelEn: 'Fishery', labelMr: 'मत्स्यव्यवसाय' },
+                          { value: 'Beekeeping', labelEn: 'Beekeeping', labelMr: 'मधमाशी पालन' },
+                          { value: 'Food Processing', labelEn: 'Food Processing', labelMr: 'अन्न प्रक्रिया' },
                         ].map(allied => {
                           const selected = phase1FormData.futureAlliedAgri?.includes(allied.value) ?? false;
                           return (
@@ -5656,12 +5648,15 @@ export const MahaAgridootFieldApp: React.FC = () => {
                               key={allied.value}
                               type="button"
                               onClick={() => toggleMultiSelect('futureAlliedAgri', allied.value)}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                              className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center space-x-1.5 ${
                                 selected ? 'bg-[#059669] text-white border-emerald-500 shadow-md' : 'bg-[#182234] border-[#233148] text-slate-300 hover:border-slate-500'
                               }`}
                             >
-                              {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                              <span>{allied.label}</span>
+                              {selected && <Check className="w-3.5 h-3.5 stroke-[3] shrink-0" />}
+                              <div className="flex flex-col text-left leading-tight">
+                                <span className="text-xs font-bold">{allied.labelEn}</span>
+                                <span className={`text-[10px] font-normal ${selected ? 'text-emerald-100' : 'text-slate-400'}`}>{allied.labelMr}</span>
+                              </div>
                             </button>
                           );
                         })}
@@ -5677,28 +5672,33 @@ export const MahaAgridootFieldApp: React.FC = () => {
                   <div className="space-y-1 pb-2 border-b border-[#1E293B]">
                     <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
                       <span>🏛️</span>
-                      <span>Government Schemes &amp; Subsidy / शासकीय योजना व अनुदान</span>
+                      <span>Government Schemes &amp; Subsidy</span>
                     </h3>
-                    <p className="text-xs text-slate-400">Government welfare benefits received &amp; assistance requirements / शासकीय लाभ आणि आवश्यक अनुदान साहाय्य.</p>
+                    <span className="text-xs text-emerald-400 font-bold block">शासकीय योजना व अनुदान</span>
+                    <p className="text-xs text-slate-300 font-medium">Government welfare benefits received &amp; assistance requirements.</p>
+                    <p className="text-[11px] text-slate-400">शासकीय लाभ आणि आवश्यक अनुदान साहाय्य.</p>
                   </div>
 
                   <div className="space-y-4">
-                    {/* SECTION A: GOVERNMENT BENEFITS CURRENTLY AVAILABLE / RECEIVED */}
+                    {/* SECTION A: GOVERNMENT BENEFITS RECEIVED */}
                     <div className="space-y-2">
-                      <label className="font-bold text-xs text-white block">
-                        Section A – Government Benefits Received / विभाग अ – मिळालेले शासकीय लाभ
-                      </label>
+                      <div>
+                        <label className="font-bold text-xs text-white block leading-tight">
+                          Section A – Government Benefits Received
+                        </label>
+                        <span className="text-[10px] text-slate-400 font-normal block leading-tight">विभाग अ – मिळालेले शासकीय लाभ</span>
+                      </div>
                       <div className="flex flex-wrap gap-2">
                         {[
-                          { value: 'PM-Kisan', label: 'PM-Kisan / पीएम-किसान' },
-                          { value: 'Namo Shetkari', label: 'Namo Shetkari / नमो शेतकरी' },
-                          { value: 'MahaDBT', label: 'MahaDBT / महाडीबीटी' },
-                          { value: 'KCC', label: 'KCC / केसीसी' },
-                          { value: 'Crop Insurance', label: 'Crop Insurance / पीक विमा' },
-                          { value: 'Soil Health Card', label: 'Soil Health Card / मृदा पत्रिका' },
-                          { value: 'Other', label: 'Other / इतर' },
-                          { value: 'None', label: 'None / काहीही नाही' },
-                          { value: "Don't Know", label: "Don't Know / माहीत नाही" },
+                          { value: 'PM-Kisan', labelEn: 'PM-Kisan', labelMr: 'पीएम-किसान' },
+                          { value: 'Namo Shetkari', labelEn: 'Namo Shetkari', labelMr: 'नमो शेतकरी' },
+                          { value: 'MahaDBT', labelEn: 'MahaDBT', labelMr: 'महाडीबीटी' },
+                          { value: 'KCC', labelEn: 'KCC', labelMr: 'केसीसी' },
+                          { value: 'Crop Insurance', labelEn: 'Crop Insurance', labelMr: 'पीक विमा' },
+                          { value: 'Soil Health Card', labelEn: 'Soil Health Card', labelMr: 'मृदा पत्रिका' },
+                          { value: 'Other', labelEn: 'Other', labelMr: 'इतर' },
+                          { value: 'None', labelEn: 'None', labelMr: 'काहीही नाही' },
+                          { value: "Don't Know", labelEn: "Don't Know", labelMr: 'माहीत नाही' },
                         ].map(scheme => {
                           const selected = phase1FormData.activeSchemesList?.includes(scheme.value) ?? false;
                           return (
@@ -5706,12 +5706,15 @@ export const MahaAgridootFieldApp: React.FC = () => {
                               key={scheme.value}
                               type="button"
                               onClick={() => toggleActiveScheme(scheme.value)}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                              className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center space-x-1.5 ${
                                 selected ? 'bg-[#059669] text-white border-emerald-500 shadow-md' : 'bg-[#182234] border-[#233148] text-slate-300 hover:border-slate-500'
                               }`}
                             >
-                              {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                              <span>{scheme.label}</span>
+                              {selected && <Check className="w-3.5 h-3.5 stroke-[3] shrink-0" />}
+                              <div className="flex flex-col text-left leading-tight">
+                                <span className="text-xs font-bold">{scheme.labelEn}</span>
+                                <span className={`text-[10px] font-normal ${selected ? 'text-emerald-100' : 'text-slate-400'}`}>{scheme.labelMr}</span>
+                              </div>
                             </button>
                           );
                         })}
@@ -5719,12 +5722,16 @@ export const MahaAgridootFieldApp: React.FC = () => {
 
                       {phase1FormData.activeSchemesList?.includes('Other') && (
                         <div className="pt-1 animate-in fade-in">
+                          <label className="block mb-1">
+                            <span className="text-[11px] font-bold text-slate-300 block leading-tight">Specify Other Scheme</span>
+                            <span className="text-[10px] text-slate-400 font-normal block leading-tight">इतर योजना नमूद करा</span>
+                          </label>
                           <input
                             type="text"
                             ref={el => (fieldInputRefs.current['activeSchemeOther'] = el)} id="field-input-activeSchemeOther"
                             value={phase1FormData.activeSchemeOther || ''}
                             onChange={e => updateFormField('activeSchemeOther', e.target.value.toUpperCase())}
-                            placeholder="SPECIFY OTHER SCHEME / इतर योजना नमूद करा"
+                            placeholder="SPECIFY OTHER SCHEME"
                             className={`w-full h-[44px] bg-[#182234] border ${fieldErrors.activeSchemeOther ? 'border-rose-500 bg-rose-950/30' : 'border-[#233148]'} rounded-xl px-3 font-bold text-white uppercase text-xs focus:border-emerald-500 focus:outline-none`}
                           />
                           {fieldErrors.activeSchemeOther && <p className="text-rose-400 text-xs font-bold pt-1 flex items-center space-x-1"><span>⚠️</span><span>{fieldErrors.activeSchemeOther}</span></p>}
@@ -5734,26 +5741,30 @@ export const MahaAgridootFieldApp: React.FC = () => {
 
                     {/* SECTION B: SCHEME / SUBSIDY ASSISTANCE REQUIRED? */}
                     <div className="p-3.5 bg-[#182234] border border-[#233148] rounded-xl space-y-3">
-                      <label className="font-bold text-xs text-white block">
-                        Section B – Scheme / Subsidy Assistance Required? / विभाग ब – योजना / अनुदान साहाय्य हवे आहे का?
-                      </label>
+                      <div>
+                        <label className="font-bold text-xs text-white block leading-tight">
+                          Section B – Scheme / Subsidy Assistance Required?
+                        </label>
+                        <span className="text-[10px] text-slate-400 font-normal block leading-tight">विभाग ब – योजना / अनुदान साहाय्य हवे आहे का?</span>
+                      </div>
                       <div className="grid grid-cols-3 gap-2">
                         {[
-                          { key: 'Yes', label: 'Yes / होय' },
-                          { key: 'No', label: 'No / नाही' },
-                          { key: 'Need Information', label: 'Need Info / माहिती हवी' },
+                          { key: 'Yes', labelEn: 'Yes', labelMr: 'होय' },
+                          { key: 'No', labelEn: 'No', labelMr: 'नाही' },
+                          { key: 'Need Information', labelEn: 'Need Info', labelMr: 'माहिती हवी' },
                         ].map(opt => (
                           <button
                             key={opt.key}
                             type="button"
                             onClick={() => updateFormField('subsidyHelpNeeded', opt.key)}
-                            className={`py-2.5 rounded-xl font-bold text-xs cursor-pointer transition-all ${
+                            className={`py-2 rounded-xl font-bold text-xs transition-all cursor-pointer text-center flex flex-col items-center justify-center leading-tight ${
                               phase1FormData.subsidyHelpNeeded === opt.key
                                 ? opt.key === 'Need Information' ? 'bg-amber-600 text-white shadow-md' : 'bg-[#059669] text-white shadow-md'
-                                : 'bg-[#111827] border border-[#2A3952] text-slate-300'
+                                : 'bg-[#111827] border border-[#2A3952] text-slate-300 hover:border-slate-500'
                             }`}
                           >
-                            {opt.label}
+                            <span className="text-xs font-bold">{opt.labelEn}</span>
+                            <span className="text-[10px] font-normal opacity-80">{opt.labelMr}</span>
                           </button>
                         ))}
                       </div>
@@ -5761,22 +5772,25 @@ export const MahaAgridootFieldApp: React.FC = () => {
                       {/* SECTION C: REQUIRED ASSISTANCE CATEGORIES */}
                       {(phase1FormData.subsidyHelpNeeded === 'Yes' || phase1FormData.subsidyHelpNeeded === 'Need Information') && (
                         <div className="space-y-2 pt-2 border-t border-[#1E293B] animate-in fade-in">
-                          <label className="font-bold text-xs text-slate-200 block">
-                            Section C – Required Assistance Categories / विभाग क – आवश्यक अनुदानाचा प्रकार
-                          </label>
+                          <div>
+                            <label className="font-bold text-xs text-slate-200 block leading-tight">
+                              Section C – Required Assistance Categories
+                            </label>
+                            <span className="text-[10px] text-slate-400 font-normal block leading-tight">विभाग क – आवश्यक अनुदानाचा प्रकार</span>
+                          </div>
                           <div className="flex flex-wrap gap-2">
                             {[
-                              { value: 'Farm Machinery', label: 'Farm Machinery / कृषी यंत्रसामग्री' },
-                              { value: 'Irrigation', label: 'Irrigation / सिंचन' },
-                              { value: 'Solar Pump', label: 'Solar Pump / सौर पंप' },
-                              { value: 'Farm Pond', label: 'Farm Pond / शेततळे' },
-                              { value: 'Orchard / Horticulture', label: 'Orchard / फळबाग' },
-                              { value: 'Dairy', label: 'Dairy / दुग्ध व्यवसाय' },
-                              { value: 'Goat Farming', label: 'Goat Farming / शेळीपालन' },
-                              { value: 'Poultry', label: 'Poultry / कुक्कुटपालन' },
-                              { value: 'Storage / Warehouse', label: 'Storage / साठवणूक गोदाम' },
-                              { value: 'Food Processing', label: 'Food Processing / अन्न प्रक्रिया' },
-                              { value: 'Other', label: 'Other / इतर' },
+                              { value: 'Farm Machinery', labelEn: 'Farm Machinery', labelMr: 'कृषी यंत्रसामग्री' },
+                              { value: 'Irrigation', labelEn: 'Irrigation', labelMr: 'सिंचन साधने' },
+                              { value: 'Solar Pump', labelEn: 'Solar Pump', labelMr: 'सौर पंप' },
+                              { value: 'Farm Pond', labelEn: 'Farm Pond', labelMr: 'शेततळे' },
+                              { value: 'Orchard / Horticulture', labelEn: 'Orchard', labelMr: 'फळबाग' },
+                              { value: 'Dairy', labelEn: 'Dairy', labelMr: 'दुग्ध व्यवसाय' },
+                              { value: 'Goat Farming', labelEn: 'Goat Farming', labelMr: 'शेळीपालन' },
+                              { value: 'Poultry', labelEn: 'Poultry', labelMr: 'कुक्कुटपालन' },
+                              { value: 'Storage / Warehouse', labelEn: 'Storage', labelMr: 'साठवणूक गोदाम' },
+                              { value: 'Food Processing', labelEn: 'Food Processing', labelMr: 'अन्न प्रक्रिया' },
+                              { value: 'Other', labelEn: 'Other', labelMr: 'इतर' },
                             ].map(cat => {
                               const selected = phase1FormData.subsidyHelpCategories?.includes(cat.value) ?? false;
                               return (
@@ -5784,12 +5798,15 @@ export const MahaAgridootFieldApp: React.FC = () => {
                                   key={cat.value}
                                   type="button"
                                   onClick={() => toggleMultiSelect('subsidyHelpCategories', cat.value)}
-                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                                  className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center space-x-1.5 ${
                                     selected ? 'bg-[#059669] text-white border-emerald-500 shadow-md' : 'bg-[#111827] border-[#2A3952] text-slate-300 hover:border-slate-500'
                                   }`}
                                 >
-                                  {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                                  <span>{cat.label}</span>
+                                  {selected && <Check className="w-3.5 h-3.5 stroke-[3] shrink-0" />}
+                                  <div className="flex flex-col text-left leading-tight">
+                                    <span className="text-xs font-bold">{cat.labelEn}</span>
+                                    <span className={`text-[10px] font-normal ${selected ? 'text-emerald-100' : 'text-slate-400'}`}>{cat.labelMr}</span>
+                                  </div>
                                 </button>
                               );
                             })}
@@ -5806,36 +5823,43 @@ export const MahaAgridootFieldApp: React.FC = () => {
                 <div className="bg-[#131C2E] rounded-2xl border border-[#1E2A40] p-5 space-y-4 shadow-xl animate-in fade-in duration-200">
                   <div className="space-y-1 pb-2 border-b border-[#1E293B]">
                     <div className="flex justify-between items-center">
-                      <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
-                        <span>⚠️</span>
-                        <span>Major Farming Problems / शेतीतील प्रमुख अडचणी</span>
-                      </h3>
-                      <span className="font-mono text-xs font-bold text-amber-300 bg-amber-950/60 border border-amber-500/40 px-2.5 py-1 rounded-full">
-                        {(phase1FormData.mainProblemsList || []).length} / 3 selected / निवडले
-                      </span>
+                      <div>
+                        <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
+                          <span>⚠️</span>
+                          <span>Major Farming Problems</span>
+                        </h3>
+                        <span className="text-xs text-emerald-400 font-bold block">शेतीतील प्रमुख अडचणी</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-mono text-xs font-bold text-amber-300 bg-amber-950/60 border border-amber-500/40 px-2.5 py-1 rounded-full block">
+                          {(phase1FormData.mainProblemsList || []).length} / 3 selected
+                        </span>
+                        <span className="text-[10px] text-amber-400/80 block mt-0.5 font-normal">जास्तीत जास्त ३ निवडा</span>
+                      </div>
                     </div>
-                    <p className="text-xs text-slate-400">Select up to 3 major challenges / जास्तीत जास्त ३ प्रमुख अडचणी निवडा.</p>
+                    <p className="text-xs text-slate-300 font-medium">Select up to 3 major challenges faced during farming.</p>
+                    <p className="text-[11px] text-slate-400">सध्या शेती करताना तुम्हाला कोणत्या प्रमुख अडचणी आहेत?</p>
                   </div>
 
                   <div className="space-y-3">
                     <div className="flex flex-wrap gap-2">
                       {[
-                        { value: 'Water', label: 'Water / पाणीटंचाई' },
-                        { value: 'Electricity', label: 'Electricity / वीज समस्या' },
-                        { value: 'Labour', label: 'Labour / मजूर टंचाई' },
-                        { value: 'Machinery', label: 'Machinery / यंत्रसामग्रीचा अभाव' },
-                        { value: 'Seeds', label: 'Seeds / बियाणे समस्या' },
-                        { value: 'Fertilizer / Inputs', label: 'Fertilizer / Inputs / खते व औषधांचा खर्च' },
-                        { value: 'Pest / Disease', label: 'Pest / Disease / कीड व रोग' },
-                        { value: 'High Production Cost', label: 'Production Cost / उत्पादनाचा जास्त खर्च' },
-                        { value: 'Market Price', label: 'Market Price / बाजारभाव / हमीभाव' },
-                        { value: 'Loan / Credit', label: 'Loan / Credit / कर्ज / पतपुरवठा' },
-                        { value: 'Crop Insurance', label: 'Crop Insurance / पीक विमा अडचणी' },
-                        { value: 'Government Scheme / Subsidy', label: 'Govt Scheme / Subsidy / शासकीय योजना विलंब' },
-                        { value: 'Storage', label: 'Storage / साठवणूक अभाव' },
-                        { value: 'Transport', label: 'Transport / वाहतूक समस्या' },
-                        { value: 'Technical Guidance', label: 'Guidance / तांत्रिक मार्गदर्शनाचा अभाव' },
-                        { value: 'Other', label: 'Other / इतर' },
+                        { value: 'Water', labelEn: 'Water', labelMr: 'पाणीटंचाई' },
+                        { value: 'Electricity', labelEn: 'Electricity', labelMr: 'वीज समस्या' },
+                        { value: 'Labour', labelEn: 'Labour', labelMr: 'मजूर टंचाई' },
+                        { value: 'Machinery', labelEn: 'Machinery', labelMr: 'यंत्रसामग्री अभाव' },
+                        { value: 'Seeds', labelEn: 'Seeds', labelMr: 'बियाणे समस्या' },
+                        { value: 'Fertilizer / Inputs', labelEn: 'Fertilizer / Inputs', labelMr: 'खते व औषधे खर्च' },
+                        { value: 'Pest / Disease', labelEn: 'Pest / Disease', labelMr: 'कीड व रोग' },
+                        { value: 'High Production Cost', labelEn: 'Production Cost', labelMr: 'उत्पादनाचा खर्च' },
+                        { value: 'Market Price', labelEn: 'Market Price', labelMr: 'हमीभाव / बाजारभाव' },
+                        { value: 'Loan / Credit', labelEn: 'Loan / Credit', labelMr: 'कर्ज / पतपुरवठा' },
+                        { value: 'Crop Insurance', labelEn: 'Crop Insurance', labelMr: 'पीक विमा अडचणी' },
+                        { value: 'Government Scheme / Subsidy', labelEn: 'Govt Subsidy', labelMr: 'शासकीय योजना' },
+                        { value: 'Storage', labelEn: 'Storage', labelMr: 'साठवणूक अभाव' },
+                        { value: 'Transport', labelEn: 'Transport', labelMr: 'वाहतूक समस्या' },
+                        { value: 'Technical Guidance', labelEn: 'Guidance', labelMr: 'मार्गदर्शन अभाव' },
+                        { value: 'Other', labelEn: 'Other', labelMr: 'इतर' },
                       ].map(prob => {
                         const selected = phase1FormData.mainProblemsList?.includes(prob.value) ?? false;
                         return (
@@ -5843,12 +5867,15 @@ export const MahaAgridootFieldApp: React.FC = () => {
                             key={prob.value}
                             type="button"
                             onClick={() => toggleMainProblem(prob.value)}
-                            className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1 ${
+                            className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center space-x-1.5 ${
                               selected ? 'bg-rose-950/80 text-rose-300 border-rose-500/50 shadow-md' : 'bg-[#182234] border-[#233148] text-slate-300 hover:border-slate-500'
                             }`}
                           >
-                            {selected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                            <span>{prob.label}</span>
+                            {selected && <Check className="w-3.5 h-3.5 stroke-[3] shrink-0" />}
+                            <div className="flex flex-col text-left leading-tight">
+                              <span className="text-xs font-bold">{prob.labelEn}</span>
+                              <span className={`text-[10px] font-normal ${selected ? 'text-rose-200' : 'text-slate-400'}`}>{prob.labelMr}</span>
+                            </div>
                           </button>
                         );
                       })}
@@ -5856,15 +5883,16 @@ export const MahaAgridootFieldApp: React.FC = () => {
 
                     {phase1FormData.mainProblemsList?.includes('Other') && (
                       <div className="pt-1 animate-in fade-in">
-                        <label className="font-bold text-xs text-slate-300 block mb-1">
-                          Specify Other Problem / इतर अडचण नमूद करा
+                        <label className="block mb-1">
+                          <span className="text-xs font-bold text-slate-300 block leading-tight">Specify Other Problem</span>
+                          <span className="text-[10px] text-slate-400 font-normal block leading-tight">इतर अडचण नमूद करा</span>
                         </label>
                         <input
                           type="text"
                           ref={el => (fieldInputRefs.current['mainProblemOther'] = el)} id="field-input-mainProblemOther"
                           value={phase1FormData.mainProblemOther || ''}
                           onChange={e => updateFormField('mainProblemOther', e.target.value.toUpperCase())}
-                          placeholder="ENTER DETAILS OF OTHER PROBLEM / इतर अडचणीचा तपशील लिहा"
+                          placeholder="ENTER DETAILS OF OTHER PROBLEM"
                           className={`w-full h-[44px] bg-[#182234] border ${fieldErrors.mainProblemOther ? 'border-rose-500 bg-rose-950/30' : 'border-[#233148]'} rounded-xl px-3 font-bold text-white uppercase text-xs focus:border-emerald-500 focus:outline-none`}
                         />
                         {fieldErrors.mainProblemOther && <p className="text-rose-400 text-xs font-bold pt-1 flex items-center space-x-1"><span>⚠️</span><span>{fieldErrors.mainProblemOther}</span></p>}
@@ -5881,31 +5909,33 @@ export const MahaAgridootFieldApp: React.FC = () => {
                     <div className="space-y-0.5">
                       <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
                         <span>📝</span>
-                        <span>Review &amp; Submit Profile / पुनरावलोकन व नोंदणी</span>
+                        <span>Review &amp; Submit Profile</span>
                       </h3>
-                      <p className="text-xs text-slate-400">Verify all entered details before profile creation / प्रोफाइल तयार करण्यापूर्वी माहिती तपासा.</p>
+                      <span className="text-xs text-emerald-400 font-bold block">पुनरावलोकन व नोंदणी</span>
+                      <p className="text-xs text-slate-400">Verify all entered details before profile creation.</p>
                     </div>
                     <span className="font-mono text-[10px] font-bold bg-emerald-500/20 text-emerald-300 px-2.5 py-1 rounded-full border border-emerald-500/40">
-                      Step 10 of 10 / टप्पा १०/१०
+                      Step 10 of 10
                     </span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     {[
-                      { step: 1, label: 'Step 1 / टप्पा १', title: 'Basic Details / मूलभूत माहिती' },
-                      { step: 2, label: 'Step 2 / टप्पा २', title: 'Location / ठिकाण' },
-                      { step: 3, label: 'Step 3 / टप्पा ३', title: 'Candidate Type / नोंदणी प्रकार' },
-                      { step: 4, label: 'Step 4 / टप्पा ४', title: 'Land Profile / जमीन प्रोफाइल' },
-                      { step: 5, label: 'Step 5 / टप्पा ५', title: 'Facilities / पाणी व वीज सुविधा' },
-                      { step: 6, label: 'Step 6 / टप्पा ६', title: 'Services / आवश्यक सेवा' },
-                      { step: 7, label: 'Step 7 / टप्पा ७', title: 'Future Investment / भविष्यातील गुंतवणूक' },
-                      { step: 8, label: 'Step 8 / टप्पा ८', title: 'Schemes & Subsidy / योजना व अनुदान' },
-                      { step: 9, label: 'Step 9 / टप्पा ९', title: 'Major Problems / शेतीतील अडचणी' }
+                      { step: 1, label: 'Step 1', titleEn: 'Basic Details', titleMr: 'मूलभूत माहिती' },
+                      { step: 2, label: 'Step 2', titleEn: 'Location', titleMr: 'ठिकाण' },
+                      { step: 3, label: 'Step 3', titleEn: 'Candidate Type', titleMr: 'नोंदणी प्रकार' },
+                      { step: 4, label: 'Step 4', titleEn: 'Land Profile', titleMr: 'जमीन प्रोफाइल' },
+                      { step: 5, label: 'Step 5', titleEn: 'Facilities', titleMr: 'पाणी व वीज सुविधा' },
+                      { step: 6, label: 'Step 6', titleEn: 'Services Needed', titleMr: 'आवश्यक सेवा' },
+                      { step: 7, label: 'Step 7', titleEn: 'Future Investment', titleMr: 'गुंतवणूक' },
+                      { step: 8, label: 'Step 8', titleEn: 'Schemes & Subsidy', titleMr: 'योजना व अनुदान' },
+                      { step: 9, label: 'Step 9', titleEn: 'Major Problems', titleMr: 'शेतीतील अडचणी' }
                     ].map(item => (
                       <div key={item.step} className="p-3 bg-[#182234] border border-[#233148] rounded-xl flex items-center justify-between">
                         <div>
                           <span className="text-[9px] font-mono text-slate-400 block">{item.label}</span>
-                          <span className="font-bold text-white text-[11px] leading-tight block">{item.title}</span>
+                          <span className="font-bold text-white text-xs block leading-tight">{item.titleEn}</span>
+                          <span className="text-[10px] text-slate-400 font-normal block leading-tight">{item.titleMr}</span>
                         </div>
                         <button
                           type="button"
@@ -5913,7 +5943,10 @@ export const MahaAgridootFieldApp: React.FC = () => {
                           className="text-[11px] font-bold text-amber-400 hover:text-amber-300 flex items-center space-x-0.5 cursor-pointer shrink-0 ml-1"
                         >
                           <span>✏️</span>
-                          <span>Edit / बदला</span>
+                          <div className="flex flex-col text-left leading-none">
+                            <span className="text-[10px] font-bold">Edit</span>
+                            <span className="text-[9px] font-normal text-amber-300/80">बदला</span>
+                          </div>
                         </button>
                       </div>
                     ))}
@@ -5924,14 +5957,20 @@ export const MahaAgridootFieldApp: React.FC = () => {
                     {/* STEP 4 PREVIEW */}
                     <div className="p-3 bg-[#182234] border border-[#233148] rounded-xl space-y-1">
                       <div className="flex justify-between font-bold text-white">
-                        <span>Land &amp; Parcels / जमीन व गट</span>
-                        <span className="text-emerald-400 font-mono">Total / एकूण: {calculateGatWiseTotalAcres()} Acre</span>
+                        <div>
+                          <span className="block leading-tight">Land &amp; Parcels</span>
+                          <span className="text-[10px] text-slate-400 font-normal block leading-tight">जमीन व गट नोंद</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-emerald-400 font-mono block leading-tight">Total: {calculateGatWiseTotalAcres()} Acre</span>
+                          <span className="text-[10px] text-emerald-400/80 block leading-tight">एकूण: {calculateGatWiseTotalAcres()} एकर</span>
+                        </div>
                       </div>
                       <p className="text-[11px] text-slate-300 font-mono">
-                        Parcels / गट: {(phase1FormData.gatSurveyParcels || []).map((p: any) => `Gat ${p.gatNumber} (${p.area} ${p.areaUnit})`).join(', ') || 'None / काही नाही'}
+                        Parcels: {(phase1FormData.gatSurveyParcels || []).map((p: any) => `Gat ${p.gatNumber} (${p.area} ${p.areaUnit})`).join(', ') || 'None'}
                       </p>
                       <p className="text-[11px] text-slate-300">
-                        Farmer ID / शेतकरी आयडी: <strong className="text-white">{phase1FormData.hasFarmerId}</strong>
+                        Farmer ID: <strong className="text-white">{phase1FormData.hasFarmerId}</strong>
                         {phase1FormData.hasFarmerId === 'Yes' && <strong className="text-emerald-400 font-mono ml-1">({phase1FormData.govtAgriStackFarmerId || phase1FormData.farmerId})</strong>}
                       </p>
                     </div>
@@ -5939,15 +5978,18 @@ export const MahaAgridootFieldApp: React.FC = () => {
                     {/* STEP 8 PREVIEW */}
                     <div className="p-3 bg-[#182234] border border-[#233148] rounded-xl space-y-1">
                       <div className="flex justify-between font-bold text-white">
-                        <span>Government Schemes &amp; Subsidy / शासकीय योजना व अनुदान</span>
-                        <span className="text-emerald-400 font-bold">{phase1FormData.subsidyHelpNeeded || 'None / काही नाही'}</span>
+                        <div>
+                          <span className="block leading-tight">Government Schemes &amp; Subsidy</span>
+                          <span className="text-[10px] text-slate-400 font-normal block leading-tight">शासकीय योजना व अनुदान</span>
+                        </div>
+                        <span className="text-emerald-400 font-bold">{phase1FormData.subsidyHelpNeeded || 'None'}</span>
                       </div>
                       <p className="text-[11px] text-slate-300">
-                        Active Benefits / मिळालेले लाभ: {(phase1FormData.activeSchemesList || []).join(', ') || 'None / काही नाही'}
+                        Active Benefits: {(phase1FormData.activeSchemesList || []).join(', ') || 'None'}
                       </p>
                       {(phase1FormData.subsidyHelpCategories || []).length > 0 && (
                         <p className="text-[11px] text-slate-300">
-                          Assistance Needed / आवश्यक साहाय्य: {phase1FormData.subsidyHelpCategories.join(', ')}
+                          Assistance Needed: {phase1FormData.subsidyHelpCategories.join(', ')}
                         </p>
                       )}
                     </div>
@@ -5955,11 +5997,14 @@ export const MahaAgridootFieldApp: React.FC = () => {
                     {/* STEP 9 PREVIEW */}
                     <div className="p-3 bg-[#182234] border border-[#233148] rounded-xl space-y-1">
                       <div className="flex justify-between font-bold text-white">
-                        <span>Major Farming Problems / शेतीतील प्रमुख अडचणी</span>
+                        <div>
+                          <span className="block leading-tight">Major Farming Problems</span>
+                          <span className="text-[10px] text-slate-400 font-normal block leading-tight">शेतीतील प्रमुख अडचणी</span>
+                        </div>
                         <span className="text-rose-400 font-mono font-bold">{(phase1FormData.mainProblemsList || []).length} / 3</span>
                       </div>
                       <p className="text-[11px] text-slate-300">
-                        Issues / अडचणी: {(phase1FormData.mainProblemsList || []).join(', ') || 'None / काही नाही'}
+                        Issues: {(phase1FormData.mainProblemsList || []).join(', ') || 'None'}
                         {phase1FormData.mainProblemOther && ` (${phase1FormData.mainProblemOther})`}
                       </p>
                     </div>
@@ -5972,10 +6017,13 @@ export const MahaAgridootFieldApp: React.FC = () => {
                 <button
                   type="button"
                   onClick={handlePrevWizardSection}
-                  className="h-[52px] px-6 bg-[#182234] hover:bg-[#223046] border border-[#2A3952] text-white font-bold rounded-2xl text-sm transition-all cursor-pointer flex items-center space-x-2 shrink-0"
+                  className="h-[52px] px-5 bg-[#182234] hover:bg-[#223046] border border-[#2A3952] text-white font-bold rounded-2xl text-sm transition-all cursor-pointer flex items-center space-x-2 shrink-0"
                 >
                   <ChevronLeft className="w-4 h-4" />
-                  <span>Back</span>
+                  <div className="flex flex-col text-left leading-none">
+                    <span className="text-xs font-bold">Back</span>
+                    <span className="text-[9px] text-slate-400 font-normal">मागे</span>
+                  </div>
                 </button>
 
                 {wizardSection < 10 ? (
@@ -6007,7 +6055,10 @@ export const MahaAgridootFieldApp: React.FC = () => {
                     }}
                     className="flex-1 h-[52px] bg-[#059669] hover:bg-[#047857] text-white font-bold rounded-2xl text-base transition-all cursor-pointer shadow-lg shadow-emerald-900/30 text-center flex items-center justify-center space-x-2"
                   >
-                    <span>Next</span>
+                    <div className="flex flex-col text-center leading-none">
+                      <span className="text-sm font-black">Next</span>
+                      <span className="text-[10px] text-emerald-100 font-normal">पुढे</span>
+                    </div>
                     <ChevronRight className="w-5 h-5" />
                   </button>
                 ) : (
@@ -6020,11 +6071,17 @@ export const MahaAgridootFieldApp: React.FC = () => {
                     {isSubmittingPhase1 ? (
                       <>
                         <Loader2 className="w-5 h-5 animate-spin text-white" />
-                        <span>Creating Profile...</span>
+                        <div className="flex flex-col text-left leading-none">
+                          <span className="text-xs font-bold">Creating Profile...</span>
+                          <span className="text-[9px] text-emerald-200 font-normal">नोंदणी पूर्ण होत आहे...</span>
+                        </div>
                       </>
                     ) : (
                       <>
-                        <span>Confirm &amp; Create Profile</span>
+                        <div className="flex flex-col text-center leading-none">
+                          <span className="text-sm font-black">Confirm &amp; Create Profile</span>
+                          <span className="text-[10px] text-emerald-100 font-normal">नोंदणी पूर्ण करा</span>
+                        </div>
                         <ChevronRight className="w-5 h-5" />
                       </>
                     )}
