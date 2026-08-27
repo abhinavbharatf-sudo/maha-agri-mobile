@@ -15,7 +15,7 @@ import { MAHARASHTRA_DISTRICTS, getTalukasForDistrict } from '../../data/maharas
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Menu, Bell, ChevronRight, ChevronLeft, Loader2, Tractor, Zap, UserCheck, Play, CheckCircle2, Clock, MapPin, Plus, Home, Search,
+  Menu, Bell, ChevronRight, ChevronLeft, Loader2, Tractor, Zap, UserCheck, Play, CheckCircle2, Clock, MapPin, MapPinned, Plus, Home, Search,
   ClipboardList, User, FileText, UserPlus, FlaskConical, GraduationCap, Plane,
   Camera, Mic, QrCode, ArrowLeft, Sun, Moon, Check, X, ShieldAlert, Sparkles, Filter,
   ShieldCheck, AlertTriangle, Users, Wallet, Settings, Activity, ArrowUpRight, Share2,
@@ -4697,7 +4697,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
                           updateFormField('taluka', talukas[0]);
                         }
                       }}
-                      options={MAHARASHTRA_DISTRICTS.map(d => ({ value: d, label: d, icon: '📍' }))}
+                      options={MAHARASHTRA_DISTRICTS.map(d => ({ value: d, label: d, icon: <MapPin className="w-4 h-4 text-rose-500 shrink-0" /> }))}
                       error={fieldErrors.district}
                       fieldRef={el => (fieldInputRefs.current['district'] = el)}
                       fieldId="field-input-district"
@@ -4707,7 +4707,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
                       label="Taluka" required
                       value={phase1FormData.taluka}
                       onChange={v => updateFormField('taluka', v)}
-                      options={getTalukasForDistrict(phase1FormData.district).map(t => ({ value: t, label: t, icon: '🏘️' }))}
+                      options={getTalukasForDistrict(phase1FormData.district).map(t => ({ value: t, label: t, icon: <MapPinned className="w-4 h-4 text-emerald-400 shrink-0" /> }))}
                       error={fieldErrors.taluka}
                       fieldRef={el => (fieldInputRefs.current['taluka'] = el)}
                       fieldId="field-input-taluka"
@@ -4796,14 +4796,14 @@ export const MahaAgridootFieldApp: React.FC = () => {
                                 updateFormField('farmTaluka', talukas[0]);
                               }
                             }}
-                            options={MAHARASHTRA_DISTRICTS.map(d => ({ value: d, label: d, icon: '📍' }))}
+                            options={MAHARASHTRA_DISTRICTS.map(d => ({ value: d, label: d, icon: <MapPin className="w-4 h-4 text-rose-500 shrink-0" /> }))}
                             small
                           />
                           <WizardSelect
                             label="Farm Taluka"
                             value={phase1FormData.farmTaluka || 'Wardha'}
                             onChange={v => updateFormField('farmTaluka', v)}
-                            options={getTalukasForDistrict(phase1FormData.farmDistrict || 'Wardha').map(t => ({ value: t, label: t, icon: '🏘️' }))}
+                            options={getTalukasForDistrict(phase1FormData.farmDistrict || 'Wardha').map(t => ({ value: t, label: t, icon: <MapPinned className="w-4 h-4 text-emerald-400 shrink-0" /> }))}
                             small
                           />
                         </div>

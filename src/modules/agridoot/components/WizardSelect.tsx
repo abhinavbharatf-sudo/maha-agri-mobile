@@ -4,7 +4,7 @@ import { ChevronDown, Check } from 'lucide-react';
 export interface WizardSelectOption {
   value: string;
   label: string;
-  icon?: string;
+  icon?: React.ReactNode;
 }
 
 interface WizardSelectProps {
@@ -70,7 +70,7 @@ const WizardSelect: React.FC<WizardSelectProps> = ({
         ].join(' ')}
       >
         <span className='flex items-center space-x-2.5 overflow-hidden text-ellipsis whitespace-nowrap'>
-          {selected?.icon && <span className='text-base leading-none shrink-0'>{selected.icon}</span>}
+          {selected?.icon && <span className='shrink-0 flex items-center justify-center'>{selected.icon}</span>}
           <span className={selected ? 'text-white truncate' : 'text-slate-500 truncate'}>
             {selected ? selected.label : placeholder}
           </span>
@@ -96,7 +96,7 @@ const WizardSelect: React.FC<WizardSelectProps> = ({
                 ].join(' ')}
               >
                 <span className='flex items-center space-x-3'>
-                  {opt.icon && <span className='text-base leading-none'>{opt.icon}</span>}
+                  {opt.icon && <span className='shrink-0 flex items-center justify-center'>{opt.icon}</span>}
                   <span>{opt.label}</span>
                 </span>
                 {isSelected && <Check className='w-4 h-4 text-emerald-400 stroke-[3] shrink-0' />}
