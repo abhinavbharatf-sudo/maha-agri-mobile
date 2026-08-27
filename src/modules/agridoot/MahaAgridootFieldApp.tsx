@@ -4647,17 +4647,21 @@ export const MahaAgridootFieldApp: React.FC = () => {
 
                     <div className="space-y-1.5">
                       <label className="font-bold text-xs text-slate-200 block">Alternate Mobile <span className="text-rose-500">*</span></label>
-                      <input
-                        type="tel"
-                        maxLength={10}
-                        ref={el => (fieldInputRefs.current['alternateMobile'] = el)} id="field-input-alternateMobile"
-                        value={phase1FormData.alternateMobile}
-                        onChange={e => updateFormField('alternateMobile', e.target.value.replace(/\D/g, '').slice(0, 10))}
-                        placeholder="9822998877"
-                        className={`w-full h-[52px] bg-[#182234] border ${fieldErrors.alternateMobile ? 'border-rose-500 bg-rose-950/30' : 'border-[#233148]'} rounded-xl px-4 font-mono font-bold text-white text-sm focus:border-emerald-500 focus:outline-none`}
-                      />
+                      <div className={`flex items-center h-[52px] bg-[#182234] border ${fieldErrors.alternateMobile ? 'border-rose-500 bg-rose-950/30' : 'border-[#233148]'} rounded-xl overflow-hidden focus-within:border-emerald-500`}>
+                        <span className="px-3 font-bold text-slate-400 text-sm border-r border-[#233148] h-full flex items-center select-none shrink-0">+91</span>
+                        <input
+                          type="tel"
+                          maxLength={10}
+                          ref={el => (fieldInputRefs.current['alternateMobile'] = el)} id="field-input-alternateMobile"
+                          value={phase1FormData.alternateMobile}
+                          onChange={e => updateFormField('alternateMobile', e.target.value.replace(/\D/g, '').slice(0, 10))}
+                          placeholder="9822998877"
+                          className="flex-1 h-full bg-transparent px-3 font-mono font-bold text-white text-sm focus:outline-none"
+                        />
+                      </div>
                       {fieldErrors.alternateMobile && <p className="text-rose-400 text-xs font-bold pt-1 flex items-center space-x-1"><span>⚠️</span><span>{fieldErrors.alternateMobile}</span></p>}
                     </div>
+
 
                     <div className="space-y-1.5">
                       <label className="font-bold text-xs text-slate-400 block">Email (Optional)</label>
