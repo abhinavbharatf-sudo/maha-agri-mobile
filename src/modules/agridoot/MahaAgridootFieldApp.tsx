@@ -4560,49 +4560,44 @@ export const MahaAgridootFieldApp: React.FC = () => {
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <label className="font-bold text-xs text-slate-200 block">Gender <span className="text-rose-500">*</span></label>
-                      <select
-                        value={phase1FormData.gender}
-                        onChange={e => updateFormField('gender', e.target.value)}
-                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
-                      >
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="font-bold text-xs text-slate-200 block">Marital Status</label>
-                      <select
-                        value={phase1FormData.maritalStatus || 'Married'}
-                        onChange={e => updateFormField('maritalStatus', e.target.value)}
-                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
-                      >
-                        <option value="Married">Married</option>
-                        <option value="Unmarried">Unmarried</option>
-                        <option value="Widowed / Other">Widowed / Other</option>
-                      </select>
-                    </div>
+                    <WizardSelect
+                      label="Gender" required
+                      value={phase1FormData.gender}
+                      onChange={v => updateFormField('gender', v)}
+                      options={[
+                        { value: 'Male', label: 'Male', icon: '👨' },
+                        { value: 'Female', label: 'Female', icon: '👩' },
+                        { value: 'Other', label: 'Other', icon: '🧑' },
+                      ]}
+                    />
+                    <WizardSelect
+                      label="Marital Status"
+                      value={phase1FormData.maritalStatus || 'Married'}
+                      onChange={v => updateFormField('maritalStatus', v)}
+                      options={[
+                        { value: 'Married', label: 'Married', icon: '💑' },
+                        { value: 'Unmarried', label: 'Unmarried', icon: '👤' },
+                        { value: 'Widowed / Other', label: 'Widowed / Other', icon: '🕊️' },
+                      ]}
+                    />
                   </div>
 
 
-                  <div className="space-y-1.5">
-                    <label className="font-bold text-xs text-slate-200 block">Caste Category <span className="text-rose-500">*</span></label>
-                    <select
-                      value={phase1FormData.casteCategory}
-                      onChange={e => updateFormField('casteCategory', e.target.value)}
-                      className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
-                    >
-                      <option value="General / Open">General / Open</option>
-                      <option value="OBC">OBC</option>
-                      <option value="SC">SC</option>
-                      <option value="ST">ST</option>
-                      <option value="VJNT">VJNT</option>
-                      <option value="SBC">SBC</option>
-                      <option value="EWS">EWS</option>
-                    </select>
-                  </div>
+                  <WizardSelect
+                    label="Caste Category" required
+                    value={phase1FormData.casteCategory}
+                    onChange={v => updateFormField('casteCategory', v)}
+                    placeholder="Select Caste Category"
+                    options={[
+                      { value: 'General / Open', label: 'General / Open', icon: '🏛️' },
+                      { value: 'OBC', label: 'OBC (Other Backward Class)', icon: '🟤' },
+                      { value: 'SC', label: 'SC (Scheduled Caste)', icon: '🔵' },
+                      { value: 'ST', label: 'ST (Scheduled Tribe)', icon: '🟢' },
+                      { value: 'VJNT', label: 'VJNT', icon: '🟡' },
+                      { value: 'SBC', label: 'SBC (Special Backward Class)', icon: '🟠' },
+                      { value: 'EWS', label: 'EWS (Economically Weaker Section)', icon: '⚪' },
+                    ]}
+                  />
 
 
                   {/* CONTACT & IDENTITY SECTION */}
@@ -4934,19 +4929,17 @@ export const MahaAgridootFieldApp: React.FC = () => {
                     <p className="text-xs text-slate-400">Basic farming profile, land area &amp; Gat-wise parcel entry.</p>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="font-bold text-xs text-slate-200 block">Primary Farming Type</label>
-                    <select
-                      value={phase1FormData.primaryFarmingType || 'Crop Farming'}
-                      onChange={e => updateFormField('primaryFarmingType', e.target.value)}
-                      className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
-                    >
-                      <option value="Crop Farming">Crop Farming</option>
-                      <option value="Horticulture">Horticulture</option>
-                      <option value="Floriculture">Floriculture</option>
-                      <option value="Mixed Farming">Mixed Farming</option>
-                    </select>
-                  </div>
+                  <WizardSelect
+                    label="Primary Farming Type"
+                    value={phase1FormData.primaryFarmingType || 'Crop Farming'}
+                    onChange={v => updateFormField('primaryFarmingType', v)}
+                    options={[
+                      { value: 'Crop Farming', label: 'Crop Farming', icon: '🌾' },
+                      { value: 'Horticulture', label: 'Horticulture', icon: '🍎' },
+                      { value: 'Floriculture', label: 'Floriculture', icon: '🌸' },
+                      { value: 'Mixed Farming', label: 'Mixed Farming', icon: '🌿' },
+                    ]}
+                  />
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
@@ -4960,19 +4953,17 @@ export const MahaAgridootFieldApp: React.FC = () => {
                         className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-mono font-bold text-white text-sm focus:border-emerald-500 focus:outline-none"
                       />
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="font-bold text-xs text-slate-200 block">Main Occupation</label>
-                      <select
-                        value={phase1FormData.mainOccupation || 'Farming'}
-                        onChange={e => updateFormField('mainOccupation', e.target.value)}
-                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
-                      >
-                        <option value="Farming">Farming</option>
-                        <option value="Agri Business">Agri Business</option>
-                        <option value="Service">Service</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </div>
+                    <WizardSelect
+                      label="Main Occupation"
+                      value={phase1FormData.mainOccupation || 'Farming'}
+                      onChange={v => updateFormField('mainOccupation', v)}
+                      options={[
+                        { value: 'Farming', label: 'Farming', icon: '🧑‍🌾' },
+                        { value: 'Agri Business', label: 'Agri Business', icon: '🚜' },
+                        { value: 'Service', label: 'Service', icon: '💼' },
+                        { value: 'Other', label: 'Other', icon: '🔄' },
+                      ]}
+                    />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -4990,34 +4981,30 @@ export const MahaAgridootFieldApp: React.FC = () => {
                       />
                       {fieldErrors.totalLand && <p className="text-rose-400 text-xs font-bold pt-1 flex items-center space-x-1"><span>⚠️</span><span>{fieldErrors.totalLand}</span></p>}
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="font-bold text-xs text-slate-200 block">Land Unit</label>
-                      <select
-                        value={phase1FormData.landUnit || 'Acre'}
-                        onChange={e => updateFormField('landUnit', e.target.value)}
-                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
-                      >
-                        <option value="Acre">Acre</option>
-                        <option value="Hectare">Hectare</option>
-                        <option value="Guntha">Guntha</option>
-                        <option value="Bigha">Bigha</option>
-                      </select>
-                    </div>
+                    <WizardSelect
+                      label="Land Unit"
+                      value={phase1FormData.landUnit || 'Acre'}
+                      onChange={v => updateFormField('landUnit', v)}
+                      options={[
+                        { value: 'Acre', label: 'Acre', icon: '📐' },
+                        { value: 'Hectare', label: 'Hectare', icon: '📐' },
+                        { value: 'Guntha', label: 'Guntha', icon: '📐' },
+                        { value: 'Bigha', label: 'Bigha', icon: '📐' },
+                      ]}
+                    />
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="font-bold text-xs text-slate-200 block">Land Ownership</label>
-                    <select
-                      value={phase1FormData.landOwnershipStatus || 'Own Land'}
-                      onChange={e => updateFormField('landOwnershipStatus', e.target.value)}
-                      className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
-                    >
-                      <option value="Own Land">Own Land</option>
-                      <option value="Lease / Tenant Land">Lease / Tenant Land</option>
-                      <option value="Family Shared Land">Family Shared Land</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </div>
+                  <WizardSelect
+                    label="Land Ownership"
+                    value={phase1FormData.landOwnershipStatus || 'Own Land'}
+                    onChange={v => updateFormField('landOwnershipStatus', v)}
+                    options={[
+                      { value: 'Own Land', label: 'Own Land', icon: '🏡' },
+                      { value: 'Lease / Tenant Land', label: 'Lease / Tenant Land', icon: '📋' },
+                      { value: 'Family Shared Land', label: 'Family Shared Land', icon: '👨‍👩‍👧‍👦' },
+                      { value: 'Other', label: 'Other', icon: '🔄' },
+                    ]}
+                  />
 
                   {/* GAT / SURVEY PARCEL ENTRY SECTION */}
                   <div className="p-3.5 bg-[#182234] border border-[#233148] rounded-xl space-y-3">
@@ -5050,15 +5037,16 @@ export const MahaAgridootFieldApp: React.FC = () => {
                         />
                       </div>
                       <div className="col-span-3">
-                        <select
+                        <WizardSelect
                           value={parcelUnitInput}
-                          onChange={e => setParcelUnitInput(e.target.value as any)}
-                          className="w-full h-[44px] bg-[#111827] border border-[#2A3952] rounded-lg px-1 font-bold text-white text-xs cursor-pointer"
-                        >
-                          <option value="Acre">Acre</option>
-                          <option value="Hectare">Hectare</option>
-                          <option value="Guntha">Guntha</option>
-                        </select>
+                          onChange={v => setParcelUnitInput(v as any)}
+                          small
+                          options={[
+                            { value: 'Acre', label: 'Acre' },
+                            { value: 'Hectare', label: 'Hectare' },
+                            { value: 'Guntha', label: 'Guntha' },
+                          ]}
+                        />
                       </div>
                       <div className="col-span-2">
                         <button
