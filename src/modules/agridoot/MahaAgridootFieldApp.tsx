@@ -4707,7 +4707,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
                       label="Taluka" required
                       value={phase1FormData.taluka}
                       onChange={v => updateFormField('taluka', v)}
-                      options={getTalukasForDistrict(phase1FormData.district).map(t => ({ value: t, label: t, icon: <MapPinned className="w-4 h-4 text-emerald-400 shrink-0" /> }))}
+                      options={getTalukasForDistrict(phase1FormData.district).map(t => ({ value: t, label: t, icon: '📌' }))}
                       error={fieldErrors.taluka}
                       fieldRef={el => (fieldInputRefs.current['taluka'] = el)}
                       fieldId="field-input-taluka"
@@ -4803,7 +4803,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
                             label="Farm Taluka"
                             value={phase1FormData.farmTaluka || 'Wardha'}
                             onChange={v => updateFormField('farmTaluka', v)}
-                            options={getTalukasForDistrict(phase1FormData.farmDistrict || 'Wardha').map(t => ({ value: t, label: t, icon: <MapPinned className="w-4 h-4 text-emerald-400 shrink-0" /> }))}
+                            options={getTalukasForDistrict(phase1FormData.farmDistrict || 'Wardha').map(t => ({ value: t, label: t, icon: '📌' }))}
                             small
                           />
                         </div>
