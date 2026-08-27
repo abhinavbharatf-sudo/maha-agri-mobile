@@ -6017,13 +6017,10 @@ export const MahaAgridootFieldApp: React.FC = () => {
                 <button
                   type="button"
                   onClick={handlePrevWizardSection}
-                  className="h-[52px] px-5 bg-[#182234] hover:bg-[#223046] border border-[#2A3952] text-white font-bold rounded-2xl text-sm transition-all cursor-pointer flex items-center space-x-2 shrink-0"
+                  className="h-[52px] px-6 bg-[#182234] hover:bg-[#223046] border border-[#2A3952] text-white font-bold rounded-2xl text-sm transition-all cursor-pointer flex items-center space-x-2 shrink-0"
                 >
                   <ChevronLeft className="w-4 h-4" />
-                  <div className="flex flex-col text-left leading-none">
-                    <span className="text-xs font-bold">Back</span>
-                    <span className="text-[9px] text-slate-400 font-normal">मागे</span>
-                  </div>
+                  <span>Back</span>
                 </button>
 
                 {wizardSection < 10 ? (
@@ -6055,10 +6052,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
                     }}
                     className="flex-1 h-[52px] bg-[#059669] hover:bg-[#047857] text-white font-bold rounded-2xl text-base transition-all cursor-pointer shadow-lg shadow-emerald-900/30 text-center flex items-center justify-center space-x-2"
                   >
-                    <div className="flex flex-col text-center leading-none">
-                      <span className="text-sm font-black">Next</span>
-                      <span className="text-[10px] text-emerald-100 font-normal">पुढे</span>
-                    </div>
+                    <span>Next</span>
                     <ChevronRight className="w-5 h-5" />
                   </button>
                 ) : (
@@ -6071,17 +6065,11 @@ export const MahaAgridootFieldApp: React.FC = () => {
                     {isSubmittingPhase1 ? (
                       <>
                         <Loader2 className="w-5 h-5 animate-spin text-white" />
-                        <div className="flex flex-col text-left leading-none">
-                          <span className="text-xs font-bold">Creating Profile...</span>
-                          <span className="text-[9px] text-emerald-200 font-normal">नोंदणी पूर्ण होत आहे...</span>
-                        </div>
+                        <span>Creating Profile...</span>
                       </>
                     ) : (
                       <>
-                        <div className="flex flex-col text-center leading-none">
-                          <span className="text-sm font-black">Confirm &amp; Create Profile</span>
-                          <span className="text-[10px] text-emerald-100 font-normal">नोंदणी पूर्ण करा</span>
-                        </div>
+                        <span>Confirm &amp; Create Profile</span>
                         <ChevronRight className="w-5 h-5" />
                       </>
                     )}
