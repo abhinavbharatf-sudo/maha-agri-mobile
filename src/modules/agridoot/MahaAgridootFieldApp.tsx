@@ -2510,66 +2510,122 @@ export const MahaAgridootFieldApp: React.FC = () => {
                     </div>
                   </div>
 
-                  {regStep === 4 ? (
-                    <div className="p-3.5 bg-emerald-950/40 border border-emerald-500/40 rounded-2xl space-y-2.5 animate-in fade-in">
-                      <div className="flex justify-between items-center">
-                        <span className="font-extrabold text-emerald-300 text-xs flex items-center space-x-1.5">
-                          <UserCheck className="w-4 h-4 text-emerald-400" />
-                          <span>Existing Profile Found!</span>
-                        </span>
-                        <span className="text-[10px] font-mono font-bold bg-emerald-900/80 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/40">
-                          ID: MH-DOT-0025
-                        </span>
-                      </div>
-
-                      <p className="text-xs text-slate-300 font-medium">
-                        Profile registered for <strong className="text-white font-bold">VIKAS PANBUDE</strong> (+91 {regMobileNumber || '9812441088'}).
-                      </p>
-
-                      <div className="flex space-x-2 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => setIsViewCompleteProfileModalOpen(true)}
-                          className="flex-1 py-2.5 bg-[#182234] hover:bg-[#223046] border border-[#2A3952] text-slate-200 font-bold rounded-xl text-xs flex items-center justify-center space-x-1.5 cursor-pointer"
-                        >
-                          <Eye className="w-4 h-4 text-cyan-400" />
-                          <span>View Profile</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsRegWizardOpen(true);
-                            setWizardSection(1);
-                          }}
-                          className="flex-1 py-2.5 bg-[#059669] hover:bg-[#047857] text-white font-bold rounded-xl text-xs flex items-center justify-center space-x-1.5 cursor-pointer shadow-md"
-                        >
-                          <span>Field Activity ➔</span>
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
+                  {/* STEP 1: MOBILE NUMBER ENTRY */}
+                  {regStep === 1 && (
                     <div className="flex space-x-2 pt-1 text-xs">
                       <input
                         type="tel"
                         maxLength={10}
                         value={regMobileNumber}
-                        onChange={e => setRegMobileNumber(e.target.value)}
+                        onChange={e => setRegMobileNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
                         placeholder="Enter 10-digit Mobile Number"
                         className={`flex-1 ${subCardBg} border rounded-xl px-3 py-2 font-mono font-bold ${textPrimary} focus:outline-none focus:border-emerald-500`}
                       />
                       <button
                         onClick={() => {
-                          if (!regMobileNumber) return;
+                          if (!regMobileNumber || regMobileNumber.length !== 10) {
+                            triggerToast('⚠️ Please enter a valid 10-digit mobile number!');
+                            return;
+                          }
                           setRegStep(2);
-                          setRegSuccessMsg(`✅ OTP sent to +91 ${regMobileNumber}. Profile Verification Active.`);
-                          triggerToast('OTP Dispatched to Mobile!');
+                          setRegSuccessMsg(`✅ OTP sent to +91 ${regMobileNumber}`);
+                          triggerToast('📱 OTP Dispatched to Mobile!');
                         }}
                         className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-4 py-2 rounded-xl transition-all shrink-0"
                       >
-                        VERIFY &amp; CONTINUE ➔
+                        SEND OTP ➔
                       </button>
                     </div>
                   )}
+
+                  {/* STEP 2: OTP VERIFICATION (TESTING BYPASS — ANY OTP ACCEPTED) */}
+                  {regStep === 2 && (
+                    <div className="space-y-2.5 pt-1 animate-in fade-in">
+                      <div className="p-2.5 bg-blue-950/40 border border-blue-500/30 rounded-xl text-xs font-bold text-blue-300 flex items-center space-x-2">
+                        <span>📱</span>
+                        <span>OTP sent to +91 {regMobileNumber}</span>
+                        <button
+                          type="button"
+                          onClick={() => setRegStep(1)}
+                          className="ml-auto text-slate-400 hover:text-white underline text-[10px] cursor-pointer"
+                        >
+                          Change
+                        </button>
+                      </div>
+                      <div className="flex space-x-2 text-xs">
+                        <input
+                          type="tel"
+                          maxLength={6}
+                          placeholder="Enter OTP"
+                          className={`flex-1 ${subCardBg} border rounded-xl px-3 py-2.5 font-mono font-bold text-white text-lg tracking-[0.4em] text-center focus:outline-none focus:border-emerald-500`}
+                          onChange={e => {
+                            const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                            e.target.value = val;
+                          }}
+                        />
+                        <button
+                          onClick={(e) => {
+                            const input = (e.currentTarget.parentElement?.querySelector('input') as HTMLInputElement);
+                            const otp = input?.value || '';
+                            if (!otp || otp.length < 4) {
+                              triggerToast('⚠️ Please enter at least 4-digit OTP!');
+                              return;
+                            }
+                            // TESTING BYPASS — any OTP accepted
+                            setRegStep(3);
+                            setRegSuccessMsg('✅ OTP Verified! Checking profile...');
+                            triggerToast('✅ OTP Verified!');
+                            setTimeout(() => {
+                              setRegStep(4);
+                              setRegSuccessMsg('✅ Profile found for +91 ' + regMobileNumber);
+                            }, 800);
+                          }}
+                          className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-5 py-2 rounded-xl transition-all shrink-0"
+                        >
+                          VERIFY OTP ✓
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-500 font-medium text-center">
+                        🔓 Testing Mode: Any OTP will be accepted
+                      </p>
+                    </div>
+                  )}
+
+                  {/* STEP 4: PROFILE FOUND / NEW REGISTRATION */}
+                  {regStep === 4 && (
+                    <div className="p-3.5 bg-emerald-950/40 border border-emerald-500/40 rounded-2xl space-y-2.5 animate-in fade-in">
+                      <div className="flex justify-between items-center">
+                        <span className="font-extrabold text-emerald-300 text-xs flex items-center space-x-1.5">
+                          <UserCheck className="w-4 h-4 text-emerald-400" />
+                          <span>Profile Verified!</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => { setRegStep(1); setRegSuccessMsg(null); }}
+                          className="text-[10px] text-slate-400 hover:text-white underline cursor-pointer"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                      <p className="text-xs text-slate-300 font-medium">
+                        Mobile: <strong className="text-white font-bold">+91 {regMobileNumber}</strong> — Ready to Register New Candidate
+                      </p>
+                      <div className="flex space-x-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsRegWizardOpen(true);
+                            setWizardSection(1);
+                            setPhase1FormData((prev: any) => ({ ...prev, whatsappMobile: regMobileNumber }));
+                          }}
+                          className="flex-1 py-2.5 bg-[#059669] hover:bg-[#047857] text-white font-black rounded-xl text-xs flex items-center justify-center space-x-1.5 cursor-pointer shadow-md"
+                        >
+                          <span>🧑‍🌾 New Registration ➔</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
 
                   {regSuccessMsg && (
                     <div className="p-2.5 bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs font-bold">
