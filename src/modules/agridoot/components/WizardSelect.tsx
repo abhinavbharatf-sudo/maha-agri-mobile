@@ -8,7 +8,7 @@ export interface WizardSelectOption {
 }
 
 interface WizardSelectProps {
-  label?: string;
+  label?: React.ReactNode;
   value: string;
   onChange: (value: string) => void;
   options: (string | WizardSelectOption)[];

@@ -4920,24 +4920,32 @@ export const MahaAgridootFieldApp: React.FC = () => {
                       <span>🌾</span>
                       <span>Farmer &amp; Land Profile</span>
                     </h3>
+                    <span className="text-xs text-emerald-400 font-bold block">शेतकरी व जमीन प्रोफाइल</span>
                     <p className="text-xs text-slate-400">Basic farming profile, land area &amp; Gat-wise parcel entry.</p>
+                    <p className="text-[11px] text-slate-500">शेतीचा मूलभूत तपशील, जमीन क्षेत्रफळ व गटनिहाय जमीन नोंद.</p>
                   </div>
 
                   <WizardSelect
-                    label="Primary Farming Type"
+                    label={
+                      <span>
+                        Primary Farming Type <span className="text-[11px] text-slate-400 font-normal ml-1">| मुख्य शेतीचा प्रकार</span>
+                      </span>
+                    }
                     value={phase1FormData.primaryFarmingType || 'Crop Farming'}
                     onChange={v => updateFormField('primaryFarmingType', v)}
                     options={[
-                      { value: 'Crop Farming', label: 'Crop Farming', icon: '🌾' },
-                      { value: 'Horticulture', label: 'Horticulture', icon: '🍎' },
-                      { value: 'Floriculture', label: 'Floriculture', icon: '🌸' },
-                      { value: 'Mixed Farming', label: 'Mixed Farming', icon: '🌿' },
+                      { value: 'Crop Farming', label: 'Crop Farming — पिकांची शेती', icon: '🌾' },
+                      { value: 'Horticulture', label: 'Horticulture — बागायती शेती', icon: '🍎' },
+                      { value: 'Floriculture', label: 'Floriculture — फूलशेती', icon: '🌸' },
+                      { value: 'Mixed Farming', label: 'Mixed Farming — मिश्र शेती', icon: '🌿' },
                     ]}
                   />
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <label className="font-bold text-xs text-slate-200 block">Experience (Years)</label>
+                      <label className="font-bold text-xs text-slate-200 block">
+                        Experience (Years) <span className="text-[11px] text-slate-400 font-normal ml-1">| शेतीचा अनुभव (वर्षे)</span>
+                      </label>
                       <input
                         type="number"
                         min={0}
@@ -4948,21 +4956,27 @@ export const MahaAgridootFieldApp: React.FC = () => {
                       />
                     </div>
                     <WizardSelect
-                      label="Main Occupation"
+                      label={
+                        <span>
+                          Main Occupation <span className="text-[11px] text-slate-400 font-normal ml-1">| मुख्य व्यवसाय</span>
+                        </span>
+                      }
                       value={phase1FormData.mainOccupation || 'Farming'}
                       onChange={v => updateFormField('mainOccupation', v)}
                       options={[
-                        { value: 'Farming', label: 'Farming', icon: '🧑‍🌾' },
-                        { value: 'Agri Business', label: 'Agri Business', icon: '🚜' },
-                        { value: 'Service', label: 'Service', icon: '💼' },
-                        { value: 'Other', label: 'Other', icon: '🔄' },
+                        { value: 'Farming', label: 'Farming — शेती', icon: '🧑‍🌾' },
+                        { value: 'Agri Business', label: 'Agri Business — कृषी व्यवसाय', icon: '🚜' },
+                        { value: 'Service', label: 'Service — नोकरी', icon: '💼' },
+                        { value: 'Other', label: 'Other — इतर', icon: '🔄' },
                       ]}
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <label className="font-bold text-xs text-slate-200 block">Total Land Area <span className="text-rose-500">*</span></label>
+                      <label className="font-bold text-xs text-slate-200 block">
+                        Total Land Area <span className="text-rose-500">*</span> <span className="text-[11px] text-slate-400 font-normal ml-1">| एकूण जमीन क्षेत्रफळ</span>
+                      </label>
                       <input
                         type="number"
                         min={0}
@@ -4976,37 +4990,53 @@ export const MahaAgridootFieldApp: React.FC = () => {
                       {fieldErrors.totalLand && <p className="text-rose-400 text-xs font-bold pt-1 flex items-center space-x-1"><span>⚠️</span><span>{fieldErrors.totalLand}</span></p>}
                     </div>
                     <WizardSelect
-                      label="Land Unit"
+                      label={
+                        <span>
+                          Land Unit <span className="text-[11px] text-slate-400 font-normal ml-1">| जमिनीचे एकक</span>
+                        </span>
+                      }
                       value={phase1FormData.landUnit || 'Acre'}
                       onChange={v => updateFormField('landUnit', v)}
                       options={[
-                        { value: 'Acre', label: 'Acre', icon: '📐' },
-                        { value: 'Hectare', label: 'Hectare', icon: '📐' },
-                        { value: 'Guntha', label: 'Guntha', icon: '📐' },
-                        { value: 'Bigha', label: 'Bigha', icon: '📐' },
+                        { value: 'Acre', label: 'Acre — एकर', icon: '📐' },
+                        { value: 'Hectare', label: 'Hectare — हेक्टर', icon: '📐' },
+                        { value: 'Guntha', label: 'Guntha — गुंठा', icon: '📐' },
+                        { value: 'Bigha', label: 'Bigha — बिघा', icon: '📐' },
                       ]}
                     />
                   </div>
 
                   <WizardSelect
-                    label="Land Ownership"
+                    label={
+                      <span>
+                        Land Ownership <span className="text-[11px] text-slate-400 font-normal ml-1">| जमिनीचा मालकी हक्क</span>
+                      </span>
+                    }
                     value={phase1FormData.landOwnershipStatus || 'Own Land'}
                     onChange={v => updateFormField('landOwnershipStatus', v)}
                     options={[
-                      { value: 'Own Land', label: 'Own Land', icon: '🏡' },
-                      { value: 'Lease / Tenant Land', label: 'Lease / Tenant Land', icon: '📋' },
-                      { value: 'Family Shared Land', label: 'Family Shared Land', icon: '👨‍👩‍👧‍👦' },
-                      { value: 'Other', label: 'Other', icon: '🔄' },
+                      { value: 'Own Land', label: 'Own Land — स्वतःची जमीन', icon: '🏡' },
+                      { value: 'Lease / Tenant Land', label: 'Lease / Tenant Land — भाडेपट्टा / कुळ जमीन', icon: '📋' },
+                      { value: 'Family Shared Land', label: 'Family Shared Land — कौटुंबिक सामायिक जमीन', icon: '👨‍👩‍👧‍👦' },
+                      { value: 'Other', label: 'Other — इतर', icon: '🔄' },
                     ]}
                   />
 
                   {/* GAT / SURVEY PARCEL ENTRY SECTION */}
                   <div className="p-3.5 bg-[#182234] border border-[#233148] rounded-xl space-y-3">
                     <div className="flex justify-between items-center">
-                      <span className="font-bold text-xs text-white">Gat/Survey Parcel Entry</span>
-                      <span className="text-[11px] font-mono font-bold text-emerald-400">
-                        Gat-wise Total: {calculateGatWiseTotalAcres()} Acre
-                      </span>
+                      <div>
+                        <span className="font-bold text-xs text-white block">Gat/Survey Parcel Entry</span>
+                        <span className="text-[11px] text-slate-400 font-normal">गट/सर्वे जमीन नोंद</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[11px] font-mono font-bold text-emerald-400 block">
+                          Gat-wise Total: {calculateGatWiseTotalAcres()} Acre
+                        </span>
+                        <span className="text-[10px] text-emerald-500/80">
+                          गटनिहाय एकूण: {calculateGatWiseTotalAcres()} एकर
+                        </span>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-12 gap-2">
@@ -5015,7 +5045,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
                           type="text"
                           value={parcelGatNoInput}
                           onChange={e => setParcelGatNoInput(e.target.value.toUpperCase())}
-                          placeholder="Gat No. (45/1)"
+                          placeholder="GAT NO. (45/1)"
                           className="w-full h-[44px] bg-[#111827] border border-[#2A3952] rounded-lg px-2.5 font-mono font-bold text-white text-xs uppercase focus:border-emerald-500 focus:outline-none"
                         />
                       </div>
@@ -5062,7 +5092,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
                             className="inline-flex items-center space-x-2 px-3 py-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-mono font-bold"
                           >
                             <span>Gat {parcel.gatNumber} • {parcel.area} {parcel.areaUnit}</span>
-                            <button type="button" onClick={() => removeGatParcel(idx)} className="text-emerald-400 hover:text-rose-400 font-bold">×</button>
+                            <button type="button" onClick={() => removeGatParcel(idx)} className="text-emerald-400 hover:text-rose-400 font-bold cursor-pointer">×</button>
                           </span>
                         ))}
                       </div>
@@ -5071,25 +5101,35 @@ export const MahaAgridootFieldApp: React.FC = () => {
 
                   {/* FARMER ID SECTION */}
                   <div className="p-3.5 bg-[#182234] border border-[#233148] rounded-xl space-y-3">
-                    <label className="font-bold text-xs text-white block">Farmer ID आहे का?</label>
+                    <div>
+                      <label className="font-bold text-xs text-white block">Farmer ID Available?</label>
+                      <span className="text-[11px] text-slate-400 font-normal">Farmer ID आहे का?</span>
+                    </div>
                     <div className="grid grid-cols-3 gap-2">
-                      {['Yes', 'No', "Don't Know"].map(opt => (
+                      {[
+                        { key: 'Yes', labelEn: 'Yes', labelMr: 'होय' },
+                        { key: 'No', labelEn: 'No', labelMr: 'नाही' },
+                        { key: "Don't Know", labelEn: "Don't Know", labelMr: 'माहीत नाही' },
+                      ].map(opt => (
                         <button
-                          key={opt}
+                          key={opt.key}
                           type="button"
-                          onClick={() => updateFormField('hasFarmerId', opt)}
-                          className={`py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
-                            phase1FormData.hasFarmerId === opt ? 'bg-[#059669] text-white shadow-md' : 'bg-[#111827] border border-[#2A3952] text-slate-300'
+                          onClick={() => updateFormField('hasFarmerId', opt.key)}
+                          className={`py-2 rounded-xl font-bold text-xs transition-all cursor-pointer text-center ${
+                            phase1FormData.hasFarmerId === opt.key ? 'bg-[#059669] text-white shadow-md' : 'bg-[#111827] border border-[#2A3952] text-slate-300 hover:border-slate-500'
                           }`}
                         >
-                          {opt}
+                          <span className="block">{opt.labelEn}</span>
+                          <span className="block text-[10px] font-normal opacity-80">{opt.labelMr}</span>
                         </button>
                       ))}
                     </div>
 
                     {phase1FormData.hasFarmerId === 'Yes' && (
                       <div className="space-y-1 pt-1 animate-in fade-in">
-                        <label className="text-[11px] font-bold text-slate-300 block">Farmer ID Number</label>
+                        <label className="text-[11px] font-bold text-slate-300 block">
+                          Farmer ID Number <span className="text-[10px] text-slate-400 font-normal ml-1">| Farmer ID क्रमांक</span>
+                        </label>
                         <input
                           type="text"
                           ref={el => (fieldInputRefs.current['govtAgriStackFarmerId'] = el)} id="field-input-govtAgriStackFarmerId"
