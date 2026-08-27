@@ -5975,7 +5975,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
                   className="h-[52px] px-6 bg-[#182234] hover:bg-[#223046] border border-[#2A3952] text-white font-bold rounded-2xl text-sm transition-all cursor-pointer flex items-center space-x-2 shrink-0"
                 >
                   <ChevronLeft className="w-4 h-4" />
-                  <span>Back / मागे</span>
+                  <span>Back</span>
                 </button>
 
                 {wizardSection < 10 ? (
@@ -6007,7 +6007,7 @@ export const MahaAgridootFieldApp: React.FC = () => {
                     }}
                     className="flex-1 h-[52px] bg-[#059669] hover:bg-[#047857] text-white font-bold rounded-2xl text-base transition-all cursor-pointer shadow-lg shadow-emerald-900/30 text-center flex items-center justify-center space-x-2"
                   >
-                    <span>Next / पुढे</span>
+                    <span>Next</span>
                     <ChevronRight className="w-5 h-5" />
                   </button>
                 ) : (
@@ -6020,11 +6020,11 @@ export const MahaAgridootFieldApp: React.FC = () => {
                     {isSubmittingPhase1 ? (
                       <>
                         <Loader2 className="w-5 h-5 animate-spin text-white" />
-                        <span>Creating Profile / प्रोफाइल तयार होत आहे...</span>
+                        <span>Creating Profile...</span>
                       </>
                     ) : (
                       <>
-                        <span>Confirm &amp; Create Profile / नोंदणी पूर्ण करा</span>
+                        <span>Confirm &amp; Create Profile</span>
                         <ChevronRight className="w-5 h-5" />
                       </>
                     )}
