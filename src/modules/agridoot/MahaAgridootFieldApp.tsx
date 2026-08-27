@@ -4632,18 +4632,20 @@ export const MahaAgridootFieldApp: React.FC = () => {
                     <div className="space-y-1.5">
                       <label className="font-bold text-xs text-slate-200 block">WhatsApp Mobile</label>
                       <div className="flex items-center space-x-2">
-                        <div className="flex-1 h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 flex items-center justify-between font-mono font-bold text-white text-sm">
-                          <span>+91 {phase1FormData.whatsappMobile}</span>
-                          <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px]">
+                        <div className="flex-1 flex items-center h-[52px] bg-[#182234] border border-[#233148] rounded-xl overflow-hidden">
+                          <span className="px-3 font-bold text-slate-400 text-sm border-r border-[#233148] h-full flex items-center select-none shrink-0">+91</span>
+                          <span className="flex-1 px-3 font-mono font-bold text-white text-sm">{phase1FormData.whatsappMobile}</span>
+                          <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] mr-3 shrink-0">
                             <Check className="w-3.5 h-3.5 stroke-[3]" />
                             <span>Verified</span>
                           </span>
                         </div>
-                        <button type="button" onClick={() => triggerToast('Mobile verification change modal')} className="h-[52px] px-4 text-emerald-400 hover:text-emerald-300 font-bold text-xs cursor-pointer">
+                        <button type="button" onClick={() => triggerToast('Mobile verification change modal')} className="h-[52px] px-4 text-emerald-400 hover:text-emerald-300 font-bold text-xs cursor-pointer shrink-0">
                           Change
                         </button>
                       </div>
                     </div>
+
 
                     <div className="space-y-1.5">
                       <label className="font-bold text-xs text-slate-200 block">Alternate Mobile <span className="text-rose-500">*</span></label>
