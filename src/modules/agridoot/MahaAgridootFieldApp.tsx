@@ -1,4 +1,5 @@
 import { EntrepreneurAssessmentWizard } from '../edp/components/EntrepreneurAssessmentWizard';
+import WizardSelect from './components/WizardSelect';
 /**
  * MAHA-AGRIDOOT World-Class Enterprise Mobile Operating System (`/maha-agri/agridoot`, `/agridoot`, `/field`)
  * COMPLETE ENTERPRISE ATTENDANCE MODULE INTEGRATED IN `DAILY_ATTENDANCE` VIEW:
