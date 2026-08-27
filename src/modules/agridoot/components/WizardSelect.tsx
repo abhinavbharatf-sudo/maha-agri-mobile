@@ -11,22 +11,32 @@ interface WizardSelectProps {
   label?: string;
   value: string;
   onChange: (value: string) => void;
-  options: WizardSelectOption[];
+  options: (string | WizardSelectOption)[];
   required?: boolean;
   error?: string;
   placeholder?: string;
   fieldRef?: (el: any) => void;
   fieldId?: string;
   small?: boolean;
+  className?: string;
 }
 
 const WizardSelect: React.FC<WizardSelectProps> = ({
   label, value, onChange, options, required = false,
-  error, placeholder = 'Select...', fieldRef, fieldId, small = false,
+  error, placeholder = 'Select...', fieldRef, fieldId, small = false, className = '',
 }) => {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const selected = options.find(o => o.value === value);
+
+  // Normalize options to WizardSelectOption format
+  const normalizedOptions: WizardSelectOption[] = options.map(opt => {
+    if (typeof opt === 'string') {
+      return { value: opt, label: opt };
+    }
+    return opt;
+  });
+
+  const selected = normalizedOptions.find(o => o.value === value);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -39,7 +49,7 @@ const WizardSelect: React.FC<WizardSelectProps> = ({
   }, []);
 
   return (
-    <div className='space-y-1.5 relative' ref={containerRef} id={fieldId}>
+    <div className={`space-y-1.5 relative ${className}`} ref={containerRef} id={fieldId}>
       {label && (
         <label className={`font-bold block ${small ? 'text-[11px] text-slate-300' : 'text-xs text-slate-200'}`}>
           {label}{required && <span className='text-rose-500 ml-0.5'>*</span>}
@@ -55,22 +65,22 @@ const WizardSelect: React.FC<WizardSelectProps> = ({
           error
             ? 'bg-rose-950/30 border-rose-500 text-white'
             : open
-            ? 'bg-[#182234] border-emerald-500 text-white'
+            ? 'bg-[#182234] border-emerald-500 text-white shadow-lg ring-2 ring-emerald-500/20'
             : 'bg-[#182234] border-[#233148] text-white hover:border-slate-500',
         ].join(' ')}
       >
-        <span className='flex items-center space-x-2.5'>
-          {selected?.icon && <span className='text-base leading-none'>{selected.icon}</span>}
-          <span className={selected ? 'text-white' : 'text-slate-500'}>
+        <span className='flex items-center space-x-2.5 overflow-hidden text-ellipsis whitespace-nowrap'>
+          {selected?.icon && <span className='text-base leading-none shrink-0'>{selected.icon}</span>}
+          <span className={selected ? 'text-white truncate' : 'text-slate-500 truncate'}>
             {selected ? selected.label : placeholder}
           </span>
         </span>
-        <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${open ? 'rotate-180 text-emerald-400' : 'text-slate-400'}`} />
+        <ChevronDown className={`w-4 h-4 shrink-0 transition-transform duration-200 ${open ? 'rotate-180 text-emerald-400' : 'text-slate-400'}`} />
       </button>
 
       {open && (
-        <div className='absolute z-[200] top-full left-0 right-0 mt-1 bg-[#0F1A2C] border border-[#2A3952] rounded-2xl shadow-2xl shadow-black/80 overflow-hidden'>
-          {options.map((opt, idx) => {
+        <div className='absolute z-[250] top-full left-0 right-0 mt-1 bg-[#0F1A2C] border border-[#2A3952] rounded-2xl shadow-2xl shadow-black/90 overflow-hidden max-h-64 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700'>
+          {normalizedOptions.map((opt, idx) => {
             const isSelected = opt.value === value;
             return (
               <button
@@ -80,13 +90,13 @@ const WizardSelect: React.FC<WizardSelectProps> = ({
                 className={[
                   'w-full flex items-center justify-between px-4 py-3 text-sm font-bold text-left transition-all cursor-pointer',
                   isSelected
-                    ? 'bg-gradient-to-r from-emerald-900/80 to-teal-900/60 text-emerald-300 border-l-2 border-emerald-500'
-                    : 'text-slate-300 hover:bg-[#182234] hover:text-white border-l-2 border-transparent',
+                    ? 'bg-gradient-to-r from-emerald-900/90 to-teal-900/70 text-emerald-300 border-l-4 border-emerald-500 shadow-inner'
+                    : 'text-slate-300 hover:bg-[#182234] hover:text-white border-l-4 border-transparent',
                   idx !== 0 ? 'border-t border-[#1E293B]/60' : '',
                 ].join(' ')}
               >
                 <span className='flex items-center space-x-3'>
-                  {opt.icon && <span className='text-base'>{opt.icon}</span>}
+                  {opt.icon && <span className='text-base leading-none'>{opt.icon}</span>}
                   <span>{opt.label}</span>
                 </span>
                 {isSelected && <Check className='w-4 h-4 text-emerald-400 stroke-[3] shrink-0' />}

@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import WizardSelect from '../../agridoot/components/WizardSelect';
 import {
   ArrowLeft,
   Check,
@@ -1333,37 +1334,14 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         Highest Educational Qualification <span className="text-rose-500">*</span>
                       </label>
                       <div className="relative">
-                        <select
-                          id="field-qualification"
-                          value={formData.education.qualification}
-                          onChange={(e) => updateFormSection('education', (prev) => ({ ...prev, qualification: e.target.value as EducationalQualification }), 'qualification')}
-                          onBlur={() => { if (!formData.education.qualification) setValidationErrors(prev => ({ ...prev, qualification: 'This field is required.' })); }}
-                          aria-invalid={!!validationErrors['qualification']}
-                          aria-describedby={validationErrors['qualification'] ? 'error-qualification' : undefined}
-                          className={`w-full h-[56px] min-h-[56px] bg-[#182234] border rounded-[16px] px-4 text-white font-medium text-[16px] focus:outline-none appearance-none cursor-pointer input-focus-smooth ${
-                            validationErrors['qualification'] ? 'border-rose-500 bg-rose-500/10 ring-2 ring-rose-500/30' : 'border-[#1F2937] focus:border-[#059669]'
-                          }`}
-                        >
-                          {[
-                            '10th Pass',
-                            '12th Pass',
-                            'ITI',
-                            'Diploma',
-                            'Graduate',
-                            'Post Graduate',
-                            'Agri Polytechnic',
-                            'Diploma in Agriculture',
-                            'B.Sc Agriculture',
-                            'M.Sc Agriculture',
-                            'B.Tech Agriculture',
-                            'B.Tech Agricultural Engineering',
-                            'Veterinary',
-                            'Other',
-                          ].map((q) => (
-                            <option key={q} value={q}>{q}</option>
-                          ))}
-                        </select>
-                        <ChevronDown className="w-5 h-5 text-[#94A3B8] absolute right-4 top-4.5 pointer-events-none" />
+                        <WizardSelect
+    fieldId="field-qualification"
+    value={formData.education.qualification}
+    
+    options={[{"value":"{q}","label":"{q}"}]}
+    small
+  />
+                        
                       </div>
                       {validationErrors['qualification'] && (
                         <p id="error-qualification" role="alert" className="text-[12px] font-medium text-rose-400 mt-[6px] flex items-center space-x-1.5 animate-in fade-in slide-in-from-top-1 duration-180">
@@ -1499,15 +1477,12 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
 
                           <div className="space-y-1.5">
                             <label className="font-medium text-[13px] text-slate-300 block">Expected Passing Year</label>
-                            <select
+                            <WizardSelect
                               value={formData.education.studentDetails?.expectedPassingYear || '2025'}
-                              onChange={(e) => updateFormSection('education', (prev) => ({ ...prev, studentDetails: { ...prev.studentDetails, expectedPassingYear: e.target.value } as any }))}
-                              className="w-full h-[50px] bg-[#111827] border border-[#1F2937] rounded-[12px] px-3 text-white text-[14px] focus:border-[#059669] focus:outline-none cursor-pointer"
-                            >
-                              {['2024', '2025', '2026', '2027', '2028', '2029'].map((yr) => (
-                                <option key={yr} value={yr}>{yr}</option>
-                              ))}
-                            </select>
+                              onChange={(v) => updateFormSection('education', (prev) => ({ ...prev, studentDetails: { ...prev.studentDetails, expectedPassingYear: v } as any }))}
+                              options={['2024', '2025', '2026', '2027', '2028', '2029'].map(yr => ({ value: yr, label: yr, icon: '📅' }))}
+                              small
+                            />
                           </div>
                         </div>
                       </div>
@@ -1600,37 +1575,24 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       <label className={`font-medium text-[15px] block ${validationErrors['occupation'] ? 'text-rose-400 font-semibold' : 'text-slate-200'}`}>
                         What are you currently doing? <span className="text-rose-500">*</span>
                       </label>
-                      <div className="relative">
-                        <select
-                          id="field-occupation"
-                          value={formData.occupation.occupation}
-                          onChange={(e) => updateFormSection('occupation', (prev) => ({ ...prev, occupation: e.target.value as OccupationType }), 'occupation')}
-                          onBlur={() => { if (!formData.occupation.occupation) setValidationErrors(prev => ({ ...prev, occupation: 'Please select your Current Occupation.' })); }}
-                          aria-invalid={!!validationErrors['occupation']}
-                          aria-describedby={validationErrors['occupation'] ? 'error-occupation' : undefined}
-                          className={`w-full h-[56px] min-h-[56px] bg-[#182234] border rounded-[16px] px-4 text-white font-medium text-[16px] focus:outline-none appearance-none cursor-pointer input-focus-smooth ${
-                            validationErrors['occupation'] ? 'border-rose-500 bg-rose-500/10 ring-2 ring-rose-500/30' : 'border-[#1F2937] focus:border-[#059669]'
-                          }`}
-                        >
-                          {[
-                            'Student',
-                            'Farmer',
-                            'Private Employee',
-                            'Government Employee',
-                            'Business Owner',
-                            'Self Employed',
-                            'Agriculture Professional',
-                            'Housewife',
-                            'Unemployed',
-                            'Other',
-                          ]
-                            .filter((occ) => formData.education.isStudent || occ !== 'Student')
-                            .map((occ) => (
-                              <option key={occ} value={occ}>{occ}</option>
-                            ))}
-                        </select>
-                        <ChevronDown className="w-5 h-5 text-[#94A3B8] absolute right-4 top-4.5 pointer-events-none" />
-                      </div>
+                      <WizardSelect
+                        fieldId="field-occupation"
+                        value={formData.occupation.occupation}
+                        onChange={(v) => updateFormSection('occupation', (prev) => ({ ...prev, occupation: v as OccupationType }), 'occupation')}
+                        error={validationErrors['occupation']}
+                        options={[
+                          { value: 'Student', label: 'Student', icon: '🎓' },
+                          { value: 'Farmer', label: 'Farmer', icon: '🧑‍🌾' },
+                          { value: 'Private Employee', label: 'Private Employee', icon: '💼' },
+                          { value: 'Government Employee', label: 'Government Employee', icon: '🏛️' },
+                          { value: 'Business Owner', label: 'Business Owner', icon: '🏢' },
+                          { value: 'Self Employed', label: 'Self Employed', icon: '🛠️' },
+                          { value: 'Agriculture Professional', label: 'Agriculture Professional', icon: '🌱' },
+                          { value: 'Housewife', label: 'Housewife', icon: '🏡' },
+                          { value: 'Unemployed', label: 'Unemployed', icon: '⏳' },
+                          { value: 'Other', label: 'Other', icon: '🔄' },
+                        ].filter((occ) => formData.education.isStudent || occ.value !== 'Student')}
+                      />
                       {validationErrors['occupation'] && (
                         <p className="text-[12px] text-rose-400 font-medium mt-1 animate-in fade-in">⚠️ {validationErrors['occupation']}</p>
                       )}
@@ -1642,16 +1604,22 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         <label className="font-medium text-[13px] text-slate-300 block">
                           Agriculture Professional Specialty
                         </label>
-                        <select
-                          id="field-agriProfCategory"
+                        <WizardSelect
+                          fieldId="field-agriProfCategory"
                           value={formData.occupation.agriProfCategory || 'Agriculture Consultant'}
-                          onChange={(e) => updateFormSection('occupation', (prev) => ({ ...prev, agriProfCategory: e.target.value as any }))}
-                          className="w-full h-[50px] bg-[#111827] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none cursor-pointer"
-                        >
-                          {['Agriculture Officer', 'Agriculture Consultant', 'Input Dealer', 'Agriculture Sales', 'Extension Worker', 'Research', 'NGO', 'Other'].map((sp) => (
-                            <option key={sp} value={sp}>{sp}</option>
-                          ))}
-                        </select>
+                          onChange={(v) => updateFormSection('occupation', (prev) => ({ ...prev, agriProfCategory: v as any }))}
+                          options={[
+                            { value: 'Agriculture Officer', label: 'Agriculture Officer', icon: '🏛️' },
+                            { value: 'Agriculture Consultant', label: 'Agriculture Consultant', icon: '👨‍🌾' },
+                            { value: 'Input Dealer', label: 'Input Dealer', icon: '🏬' },
+                            { value: 'Agriculture Sales', label: 'Agriculture Sales', icon: '📈' },
+                            { value: 'Extension Worker', label: 'Extension Worker', icon: '🤝' },
+                            { value: 'Research', label: 'Research', icon: '🔬' },
+                            { value: 'NGO', label: 'NGO', icon: '🌐' },
+                            { value: 'Other', label: 'Other', icon: '🔄' },
+                          ]}
+                          small
+                        />
                       </div>
                     )}
 
@@ -1671,17 +1639,18 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
 
                         <div className="space-y-1.5">
                           <label className="font-medium text-[13px] text-slate-300 block">Total Job Experience</label>
-                          <select
+                          <WizardSelect
                             value={formData.occupation.employeeDetails?.totalJobExperience || '1–3 Years'}
-                            onChange={(e) => updateFormSection('occupation', (prev) => ({ ...prev, employeeDetails: { ...prev.employeeDetails, totalJobExperience: e.target.value as ExperienceRange } as any }))}
-                            className="w-full h-[50px] bg-[#111827] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[15px] focus:border-[#059669] focus:outline-none cursor-pointer"
-                          >
-                            <option value="Less than 1 Year">Less than 1 Year</option>
-                            <option value="1–3 Years">1–3 Years</option>
-                            <option value="3–5 Years">3–5 Years</option>
-                            <option value="5–10 Years">5–10 Years</option>
-                            <option value="More than 10 Years">More than 10 Years</option>
-                          </select>
+                            onChange={(v) => updateFormSection('occupation', (prev) => ({ ...prev, employeeDetails: { ...prev.employeeDetails, totalJobExperience: v as ExperienceRange } as any }))}
+                            options={[
+                              { value: 'Less than 1 Year', label: 'Less than 1 Year', icon: '⏱️' },
+                              { value: '1–3 Years', label: '1–3 Years', icon: '⏱️' },
+                              { value: '3–5 Years', label: '3–5 Years', icon: '⏱️' },
+                              { value: '5–10 Years', label: '5–10 Years', icon: '⏱️' },
+                              { value: 'More than 10 Years', label: 'More than 10 Years', icon: '⏱️' },
+                            ]}
+                            small
+                          />
                         </div>
                       </div>
                     )}
@@ -1738,27 +1707,15 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
 
                             <div className="space-y-1.5">
                               <label className="font-medium text-[13px] text-slate-300 block">Years Operated</label>
-                              <div className="relative">
-                                <select
-                                  value={formData.occupation.pastBusinessDetails?.yearsOperated || '1 Year'}
-                                  onChange={(e) => updateFormSection('occupation', (prev) => ({ ...prev, pastBusinessDetails: { ...prev.pastBusinessDetails, yearsOperated: e.target.value } as any }))}
-                                  className="w-full h-[50px] bg-[#111827] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[15px] focus:border-[#059669] focus:outline-none appearance-none cursor-pointer"
-                                >
-                                  {[
-                                    'Less than 1 Year',
-                                    '1 Year',
-                                    '2 Years',
-                                    '3 Years',
-                                    '4 Years',
-                                    '5 Years',
-                                    '6–10 Years',
-                                    '10+ Years',
-                                  ].map((opt) => (
-                                    <option key={opt} value={opt}>{opt}</option>
-                                  ))}
-                                </select>
-                                <ChevronDown className="w-5 h-5 text-[#94A3B8] absolute right-4 top-3.5 pointer-events-none" />
-                              </div>
+                              <WizardSelect
+                                value={formData.occupation.pastBusinessDetails?.yearsOperated || '1 Year'}
+                                onChange={(v) => updateFormSection('occupation', (prev) => ({ ...prev, pastBusinessDetails: { ...prev.pastBusinessDetails, yearsOperated: v } as any }))}
+                                options={[
+                                  'Less than 1 Year', '1 Year', '2 Years', '3 Years',
+                                  '4 Years', '5 Years', '6–10 Years', '10+ Years'
+                                ].map(opt => ({ value: opt, label: opt, icon: '📅' }))}
+                                small
+                              />
                             </div>
                           </div>
                         )}
@@ -1854,17 +1811,13 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
 
                       <div className="space-y-1.5">
                         <label className="font-medium text-[13px] text-slate-300 block">Farming Experience</label>
-                        <select
-                          value={formData.agriculture.farmingExperience || '3–5 Years'}
-                          onChange={(e) => updateFormSection('agriculture', (prev) => ({ ...prev, farmingExperience: e.target.value as ExperienceRange }))}
-                          className="w-full h-[50px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[15px] focus:border-[#059669] focus:outline-none cursor-pointer"
-                        >
-                          <option value="Less than 1 Year">Less than 1 Year</option>
-                          <option value="1–3 Years">1–3 Years</option>
-                          <option value="3–5 Years">3–5 Years</option>
-                          <option value="5–10 Years">5–10 Years</option>
-                          <option value="More than 10 Years">More than 10 Years</option>
-                        </select>
+                        <WizardSelect
+    
+    value={formData.agriculture.farmingExperience || '3–5 Years'}
+    
+    options={[{"value":"Less than 1 Year","label":"Less than 1 Year"},{"value":"1–3 Years","label":"1–3 Years"},{"value":"3–5 Years","label":"3–5 Years"},{"value":"5–10 Years","label":"5–10 Years"},{"value":"More than 10 Years","label":"More than 10 Years"}]}
+    small
+  />
                       </div>
                     </div>
                   )}
@@ -1898,14 +1851,13 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       {/* LAND UNIT DROPDOWN */}
                       <div className="flex justify-between items-center pb-1">
                         <label className="font-medium text-[13px] text-slate-300">Land Measurement Unit</label>
-                        <select
-                          value={formData.agriculture.landUnit || 'Acre'}
-                          onChange={(e) => updateFormSection('agriculture', (prev) => ({ ...prev, landUnit: e.target.value as 'Acre' | 'Hectare' }))}
-                          className="h-[36px] bg-[#182234] border border-[#1F2937] rounded-[8px] px-3 text-emerald-400 font-semibold text-[13px] focus:outline-none"
-                        >
-                          <option value="Acre">Acres</option>
-                          <option value="Hectare">Hectares</option>
-                        </select>
+                        <WizardSelect
+    
+    value={formData.agriculture.landUnit || 'Acre'}
+    
+    options={[{"value":"Acre","label":"Acres"},{"value":"Hectare","label":"Hectares"}]}
+    small
+  />
                       </div>
 
                       <div className="grid grid-cols-3 gap-2">
@@ -2095,16 +2047,17 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       {formData.agriculture.govtSchemesReceived?.includes('PM-KISAN') && (
                         <div className="space-y-1.5 pt-2 border-t border-[#1F2937] animate-in fade-in duration-200">
                           <label className="font-medium text-[13px] text-slate-200 block">PM-KISAN Beneficiary Status</label>
-                          <select
+                          <WizardSelect
                             value={formData.agriculture.pmKisanStatus || 'Active'}
-                            onChange={(e) => updateFormSection('agriculture', (prev) => ({ ...prev, pmKisanStatus: e.target.value as any }))}
-                            className="w-full h-[46px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3 text-white text-[14px] focus:border-[#059669] focus:outline-none cursor-pointer"
-                          >
-                            <option value="Active">Active Beneficiary</option>
-                            <option value="Stopped">Stopped / Paused</option>
-                            <option value="Applied">Applied & Pending</option>
-                            <option value="Rejected">Rejected</option>
-                          </select>
+                            onChange={(v) => updateFormSection('agriculture', (prev) => ({ ...prev, pmKisanStatus: v as any }))}
+                            options={[
+                              { value: 'Active', label: 'Active Beneficiary', icon: '✅' },
+                              { value: 'Stopped', label: 'Stopped / Paused', icon: '⏸️' },
+                              { value: 'Applied', label: 'Applied & Pending', icon: '⏳' },
+                              { value: 'Rejected', label: 'Rejected', icon: '❌' },
+                            ]}
+                            small
+                          />
                         </div>
                       )}
 
@@ -2165,15 +2118,13 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1.5">
                           <label className="font-medium text-[13px] text-slate-300 block">Position in FPO</label>
-                          <select
-                            value={formData.agriculture.fpoPosition || 'Farmer Member'}
-                            onChange={(e) => updateFormSection('agriculture', (prev) => ({ ...prev, fpoPosition: e.target.value as any }))}
-                            className="w-full h-[48px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none cursor-pointer"
-                          >
-                            {['Chairman', 'Vice Chairman', 'Director', 'Board Member', 'CEO', 'Accountant', 'Coordinator', 'Farmer Member', 'Promoter', 'Other'].map((pos) => (
-                              <option key={pos} value={pos}>{pos}</option>
-                            ))}
-                          </select>
+                          <WizardSelect
+    
+    value={formData.agriculture.fpoPosition || 'Farmer Member'}
+    
+    options={[{"value":"{pos}","label":"{pos}"}]}
+    small
+  />
                         </div>
 
                         <div className="space-y-1.5">
@@ -2493,28 +2444,13 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                           <label className={`font-medium text-[13px] block ${validationErrors['droneManufacturer'] ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
                             Manufacturer <span className="text-rose-500">*</span>
                           </label>
-                          <select
-                            id="field-droneManufacturer"
-                            value={formData.agriDrone.ownedDroneDetails?.manufacturer || 'IoTechWorld'}
-                            onChange={(e) => updateFormSection('agriDrone', (prev) => ({ ...prev, ownedDroneDetails: { ...prev.ownedDroneDetails, manufacturer: e.target.value as any } }))}
-                            className={`w-full h-[48px] bg-[#182234] border rounded-[12px] px-2 text-white text-[13px] focus:outline-none cursor-pointer ${
-                              validationErrors['droneManufacturer'] ? 'border-rose-500 ring-2 ring-rose-500/40' : 'border-[#1F2937] focus:border-[#059669]'
-                            }`}
-                          >
-                            {[
-                              'Garuda Aerospace',
-                              'IoTechWorld',
-                              'Marut Drones',
-                              'General Aeronautics',
-                              'Asteria Aerospace',
-                              'Paras Aerospace',
-                              'John Deere',
-                              'DJI Agriculture',
-                              'Other',
-                            ].map((mf) => (
-                              <option key={mf} value={mf}>{mf}</option>
-                            ))}
-                          </select>
+                          <WizardSelect
+    fieldId="field-droneManufacturer"
+    value={formData.agriDrone.ownedDroneDetails?.manufacturer || 'IoTechWorld'}
+    
+    options={[{"value":"{mf}","label":"{mf}"}]}
+    small
+  />
                           {validationErrors['droneManufacturer'] && (
                             <p className="text-[12px] text-rose-400 font-medium mt-1 animate-in fade-in">⚠️ {validationErrors['droneManufacturer']}</p>
                           )}
@@ -2557,42 +2493,33 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       <div className="grid grid-cols-3 gap-2">
                         <div className="space-y-1.5">
                           <label className="font-medium text-[12px] text-slate-300 block">Capacity</label>
-                          <select
-                            id="field-droneCapacity"
-                            value={formData.agriDrone.ownedDroneDetails?.capacity || '10 Liters'}
-                            onChange={(e) => updateFormSection('agriDrone', (prev) => ({ ...prev, ownedDroneDetails: { ...prev.ownedDroneDetails, capacity: e.target.value } }))}
-                            className="w-full h-[48px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-2 text-white text-[13px] focus:border-[#059669] focus:outline-none"
-                          >
-                            <option value="10 Liters">10 Liters</option>
-                            <option value="16 Liters">16 Liters</option>
-                            <option value="25 Liters">25 Liters</option>
-                            <option value="30 Liters">30 Liters</option>
-                          </select>
+                          <WizardSelect
+    fieldId="field-droneCapacity"
+    value={formData.agriDrone.ownedDroneDetails?.capacity || '10 Liters'}
+    
+    options={[{"value":"10 Liters","label":"10 Liters"},{"value":"16 Liters","label":"16 Liters"},{"value":"25 Liters","label":"25 Liters"},{"value":"30 Liters","label":"30 Liters"}]}
+    small
+  />
                         </div>
                         <div className="space-y-1.5">
                           <label className="font-medium text-[12px] text-slate-300 block">Category</label>
-                          <select
-                            id="field-droneCategory"
-                            value={formData.agriDrone.ownedDroneDetails?.category || 'Small'}
-                            onChange={(e) => updateFormSection('agriDrone', (prev) => ({ ...prev, ownedDroneDetails: { ...prev.ownedDroneDetails, category: e.target.value } }))}
-                            className="w-full h-[48px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-2 text-white text-[13px] focus:border-[#059669] focus:outline-none"
-                          >
-                            <option value="Micro">Micro (&lt;2kg)</option>
-                            <option value="Small">Small (2-25kg)</option>
-                            <option value="Medium">Medium (25-150kg)</option>
-                          </select>
+                          <WizardSelect
+    fieldId="field-droneCategory"
+    value={formData.agriDrone.ownedDroneDetails?.category || 'Small'}
+    
+    options={[{"value":"Micro","label":"Micro (&lt;2kg)"},{"value":"Small","label":"Small (2-25kg)"},{"value":"Medium","label":"Medium (25-150kg)"}]}
+    small
+  />
                         </div>
                         <div className="space-y-1.5">
                           <label className="font-medium text-[12px] text-slate-300 block">Drone Condition</label>
-                          <select
-                            value={formData.agriDrone.ownedDroneDetails?.condition || 'Operational'}
-                            onChange={(e) => updateFormSection('agriDrone', (prev) => ({ ...prev, ownedDroneDetails: { ...prev.ownedDroneDetails, condition: e.target.value as any } }))}
-                            className="w-full h-[48px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-2 text-white text-[13px] focus:border-[#059669] focus:outline-none"
-                          >
-                            <option value="Operational">Operational</option>
-                            <option value="Repair Required">Repair Required</option>
-                            <option value="Not Working">Not Working</option>
-                          </select>
+                          <WizardSelect
+    
+    value={formData.agriDrone.ownedDroneDetails?.condition || 'Operational'}
+    
+    options={[{"value":"Operational","label":"Operational"},{"value":"Repair Required","label":"Repair Required"},{"value":"Not Working","label":"Not Working"}]}
+    small
+  />
                         </div>
                       </div>
                     </div>
@@ -2631,18 +2558,13 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                             <label className={`font-medium text-[13px] block ${validationErrors['purchaseMethod'] ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
                               Preferred Purchase Method <span className="text-rose-500">*</span>
                             </label>
-                            <select
-                              id="field-purchaseMethod"
-                              value={formData.agriDrone.purchaseMethod || 'MAHA-DBT Subsidy'}
-                              onChange={(e) => updateFormSection('agriDrone', (prev) => ({ ...prev, purchaseMethod: e.target.value as any }))}
-                              className={`w-full h-[48px] bg-[#182234] border rounded-[12px] px-3 text-white text-[14px] focus:outline-none cursor-pointer ${
-                                validationErrors['purchaseMethod'] ? 'border-rose-500 ring-2 ring-rose-500/40' : 'border-[#1F2937] focus:border-[#059669]'
-                              }`}
-                            >
-                              {['Full Cash Payment', 'Bank Loan', 'MAHA-DBT Subsidy', 'CMEGP Scheme', 'PMEGP Scheme', 'Mixed Finance', 'Not Decided'].map((m) => (
-                                <option key={m} value={m}>{m}</option>
-                              ))}
-                            </select>
+                            <WizardSelect
+    fieldId="field-purchaseMethod"
+    value={formData.agriDrone.purchaseMethod || 'MAHA-DBT Subsidy'}
+    
+    options={[{"value":"{m}","label":"{m}"}]}
+    small
+  />
                             {validationErrors['purchaseMethod'] && (
                               <p className="text-[12px] text-rose-400 font-medium mt-1 animate-in fade-in">⚠️ {validationErrors['purchaseMethod']}</p>
                             )}
@@ -2675,15 +2597,13 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                           {(formData.agriDrone.purchaseMethod === 'CMEGP Scheme' || formData.agriDrone.purchaseMethod === 'PMEGP Scheme') && (
                             <div className="space-y-1.5 animate-in fade-in duration-200">
                               <label className="font-medium text-[13px] text-slate-200 block">Govt Subsidy Scheme Application Status</label>
-                              <select
-                                value={formData.agriDrone.schemeAppliedStatus || 'Planning to Apply'}
-                                onChange={(e) => updateFormSection('agriDrone', (prev) => ({ ...prev, schemeAppliedStatus: e.target.value as any }))}
-                                className="w-full h-[46px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3 text-white text-[14px] focus:border-[#059669] focus:outline-none cursor-pointer"
-                              >
-                                <option value="Already Applied">Already Applied</option>
-                                <option value="Planning to Apply">Planning to Apply</option>
-                                <option value="No">Not Applied Yet</option>
-                              </select>
+                              <WizardSelect
+    
+    value={formData.agriDrone.schemeAppliedStatus || 'Planning to Apply'}
+    
+    options={[{"value":"Already Applied","label":"Already Applied"},{"value":"Planning to Apply","label":"Planning to Apply"},{"value":"No","label":"Not Applied Yet"}]}
+    small
+  />
                             </div>
                           )}
 
@@ -2691,18 +2611,13 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                             <label className={`font-medium text-[13px] block ${validationErrors['purchaseTimeline'] ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
                               Expected Timeline <span className="text-rose-500">*</span>
                             </label>
-                            <select
-                              id="field-purchaseTimeline"
-                              value={formData.agriDrone.purchaseTimeline || 'Within 3 Months'}
-                              onChange={(e) => updateFormSection('agriDrone', (prev) => ({ ...prev, purchaseTimeline: e.target.value as any }))}
-                              className={`w-full h-[48px] bg-[#182234] border rounded-[12px] px-3 text-white text-[14px] focus:outline-none cursor-pointer ${
-                                validationErrors['purchaseTimeline'] ? 'border-rose-500 ring-2 ring-rose-500/40' : 'border-[#1F2937] focus:border-[#059669]'
-                              }`}
-                            >
-                              {['Immediately', 'Within 3 Months', 'Within 6 Months', 'Within 1 Year'].map((t) => (
-                                <option key={t} value={t}>{t}</option>
-                              ))}
-                            </select>
+                            <WizardSelect
+    fieldId="field-purchaseTimeline"
+    value={formData.agriDrone.purchaseTimeline || 'Within 3 Months'}
+    
+    options={[{"value":"{t}","label":"{t}"}]}
+    small
+  />
                             {validationErrors['purchaseTimeline'] && (
                               <p className="text-[12px] text-rose-400 font-medium mt-1 animate-in fade-in">⚠️ {validationErrors['purchaseTimeline']}</p>
                             )}
@@ -2803,15 +2718,13 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
 
                       <div className="space-y-1.5">
                         <label className="font-medium text-[13px] text-slate-300 block">Drone Ownership Preference</label>
-                        <select
-                          value={formData.entrepreneurInterest.moduleADrone?.ownershipInterest || 'Own'}
-                          onChange={(e) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, ownershipInterest: e.target.value } as any }))}
-                          className="w-full h-[48px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none"
-                        >
-                          <option value="Own">Own Purchase</option>
-                          <option value="Lease">Leasing / Rental</option>
-                          <option value="Franchise">Franchise Model</option>
-                        </select>
+                        <WizardSelect
+    
+    value={formData.entrepreneurInterest.moduleADrone?.ownershipInterest || 'Own'}
+    
+    options={[{"value":"Own","label":"Own Purchase"},{"value":"Lease","label":"Leasing / Rental"},{"value":"Franchise","label":"Franchise Model"}]}
+    small
+  />
                       </div>
 
                       {/* ========================================================================= */}
@@ -2850,15 +2763,13 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         {formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.canAttendWorkshop === 'No' && (
                           <div className="space-y-1.5 animate-in fade-in duration-200">
                             <label className="font-medium text-[13px] text-slate-300 block">Reason for Not Attending</label>
-                            <select
-                              value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.cannotAttendReason || 'Distance'}
-                              onChange={(e) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, cannotAttendReason: e.target.value as any } } as any }))}
-                              className="w-full h-[46px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none cursor-pointer"
-                            >
-                              {['Distance', 'Health', 'Job', 'Education', 'Family', 'Other'].map((r) => (
-                                <option key={r} value={r}>{r}</option>
-                              ))}
-                            </select>
+                            <WizardSelect
+    
+    value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.cannotAttendReason || 'Distance'}
+    
+    options={[{"value":"{r}","label":"{r}"}]}
+    small
+  />
                             {formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.cannotAttendReason === 'Other' && (
                               <input
                                 type="text"
@@ -2876,24 +2787,13 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                           <label className="font-medium text-[13px] text-slate-200 block">
                             After successfully completing the EDP – Agri Drone Workshop, what would you like to do? <span className="text-rose-500">*</span>
                           </label>
-                          <select
-                            value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.postTrainingPlan || 'Start My Own Agri Drone Spray Business'}
-                            onChange={(e) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, postTrainingPlan: e.target.value as any } } as any }))}
-                            className="w-full h-[46px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none cursor-pointer"
-                          >
-                            {[
-                              'Start My Own Agri Drone Spray Business',
-                              'Work with MAHA-AGRI Drone Service Team',
-                              'Become a Professional Drone Pilot',
-                              'Start a Drone Rental Business',
-                              'Become a Drone Service Partner',
-                              'Work in a Drone Company',
-                              'Still Exploring Opportunities',
-                              'Other',
-                            ].map((plan) => (
-                              <option key={plan} value={plan}>{plan}</option>
-                            ))}
-                          </select>
+                          <WizardSelect
+    
+    value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.postTrainingPlan || 'Start My Own Agri Drone Spray Business'}
+    
+    options={[{"value":"{plan}","label":"{plan}"}]}
+    small
+  />
                           {formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.postTrainingPlan === 'Other' && (
                             <input
                               type="text"
@@ -2974,17 +2874,13 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         {/* 4. PREFERRED BUSINESS MODEL */}
                         <div className="space-y-1.5">
                           <label className="font-medium text-[13px] text-slate-200 block">Preferred Business Model</label>
-                          <select
-                            value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.preferredBusinessModel || 'Individual Entrepreneur'}
-                            onChange={(e) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, preferredBusinessModel: e.target.value as any } } as any }))}
-                            className="w-full h-[46px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none cursor-pointer"
-                          >
-                            <option value="Individual Entrepreneur">Individual Entrepreneur</option>
-                            <option value="Partnership">Partnership</option>
-                            <option value="FPO Based">FPO Based</option>
-                            <option value="Franchise Model">Franchise Model</option>
-                            <option value="Cooperative Model">Cooperative Model</option>
-                          </select>
+                          <WizardSelect
+    
+    value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.preferredBusinessModel || 'Individual Entrepreneur'}
+    
+    options={[{"value":"Individual Entrepreneur","label":"Individual Entrepreneur"},{"value":"Partnership","label":"Partnership"},{"value":"FPO Based","label":"FPO Based"},{"value":"Franchise Model","label":"Franchise Model"},{"value":"Cooperative Model","label":"Cooperative Model"}]}
+    small
+  />
                         </div>
 
                         {/* 5. MAHA-AGRI BUSINESS PARTNERSHIP */}
@@ -3009,15 +2905,13 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                           {formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.wantsMahaAgriAssistance === 'Yes' && (
                             <div className="space-y-1.5 pt-1 animate-in fade-in duration-200">
                               <label className="font-medium text-[13px] text-slate-300 block">Preferred Working Model</label>
-                              <select
-                                value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.mahaAgriWorkingModel || 'District Partner'}
-                                onChange={(e) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, mahaAgriWorkingModel: e.target.value as any } } as any }))}
-                                className="w-full h-[46px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none cursor-pointer"
-                              >
-                                {['District Partner', 'Taluka Partner', 'Village Service Provider', 'Project Based', 'Seasonal Contract', 'Full Time', 'Part Time'].map((wm) => (
-                                  <option key={wm} value={wm}>{wm}</option>
-                                ))}
-                              </select>
+                              <WizardSelect
+    
+    value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.mahaAgriWorkingModel || 'District Partner'}
+    
+    options={[{"value":"{wm}","label":"{wm}"}]}
+    small
+  />
                             </div>
                           )}
 
@@ -3049,15 +2943,13 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                               {formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.wantsIndependentBusiness === 'Yes' && (
                                 <div className="space-y-1.5 pt-1 animate-in fade-in duration-200">
                                   <label className="font-medium text-[13px] text-slate-300 block">Expected Business Launch Timeline</label>
-                                  <select
-                                    value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.independentBusinessTimeline || 'Immediately'}
-                                    onChange={(e) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, independentBusinessTimeline: e.target.value as any } } as any }))}
-                                    className="w-full h-[46px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none cursor-pointer"
-                                  >
-                                    {['Immediately', 'Within 3 Months', 'Within 6 Months', 'Within 1 Year', 'After Training Completion'].map((tl) => (
-                                      <option key={tl} value={tl}>{tl}</option>
-                                    ))}
-                                  </select>
+                                  <WizardSelect
+    
+    value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.independentBusinessTimeline || 'Immediately'}
+    
+    options={[{"value":"{tl}","label":"{tl}"}]}
+    small
+  />
                                 </div>
                               )}
                             </div>
@@ -3067,17 +2959,13 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         {/* 6. SERVICE COVERAGE */}
                         <div className="space-y-1.5">
                           <label className="font-medium text-[13px] text-slate-200 block">How many villages are you planning to serve initially?</label>
-                          <select
-                            value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.villagesTargetToServe || '1–5'}
-                            onChange={(e) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, villagesTargetToServe: e.target.value as any } } as any }))}
-                            className="w-full h-[46px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none cursor-pointer"
-                          >
-                            <option value="1–5">1–5</option>
-                            <option value="6–10">6–10</option>
-                            <option value="11–25">11–25</option>
-                            <option value="26–50">26–50</option>
-                            <option value="More than 50">More than 50</option>
-                          </select>
+                          <WizardSelect
+    
+    value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.villagesTargetToServe || '1–5'}
+    
+    options={[{"value":"1–5","label":"1–5"},{"value":"6–10","label":"6–10"},{"value":"11–25","label":"11–25"},{"value":"26–50","label":"26–50"},{"value":"More than 50","label":"More than 50"}]}
+    small
+  />
                         </div>
 
                         {/* 7. MANDATORY AGREEMENT BEFORE ONBOARDING */}
@@ -3109,16 +2997,13 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       </div>
                       <div className="space-y-1.5">
                         <label className="font-medium text-[13px] text-slate-300 block">Purchase Funding Mode</label>
-                        <select
-                          value={formData.entrepreneurInterest.moduleADrone?.purchasePreference || 'Subsidized Scheme'}
-                          onChange={(e) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, purchasePreference: e.target.value } as any }))}
-                          className="w-full h-[48px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none"
-                        >
-                          <option value="Subsidized Scheme">Subsidized Scheme</option>
-                          <option value="Bank Loan">Bank Loan</option>
-                          <option value="Outright Purchase">Outright Purchase</option>
-                          <option value="Leasing">Leasing</option>
-                        </select>
+                        <WizardSelect
+    
+    value={formData.entrepreneurInterest.moduleADrone?.purchasePreference || 'Subsidized Scheme'}
+    
+    options={[{"value":"Subsidized Scheme","label":"Subsidized Scheme"},{"value":"Bank Loan","label":"Bank Loan"},{"value":"Outright Purchase","label":"Outright Purchase"},{"value":"Leasing","label":"Leasing"}]}
+    small
+  />
                       </div>
 
                       {/* ========================================================================= */}
@@ -3156,36 +3041,25 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         {/* Q2: PREFERRED LOCATION */}
                         <div className="space-y-1.5">
                           <label className="font-medium text-[13px] text-slate-200 block">Q2. Preferred Training Location</label>
-                          <select
-                            value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.preferredTrainingLocation || 'Taluka HQ'}
-                            onChange={(e) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, preferredTrainingLocation: e.target.value as any } } as any }))}
-                            className="w-full h-[46px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none cursor-pointer"
-                          >
-                            <option value="Taluka HQ">Taluka HQ</option>
-                            <option value="District HQ">District HQ</option>
-                            <option value="Online (Theory Only)">Online (Theory Only)</option>
-                          </select>
+                          <WizardSelect
+    
+    value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.preferredTrainingLocation || 'Taluka HQ'}
+    
+    options={[{"value":"Taluka HQ","label":"Taluka HQ"},{"value":"District HQ","label":"District HQ"},{"value":"Online (Theory Only)","label":"Online (Theory Only)"}]}
+    small
+  />
                         </div>
 
                         {/* Q3: POST TRAINING PLAN */}
                         <div className="space-y-1.5">
                           <label className="font-medium text-[13px] text-slate-200 block">Q3. After completing the EDP Workshop, what do you plan to do?</label>
-                          <select
-                            value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.postTrainingPlan || 'Start My Own Drone Spray Business'}
-                            onChange={(e) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, postTrainingPlan: e.target.value as any } } as any }))}
-                            className="w-full h-[46px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none cursor-pointer"
-                          >
-                            {[
-                              'Work with MAHA-AGRI Drone Service Team',
-                              'Start My Own Drone Spray Business',
-                              'Work as a Drone Pilot',
-                              'Work as a Drone Technician',
-                              'Join Existing Drone Company',
-                              'Still Exploring Opportunities',
-                            ].map((p) => (
-                              <option key={p} value={p}>{p}</option>
-                            ))}
-                          </select>
+                          <WizardSelect
+    
+    value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.postTrainingPlan || 'Start My Own Drone Spray Business'}
+    
+    options={[{"value":"{p}","label":"{p}"}]}
+    small
+  />
                         </div>
 
                         {/* Q4: CAREER PATHS INTEREST (MULTI SELECT) */}
@@ -3243,16 +3117,13 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         {/* Q5: VILLAGES TO SERVE */}
                         <div className="space-y-1.5">
                           <label className="font-medium text-[13px] text-slate-200 block">Q5. How many villages would you like to serve?</label>
-                          <select
-                            value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.villagesTargetToServe || '5–10'}
-                            onChange={(e) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, villagesTargetToServe: e.target.value as any } } as any }))}
-                            className="w-full h-[46px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none cursor-pointer"
-                          >
-                            <option value="1–5">1–5 Villages</option>
-                            <option value="5–10">5–10 Villages</option>
-                            <option value="10–25">10–25 Villages</option>
-                            <option value="25+">25+ Villages</option>
-                          </select>
+                          <WizardSelect
+    
+    value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.villagesTargetToServe || '5–10'}
+    
+    options={[{"value":"1–5","label":"1–5 Villages"},{"value":"5–10","label":"5–10 Villages"},{"value":"10–25","label":"10–25 Villages"},{"value":"25+","label":"25+ Villages"}]}
+    small
+  />
                         </div>
 
                         {/* Q6: MAHA AGRI ASSISTANCE */}
@@ -3277,17 +3148,13 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         {/* Q7: PREFERRED BUSINESS MODEL */}
                         <div className="space-y-1.5">
                           <label className="font-medium text-[13px] text-slate-200 block">Q7. Preferred Business Model</label>
-                          <select
-                            value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.preferredBusinessModel || 'Individual Entrepreneur'}
-                            onChange={(e) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, preferredBusinessModel: e.target.value as any } } as any }))}
-                            className="w-full h-[46px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none cursor-pointer"
-                          >
-                            <option value="Individual Entrepreneur">Individual Entrepreneur</option>
-                            <option value="Partnership">Partnership</option>
-                            <option value="FPO Based">FPO Based</option>
-                            <option value="Franchise Model">Franchise Model</option>
-                            <option value="Cooperative Model">Cooperative Model</option>
-                          </select>
+                          <WizardSelect
+    
+    value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.preferredBusinessModel || 'Individual Entrepreneur'}
+    
+    options={[{"value":"Individual Entrepreneur","label":"Individual Entrepreneur"},{"value":"Partnership","label":"Partnership"},{"value":"FPO Based","label":"FPO Based"},{"value":"Franchise Model","label":"Franchise Model"},{"value":"Cooperative Model","label":"Cooperative Model"}]}
+    small
+  />
                         </div>
                       </div>
                     </div>
@@ -3301,15 +3168,13 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       </h4>
                       <div className="space-y-1.5">
                         <label className="font-medium text-[13px] text-slate-300 block">Shop Location Availability</label>
-                        <select
-                          value={formData.entrepreneurInterest.moduleBKrushiSeva?.shopAvailability || 'Owned'}
-                          onChange={(e) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleBKrushiSeva: { ...prev.moduleBKrushiSeva, shopAvailability: e.target.value } as any }))}
-                          className="w-full h-[48px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none"
-                        >
-                          <option value="Owned">Owned Shop Space</option>
-                          <option value="Rented">Rented Shop Space</option>
-                          <option value="Will Acquire">Will Acquire Space</option>
-                        </select>
+                        <WizardSelect
+    
+    value={formData.entrepreneurInterest.moduleBKrushiSeva?.shopAvailability || 'Owned'}
+    
+    options={[{"value":"Owned","label":"Owned Shop Space"},{"value":"Rented","label":"Rented Shop Space"},{"value":"Will Acquire","label":"Will Acquire Space"}]}
+    small
+  />
                       </div>
                     </div>
                   )}
@@ -3322,15 +3187,13 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       </h4>
                       <div className="space-y-1.5">
                         <label className="font-medium text-[13px] text-slate-300 block">Soil Testing Knowledge Level</label>
-                        <select
-                          value={formData.entrepreneurInterest.moduleCSoilTesting?.soilTestingKnowledge || 'Intermediate'}
-                          onChange={(e) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleCSoilTesting: { ...prev.moduleCSoilTesting, soilTestingKnowledge: e.target.value } as any }))}
-                          className="w-full h-[48px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none"
-                        >
-                          <option value="Basic">Basic Understanding</option>
-                          <option value="Intermediate">Intermediate Lab Skills</option>
-                          <option value="Advanced">Advanced Chemist Level</option>
-                        </select>
+                        <WizardSelect
+    
+    value={formData.entrepreneurInterest.moduleCSoilTesting?.soilTestingKnowledge || 'Intermediate'}
+    
+    options={[{"value":"Basic","label":"Basic Understanding"},{"value":"Intermediate","label":"Intermediate Lab Skills"},{"value":"Advanced","label":"Advanced Chemist Level"}]}
+    small
+  />
                       </div>
                     </div>
                   )}
@@ -3345,17 +3208,13 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       </h4>
                       <div className="space-y-1.5">
                         <label className="font-medium text-[13px] text-slate-300 block">Dealer / Sales Experience</label>
-                        <select
-                          value={formData.entrepreneurInterest.moduleDInputBusiness?.dealerExperienceYears || '1–3 Years'}
-                          onChange={(e) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleDInputBusiness: { ...prev.moduleDInputBusiness, dealerExperienceYears: e.target.value } as any }))}
-                          className="w-full h-[48px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none"
-                        >
-                          <option value="Less than 1 Year">Less than 1 Year</option>
-                          <option value="1–3 Years">1–3 Years</option>
-                          <option value="3–5 Years">3–5 Years</option>
-                          <option value="5–10 Years">5–10 Years</option>
-                          <option value="More than 10 Years">More than 10 Years</option>
-                        </select>
+                        <WizardSelect
+    
+    value={formData.entrepreneurInterest.moduleDInputBusiness?.dealerExperienceYears || '1–3 Years'}
+    
+    options={[{"value":"Less than 1 Year","label":"Less than 1 Year"},{"value":"1–3 Years","label":"1–3 Years"},{"value":"3–5 Years","label":"3–5 Years"},{"value":"5–10 Years","label":"5–10 Years"},{"value":"More than 10 Years","label":"More than 10 Years"}]}
+    small
+  />
                       </div>
                     </div>
                   )}
@@ -3417,29 +3276,14 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         Initial Investment Capacity <span className="text-rose-500">*</span>
                       </label>
                       <div className="relative">
-                        <select
-                          id="field-investmentCapacity"
-                          value={formData.investment.capacity}
-                          onChange={(e) => updateFormSection('investment', (prev) => ({ ...prev, capacity: e.target.value as InvestmentCapacityRange }), 'investmentCapacity')}
-                          onBlur={() => { if (!formData.investment.capacity) setValidationErrors(prev => ({ ...prev, investmentCapacity: 'Please select Initial Investment Capacity.' })); }}
-                          aria-invalid={!!validationErrors['investmentCapacity']}
-                          aria-describedby={validationErrors['investmentCapacity'] ? 'error-investmentCapacity' : undefined}
-                          className={`w-full h-[56px] min-h-[56px] bg-[#182234] border rounded-[16px] px-4 text-white font-medium text-[16px] focus:outline-none appearance-none cursor-pointer input-focus-smooth ${
-                            validationErrors['investmentCapacity'] ? 'border-rose-500 bg-rose-500/10 ring-2 ring-rose-500/30' : 'border-[#1F2937] focus:border-[#059669]'
-                          }`}
-                        >
-                          {[
-                            'Up to ₹50,000',
-                            'Up to ₹1 Lakh',
-                            'Up to ₹2 Lakh',
-                            'Up to ₹5 Lakh',
-                            '₹5–10 Lakh',
-                            'Above ₹10 Lakh',
-                          ].map((cap) => (
-                            <option key={cap} value={cap}>{cap}</option>
-                          ))}
-                        </select>
-                        <ChevronDown className="w-5 h-5 text-[#94A3B8] absolute right-4 top-4.5 pointer-events-none" />
+                        <WizardSelect
+    fieldId="field-investmentCapacity"
+    value={formData.investment.capacity}
+    
+    options={[{"value":"{cap}","label":"{cap}"}]}
+    small
+  />
+                        
                       </div>
                       {validationErrors['investmentCapacity'] && (
                         <p id="error-investmentCapacity" role="alert" className="text-[12px] text-rose-400 font-medium mt-1.5 flex items-center space-x-1.5 animate-in fade-in duration-180">
@@ -3454,22 +3298,14 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         Primary Investment Source <span className="text-rose-500">*</span>
                       </label>
                       <div className="relative">
-                        <select
-                          id="field-investmentSource"
-                          value={formData.investment.source}
-                          onChange={(e) => updateFormSection('investment', (prev) => ({ ...prev, source: e.target.value as InvestmentSourceType }), 'investmentSource')}
-                          onBlur={() => { if (!formData.investment.source) setValidationErrors(prev => ({ ...prev, investmentSource: 'Please select Investment Source.' })); }}
-                          aria-invalid={!!validationErrors['investmentSource']}
-                          aria-describedby={validationErrors['investmentSource'] ? 'error-investmentSource' : undefined}
-                          className={`w-full h-[56px] min-h-[56px] bg-[#182234] border rounded-[16px] px-4 text-white font-medium text-[16px] focus:outline-none appearance-none cursor-pointer input-focus-smooth ${
-                            validationErrors['investmentSource'] ? 'border-rose-500 bg-rose-500/10 ring-2 ring-rose-500/30' : 'border-[#1F2937] focus:border-[#059669]'
-                          }`}
-                        >
-                          {['Self', 'Family', 'Loan', 'Investor', 'Other'].map((src) => (
-                            <option key={src} value={src}>{src}</option>
-                          ))}
-                        </select>
-                        <ChevronDown className="w-5 h-5 text-[#94A3B8] absolute right-4 top-4.5 pointer-events-none" />
+                        <WizardSelect
+    fieldId="field-investmentSource"
+    value={formData.investment.source}
+    
+    options={[{"value":"{src}","label":"{src}"}]}
+    small
+  />
+                        
                       </div>
                       {validationErrors['investmentSource'] && (
                         <p id="error-investmentSource" role="alert" className="text-[12px] text-rose-400 font-medium mt-1.5 flex items-center space-x-1.5 animate-in fade-in duration-180">
@@ -3493,30 +3329,24 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                     <div className="space-y-3">
                       <div className="space-y-1.5">
                         <label className="font-medium text-[13px] text-slate-300 block">Priority 1 Funding Preference</label>
-                        <select
-                          value={formData.investment.fundingPriority1 || 'Government Subsidy Scheme (CMEGP / MAHA-DBT)'}
-                          onChange={(e) => updateFormSection('investment', (prev) => ({ ...prev, fundingPriority1: e.target.value }))}
-                          className="w-full h-[50px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none cursor-pointer"
-                        >
-                          <option value="Government Subsidy Scheme (CMEGP / MAHA-DBT)">Government Subsidy Scheme (CMEGP / MAHA-DBT)</option>
-                          <option value="Bank Loan (Mudra / PMEGP)">Bank Loan (Mudra / PMEGP)</option>
-                          <option value="Self Investment / Family Savings">Self Investment / Family Savings</option>
-                          <option value="Private Investor / Angel Funding">Private Investor / Angel Funding</option>
-                        </select>
+                        <WizardSelect
+    
+    value={formData.investment.fundingPriority1 || 'Government Subsidy Scheme (CMEGP / MAHA-DBT)'}
+    
+    options={[{"value":"Government Subsidy Scheme (CMEGP / MAHA-DBT)","label":"Government Subsidy Scheme (CMEGP / MAHA-DBT)"},{"value":"Bank Loan (Mudra / PMEGP)","label":"Bank Loan (Mudra / PMEGP)"},{"value":"Self Investment / Family Savings","label":"Self Investment / Family Savings"},{"value":"Private Investor / Angel Funding","label":"Private Investor / Angel Funding"}]}
+    small
+  />
                       </div>
 
                       <div className="space-y-1.5">
                         <label className="font-medium text-[13px] text-slate-300 block">Priority 2 Funding Preference</label>
-                        <select
-                          value={formData.investment.fundingPriority2 || 'Bank Loan (Mudra / PMEGP)'}
-                          onChange={(e) => updateFormSection('investment', (prev) => ({ ...prev, fundingPriority2: e.target.value }))}
-                          className="w-full h-[50px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none cursor-pointer"
-                        >
-                          <option value="Bank Loan (Mudra / PMEGP)">Bank Loan (Mudra / PMEGP)</option>
-                          <option value="Government Subsidy Scheme (CMEGP / MAHA-DBT)">Government Subsidy Scheme (CMEGP / MAHA-DBT)</option>
-                          <option value="Self Investment / Family Savings">Self Investment / Family Savings</option>
-                          <option value="Private Investor / Angel Funding">Private Investor / Angel Funding</option>
-                        </select>
+                        <WizardSelect
+    
+    value={formData.investment.fundingPriority2 || 'Bank Loan (Mudra / PMEGP)'}
+    
+    options={[{"value":"Bank Loan (Mudra / PMEGP)","label":"Bank Loan (Mudra / PMEGP)"},{"value":"Government Subsidy Scheme (CMEGP / MAHA-DBT)","label":"Government Subsidy Scheme (CMEGP / MAHA-DBT)"},{"value":"Self Investment / Family Savings","label":"Self Investment / Family Savings"},{"value":"Private Investor / Angel Funding","label":"Private Investor / Angel Funding"}]}
+    small
+  />
                       </div>
                     </div>
                   </div>
@@ -3541,23 +3371,14 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         Select Primary Bank Account Type <span className="text-rose-500">*</span>
                       </label>
                       <div className="relative">
-                        <select
-                          id="field-bankAccountType"
-                          value={formData.financial.bankAccountType || 'Savings Account'}
-                          onChange={(e) => updateFormSection('financial', (prev) => ({ ...prev, bankAccountType: e.target.value as any }), 'bankAccountType')}
-                          onBlur={() => { if (!formData.financial.bankAccountType) setValidationErrors(prev => ({ ...prev, bankAccountType: 'Please select Primary Bank Account Type.' })); }}
-                          aria-invalid={!!validationErrors['bankAccountType']}
-                          aria-describedby={validationErrors['bankAccountType'] ? 'error-bankAccountType' : undefined}
-                          className={`w-full h-[56px] min-h-[56px] bg-[#182234] border rounded-[16px] px-4 text-white font-medium text-[16px] focus:outline-none appearance-none cursor-pointer input-focus-smooth ${
-                            validationErrors['bankAccountType'] ? 'border-rose-500 bg-rose-500/10 ring-2 ring-rose-500/30' : 'border-[#1F2937] focus:border-[#059669]'
-                          }`}
-                        >
-                          <option value="Savings Account">Savings Account</option>
-                          <option value="Current Account">Current Account</option>
-                          <option value="Overdraft (OD) Account">Overdraft (OD) Account</option>
-                          <option value="Business Account">Business Account</option>
-                        </select>
-                        <ChevronDown className="w-5 h-5 text-[#94A3B8] absolute right-4 top-4.5 pointer-events-none" />
+                        <WizardSelect
+    fieldId="field-bankAccountType"
+    value={formData.financial.bankAccountType || 'Savings Account'}
+    
+    options={[{"value":"Savings Account","label":"Savings Account"},{"value":"Current Account","label":"Current Account"},{"value":"Overdraft (OD) Account","label":"Overdraft (OD) Account"},{"value":"Business Account","label":"Business Account"}]}
+    small
+  />
+                        
                       </div>
                       {validationErrors['bankAccountType'] && (
                         <p id="error-bankAccountType" role="alert" className="text-[12px] text-rose-400 font-medium mt-1.5 flex items-center space-x-1.5 animate-in fade-in duration-180">
@@ -3655,29 +3476,14 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         Approximate CIBIL Score <span className="text-rose-500">*</span>
                       </label>
                       <div className="relative">
-                        <select
-                          id="field-cibilScore"
-                          value={formData.financial.cibilScore}
-                          onChange={(e) => updateFormSection('financial', (prev) => ({ ...prev, cibilScore: e.target.value as CibilScoreRange }), 'cibilScore')}
-                          onBlur={() => { if (!formData.financial.cibilScore) setValidationErrors(prev => ({ ...prev, cibilScore: 'Please select approximate CIBIL Score.' })); }}
-                          aria-invalid={!!validationErrors['cibilScore']}
-                          aria-describedby={validationErrors['cibilScore'] ? 'error-cibilScore' : undefined}
-                          className={`w-full h-[56px] min-h-[56px] bg-[#182234] border rounded-[16px] px-4 text-white font-medium text-[16px] focus:outline-none appearance-none cursor-pointer input-focus-smooth ${
-                            validationErrors['cibilScore'] ? 'border-rose-500 bg-rose-500/10 ring-2 ring-rose-500/30' : 'border-[#1F2937] focus:border-[#059669]'
-                          }`}
-                        >
-                          {[
-                            'Below 600',
-                            '600–650',
-                            '650–700',
-                            '700–750',
-                            'Above 750',
-                            'Don\'t Know',
-                          ].map((score) => (
-                            <option key={score} value={score}>{score}</option>
-                          ))}
-                        </select>
-                        <ChevronDown className="w-5 h-5 text-[#94A3B8] absolute right-4 top-4.5 pointer-events-none" />
+                        <WizardSelect
+    fieldId="field-cibilScore"
+    value={formData.financial.cibilScore}
+    
+    options={[{"value":"{score}","label":"{score}"}]}
+    small
+  />
+                        
                       </div>
                       {validationErrors['cibilScore'] && (
                         <p id="error-cibilScore" role="alert" className="text-[12px] text-rose-400 font-medium mt-1.5 flex items-center space-x-1.5 animate-in fade-in duration-180">
