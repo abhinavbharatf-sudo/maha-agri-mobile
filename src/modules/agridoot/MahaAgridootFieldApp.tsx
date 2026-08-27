@@ -4921,8 +4921,6 @@ export const MahaAgridootFieldApp: React.FC = () => {
                       <span>Farmer &amp; Land Profile</span>
                     </h3>
                     <span className="text-xs text-emerald-400 font-bold block">शेतकरी व जमीन प्रोफाइल</span>
-                    <p className="text-xs text-slate-400">Basic farming profile, land area &amp; Gat-wise parcel entry.</p>
-                    <p className="text-[11px] text-slate-500">शेतीचा मूलभूत तपशील, जमीन क्षेत्रफळ व गटनिहाय जमीन नोंद.</p>
                   </div>
 
                   <WizardSelect
