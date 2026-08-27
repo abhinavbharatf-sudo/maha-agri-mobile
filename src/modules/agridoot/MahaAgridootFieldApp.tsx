@@ -1,5 +1,6 @@
 import { EntrepreneurAssessmentWizard } from '../edp/components/EntrepreneurAssessmentWizard';
 import WizardSelect from './components/WizardSelect';
+import { MAHARASHTRA_DISTRICTS, getTalukasForDistrict } from '../../data/maharashtraGeography';
 /**
  * MAHA-AGRIDOOT World-Class Enterprise Mobile Operating System (`/maha-agri/agridoot`, `/agridoot`, `/field`)
  * COMPLETE ENTERPRISE ATTENDANCE MODULE INTEGRATED IN `DAILY_ATTENDANCE` VIEW:
@@ -313,14 +314,6 @@ export const MahaAgridootFieldApp: React.FC = () => {
     mainProblemsList: ['Water', 'Pest / Disease', 'High Production Cost'],
     mainProblemOther: ''
   });
-
-  const MAHARASHTRA_DISTRICTS = ['Ratnagiri', 'Wardha', 'Nagpur', 'Amravati', 'Yavatmal', 'Chandrapur', 'Nashik', 'Pune', 'Chhatrapati Sambhajinagar'];
-
-  const getTalukasForDistrict = (dist: string) => {
-    if (dist === 'Ratnagiri') return ['Ratnagiri', 'Chiplun', 'Dapoli', 'Guhagar', 'Khed', 'Lanja', 'Mandangad', 'Rajapur', 'Sangameshwar'];
-    if (dist === 'Wardha') return ['Wardha', 'Seloo', 'Deoli', 'Hinganghat', 'Arvi', 'Karanja'];
-    return ['Headquarters', 'North', 'South', 'East', 'West'];
-  };
 
   const handlePrevWizardSection = () => {
     if (isEntrepreneurWizardOpen) {
