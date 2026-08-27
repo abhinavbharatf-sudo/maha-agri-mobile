@@ -4586,37 +4586,24 @@ export const MahaAgridootFieldApp: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <label className="font-bold text-xs text-slate-200 block">Caste Category <span className="text-rose-500">*</span></label>
-                      <select
-                        value={phase1FormData.casteCategory}
-                        onChange={e => updateFormField('casteCategory', e.target.value)}
-                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
-                      >
-                        <option value="General / Open">General / Open</option>
-                        <option value="OBC">OBC</option>
-                        <option value="SC">SC</option>
-                        <option value="ST">ST</option>
-                        <option value="VJNT">VJNT</option>
-                        <option value="SBC">SBC</option>
-                        <option value="EWS">EWS</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="font-bold text-xs text-slate-200 block">Farmer Type</label>
-                      <select
-                        value={phase1FormData.farmerType || 'Individual Farmer'}
-                        onChange={e => updateFormField('farmerType', e.target.value)}
-                        className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
-                      >
-                        <option value="Individual Farmer">Individual Farmer</option>
-                        <option value="Tenant / Lessee">Tenant / Lessee</option>
-                        <option value="Sharecropper">Sharecropper</option>
-                        <option value="Institutional Farmer">Institutional Farmer</option>
-                      </select>
-                    </div>
+
+                  <div className="space-y-1.5">
+                    <label className="font-bold text-xs text-slate-200 block">Caste Category <span className="text-rose-500">*</span></label>
+                    <select
+                      value={phase1FormData.casteCategory}
+                      onChange={e => updateFormField('casteCategory', e.target.value)}
+                      className="w-full h-[52px] bg-[#182234] border border-[#233148] rounded-xl px-4 font-bold text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
+                    >
+                      <option value="General / Open">General / Open</option>
+                      <option value="OBC">OBC</option>
+                      <option value="SC">SC</option>
+                      <option value="ST">ST</option>
+                      <option value="VJNT">VJNT</option>
+                      <option value="SBC">SBC</option>
+                      <option value="EWS">EWS</option>
+                    </select>
                   </div>
+
 
                   {/* CONTACT & IDENTITY SECTION */}
                   <div className="pt-2 space-y-3 border-t border-[#1E293B]">
