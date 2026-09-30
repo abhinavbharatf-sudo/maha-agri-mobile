@@ -391,9 +391,6 @@ export const MahaAgridootFieldApp: React.FC = () => {
       if (isMarathiScript(phase1FormData.residentialAddress)) {
         errors.residentialAddress = 'Residential Address must be in English (Marathi script not allowed)';
       }
-      if (phase1FormData.farmSameAsResidential === 'No' && isMarathiScript(phase1FormData.farmVillage)) {
-        errors.farmVillage = 'Farm Village must be in English (Marathi script not allowed)';
-      }
     } else if (section === 3) {
       if (!phase1FormData.totalLand || phase1FormData.totalLand <= 0) {
         errors.totalLand = 'Total Land Area must be greater than 0';
@@ -406,6 +403,17 @@ export const MahaAgridootFieldApp: React.FC = () => {
         }
       }
     } else if (section === 4) {
+      if (!phase1FormData.farmDistrict) {
+        errors.farmDistrict = 'Farm District is required / शेतीचा जिल्हा निवडणे आवश्यक आहे';
+      }
+      if (!phase1FormData.farmTaluka) {
+        errors.farmTaluka = 'Farm Taluka is required / शेतीचा तालुका निवडणे आवश्यक आहे';
+      }
+      if (!phase1FormData.farmVillage || !phase1FormData.farmVillage.trim()) {
+        errors.farmVillage = 'Farm Village / Town is required / शेतीचे गाव / शहर आवश्यक आहे';
+      } else if (isMarathiScript(phase1FormData.farmVillage)) {
+        errors.farmVillage = 'Farm Village must be in English / शेतीचे गाव इंग्रजीत लिहा';
+      }
       if (!phase1FormData.mainCrops || phase1FormData.mainCrops.length === 0) {
         errors.mainCrops = 'Please select at least one crop';
       }
@@ -4753,75 +4761,6 @@ export const MahaAgridootFieldApp: React.FC = () => {
                     />
                     {fieldErrors.residentialAddress && <p className="text-rose-400 text-xs font-bold pt-1 flex items-center space-x-1"><span>⚠️</span><span>{fieldErrors.residentialAddress}</span></p>}
                   </div>
-
-                  <div className="space-y-2 pt-2 border-t border-[#1E293B]">
-                    <label className="font-bold text-xs text-slate-200 block">Farm Location Same as Residential Address?</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => updateFormField('farmSameAsResidential', 'Yes')}
-                        className={`py-3 rounded-xl font-bold text-xs transition-all cursor-pointer ${
-                          phase1FormData.farmSameAsResidential === 'Yes'
-                            ? 'bg-[#059669] text-white shadow-md'
-                            : 'bg-[#182234] border border-[#233148] text-slate-300 hover:border-slate-500'
-                        }`}
-                      >
-                        Yes — Same Location
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => updateFormField('farmSameAsResidential', 'No')}
-                        className={`py-3 rounded-xl font-bold text-xs transition-all cursor-pointer ${
-                          phase1FormData.farmSameAsResidential === 'No'
-                            ? 'bg-[#059669] text-white shadow-md'
-                            : 'bg-[#182234] border border-[#233148] text-slate-300 hover:border-slate-500'
-                        }`}
-                      >
-                        No — Different Location
-                      </button>
-                    </div>
-
-                    {phase1FormData.farmSameAsResidential === 'No' && (
-                      <div className="p-3 bg-[#182234] border border-[#233148] rounded-xl space-y-2 animate-in fade-in">
-                        <span className="font-mono text-[10px] font-black text-amber-300 uppercase tracking-wider block">FARM LOCATION DETAILS</span>
-                        <div className="grid grid-cols-2 gap-2">
-                          <WizardSelect
-                            label="Farm District"
-                            value={phase1FormData.farmDistrict || 'Wardha'}
-                            onChange={v => {
-                              updateFormField('farmDistrict', v);
-                              const talukas = getTalukasForDistrict(v);
-                              if (talukas.length > 0 && !talukas.includes(phase1FormData.farmTaluka)) {
-                                updateFormField('farmTaluka', talukas[0]);
-                              }
-                            }}
-                            options={MAHARASHTRA_DISTRICTS.map(d => ({ value: d, label: d, icon: <MapPin className="w-4 h-4 text-rose-500 shrink-0" /> }))}
-                            small
-                          />
-                          <WizardSelect
-                            label="Farm Taluka"
-                            value={phase1FormData.farmTaluka || 'Wardha'}
-                            onChange={v => updateFormField('farmTaluka', v)}
-                            options={getTalukasForDistrict(phase1FormData.farmDistrict || 'Wardha').map(t => ({ value: t, label: t, icon: '📌' }))}
-                            small
-                          />
-                        </div>
-
-                        <div>
-                          <label className="font-bold text-[11px] text-slate-300 block mb-1">Farm Village / Town</label>
-                          <input
-                            type="text"
-                            ref={el => (fieldInputRefs.current['farmVillage'] = el)} id="field-input-farmVillage"
-                            value={phase1FormData.farmVillage || ''}
-                            onChange={e => updateFormField('farmVillage', e.target.value.toUpperCase())}
-                            placeholder="e.g. PAVANAR"
-                            className={`w-full h-[44px] bg-[#111827] border ${fieldErrors.farmVillage ? 'border-rose-500 bg-rose-950/30' : 'border-[#2A3952]'} rounded-lg px-3 font-bold text-white uppercase text-xs focus:border-emerald-500 focus:outline-none`}
-                          />
-                          {fieldErrors.farmVillage && <p className="text-rose-400 text-xs font-bold pt-1 flex items-center space-x-1"><span>⚠️</span><span>{fieldErrors.farmVillage}</span></p>}
-                        </div>
-                      </div>
-                    )}
-                  </div>
                 </div>
               )}
 
@@ -5026,6 +4965,69 @@ export const MahaAgridootFieldApp: React.FC = () => {
                       { value: 'Other', label: 'Other', sublabel: 'इतर', icon: '🔄' },
                     ]}
                   />
+
+                  {/* FARM LOCATION SECTION */}
+                  <div className="p-3.5 bg-[#182234] border border-[#233148] rounded-xl space-y-3">
+                    <div className="border-b border-[#233148] pb-1.5">
+                      <span className="font-bold text-xs text-white flex items-center leading-tight">
+                        <span>Farm Location Details</span>
+                        <span className="text-rose-500 ml-1 font-bold">*</span>
+                      </span>
+                      <span className="text-[10px] text-slate-400 block font-normal leading-tight">शेतीचे ठिकाण तपशील</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <WizardSelect
+                        label={
+                          <div>
+                            <span className="font-bold text-xs text-slate-200 block leading-tight">Farm District</span>
+                            <span className="text-[10px] text-slate-400 block font-normal leading-tight">शेतीचा जिल्हा</span>
+                          </div>
+                        }
+                        value={phase1FormData.farmDistrict || 'Wardha'}
+                        onChange={v => {
+                          updateFormField('farmDistrict', v);
+                          const talukas = getTalukasForDistrict(v);
+                          if (talukas.length > 0 && !talukas.includes(phase1FormData.farmTaluka)) {
+                            updateFormField('farmTaluka', talukas[0]);
+                          }
+                        }}
+                        options={MAHARASHTRA_DISTRICTS.map(d => ({ value: d, label: d, icon: <MapPin className="w-4 h-4 text-rose-500 shrink-0" /> }))}
+                        error={fieldErrors.farmDistrict}
+                        fieldRef={el => (fieldInputRefs.current['farmDistrict'] = el)}
+                        fieldId="field-input-farmDistrict"
+                      />
+                      <WizardSelect
+                        label={
+                          <div>
+                            <span className="font-bold text-xs text-slate-200 block leading-tight">Farm Taluka</span>
+                            <span className="text-[10px] text-slate-400 block font-normal leading-tight">शेतीचा तालुका</span>
+                          </div>
+                        }
+                        value={phase1FormData.farmTaluka || 'Wardha'}
+                        onChange={v => updateFormField('farmTaluka', v)}
+                        options={getTalukasForDistrict(phase1FormData.farmDistrict || 'Wardha').map(t => ({ value: t, label: t, icon: '📌' }))}
+                        error={fieldErrors.farmTaluka}
+                        fieldRef={el => (fieldInputRefs.current['farmTaluka'] = el)}
+                        fieldId="field-input-farmTaluka"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block mb-1.5">
+                        <span className="font-bold text-xs text-slate-200 block leading-tight">Farm Village / Town</span>
+                        <span className="text-[10px] text-slate-400 block font-normal leading-tight">शेतीचे गाव / शहर</span>
+                      </label>
+                      <input
+                        type="text"
+                        ref={el => (fieldInputRefs.current['farmVillage'] = el)} id="field-input-farmVillage"
+                        value={phase1FormData.farmVillage || ''}
+                        onChange={e => updateFormField('farmVillage', e.target.value.toUpperCase())}
+                        placeholder="e.g. PAVANAR"
+                        className={`w-full h-[52px] bg-[#182234] border ${fieldErrors.farmVillage ? 'border-rose-500 bg-rose-950/30' : 'border-[#233148]'} rounded-xl px-4 font-bold text-white uppercase text-sm focus:border-emerald-500 focus:outline-none`}
+                      />
+                      {fieldErrors.farmVillage && <p className="text-rose-400 text-xs font-bold pt-1 flex items-center space-x-1"><span>⚠️</span><span>{fieldErrors.farmVillage}</span></p>}
+                    </div>
+                  </div>
 
                   {/* GAT / SURVEY PARCEL ENTRY SECTION */}
                   <div className="p-3.5 bg-[#182234] border border-[#233148] rounded-xl space-y-3">
