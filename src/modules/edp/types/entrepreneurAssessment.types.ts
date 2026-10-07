@@ -35,6 +35,7 @@ export interface EducationProfile {
   studentDetails?: {
     collegeName: string;
     courseName: string;
+    courseNameOther?: string;
     currentYear: string;
     expectedPassingYear?: string;
   };
@@ -150,11 +151,18 @@ export type AgriActivity =
 export type GovtSchemeType =
   | 'PM-KISAN'
   | 'MAHA-DBT'
+  | 'PoCRA Yojana'
   | 'Farm Mechanization'
   | 'Drip Irrigation'
   | 'Solar Pump'
   | 'Soil Health Card'
   | 'Other';
+
+export interface GatSurveyParcel {
+  gatNumber: string;
+  area: string;
+  areaUnit: 'Acre' | 'Hectare' | 'Guntha';
+}
 
 export interface AgricultureProfile {
   isInvolvedInAgri: boolean;
@@ -162,10 +170,18 @@ export interface AgricultureProfile {
   agriActivityOther?: string;
   farmingExperience?: ExperienceRange;
   ownsAgriLand: boolean;
+  landOwnership?: 'Self Owned' | 'Family Owned' | 'Leased / Rented' | 'Jointly Owned';
+  landUnit?: 'Acre' | 'Hectare' | 'Guntha';
   landDetails?: {
     totalLandArea: string; // Acres
     irrigatedArea: string;
     rainfedArea: string;
+    farmDistrict?: string;
+    farmTaluka?: string;
+    farmVillage?: string;
+    gatSurveyNumber?: string;
+    gatSurveyParcels?: GatSurveyParcel[];
+    surveyGatNumbers?: string[];
   };
   hasFarmerId: boolean;
   isRegisteredMahaDbt: boolean;
@@ -282,24 +298,19 @@ export interface EdpDroneWorkshop {
   mahaAgriWorkingModel?: 'District Partner' | 'Taluka Partner' | 'Village Service Provider' | 'Project Based' | 'Seasonal Contract' | 'Full Time' | 'Part Time';
   wantsIndependentBusiness?: 'Yes' | 'No';
   independentBusinessTimeline?: 'Immediately' | 'Within 3 Months' | 'Within 6 Months' | 'Within 1 Year' | 'After Training Completion';
-  preferredBusinessModel?: 'Individual Entrepreneur' | 'Partnership' | 'FPO Based' | 'Franchise Model' | 'Cooperative Model';
+  preferredBusinessModel?: 'Individual Entrepreneur' | 'Partnership' | 'FPO Based' | 'Franchise Model' | 'Cooperative Model' | string;
+  droneBusinessOperation?: string;
   agreeToCompleteEdpBeforeOnboarding?: 'Yes' | 'No';
 }
 
 // 5. Entrepreneur Interest & Dynamic Conditional Modules
 export type EntrepreneurProgram =
   | 'Agri Drone Entrepreneur'
+  | 'Professional Drone Pilot'
+  | 'MAHA-AGRI Krushi Seva Kendra / Agri Service Centre'
   | 'Soil Testing Entrepreneur'
-  | 'MAHA-AGRI Krushi Seva Kendra'
-  | 'Agri Service Centre'
-  | 'Seed Business'
-  | 'Fertilizer Business'
-  | 'Pesticide Business'
-  | 'Bio-input Business'
   | 'Nursery'
-  | 'Farm Machinery Rental'
-  | 'Custom Hiring Centre'
-  | 'Agri Consultancy'
+  | 'Custom Hiring / Farm Machinery Rental'
   | 'Food Processing'
   | 'Dairy'
   | 'Goat Farming'
@@ -307,7 +318,8 @@ export type EntrepreneurProgram =
   | 'Fisheries'
   | 'Organic Farming'
   | 'FPO Entrepreneur'
-  | 'Other';
+  | 'Other'
+  | string;
 
 // Module A: Agri Drone Entrepreneur
 export interface ModuleADrone {
@@ -432,13 +444,14 @@ export interface EntrepreneurInterestProfile {
 // 6. Investment Capacity
 export type InvestmentCapacityRange =
   | 'Up to ₹50,000'
-  | 'Up to ₹1 Lakh'
-  | 'Up to ₹2 Lakh'
-  | 'Up to ₹5 Lakh'
+  | '₹50,000–₹1 Lakh'
+  | '₹1–2 Lakh'
+  | '₹2–5 Lakh'
   | '₹5–10 Lakh'
-  | 'Above ₹10 Lakh';
+  | '₹10 Lakh & Above'
+  | string;
 
-export type InvestmentSourceType = 'Self' | 'Family' | 'Loan' | 'Investor' | 'Other';
+export type InvestmentSourceType = 'Self' | 'Family' | 'Loan' | 'Investor' | 'Other' | string;
 
 export interface InvestmentProfile {
   capacity: InvestmentCapacityRange;
@@ -446,6 +459,7 @@ export interface InvestmentProfile {
   sourceOther?: string;
   fundingPriority1?: string;
   fundingPriority2?: string;
+  preferredFundingAssistance?: string;
 
   // Master V2 Parameters:
   preferredBusinessInvestment?: string;
@@ -488,6 +502,7 @@ export type CibilScoreRange =
 export interface FinancialProfile {
   hasRunningLoan: boolean;
   runningLoanTypes?: LoanType[];
+  monthlyEmiObligation?: string;
   hasGovtLoan: boolean;
   govtLoanDetails?: {
     scheme: GovtLoanScheme;
@@ -495,6 +510,10 @@ export interface FinancialProfile {
   };
   cibilScore: CibilScoreRange;
   bankAccountType?: 'Savings Account' | 'Current Account' | 'Overdraft (OD) Account' | 'Business Account';
+  hasCmegpBenefit?: 'Yes' | 'No' | 'Not Sure';
+  hasMahaDbtAgriMachineryBenefit?: 'Yes' | 'No' | 'Not Sure';
+  hasOtherGovtSchemeBenefit?: 'Yes' | 'No' | 'Not Sure';
+  otherGovtSchemeName?: string;
 
   // Phase 2 Extended Parameters:
   primaryFundingSource?: 'Own Savings' | 'Bank Loan (Mudra/CGS)' | 'Govt Subsidy Scheme' | 'Family/Private Loan';

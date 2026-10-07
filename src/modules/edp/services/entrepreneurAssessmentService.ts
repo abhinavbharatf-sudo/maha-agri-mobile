@@ -137,8 +137,9 @@ export const INITIAL_ASSESSMENT_FORM_DATA: EntrepreneurAssessmentFormData = {
   },
 
   investment: {
-    capacity: 'Up to ₹5 Lakh',
-    source: 'Self',
+    capacity: 'Up to ₹50,000',
+    source: 'Self Investment / Own Capital',
+    preferredFundingAssistance: 'Government Subsidy Scheme (CMEGP / MAHA-DBT)',
   },
 
   financial: {

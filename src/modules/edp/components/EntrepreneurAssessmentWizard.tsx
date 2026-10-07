@@ -6,6 +6,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import WizardSelect from '../../agridoot/components/WizardSelect';
+import { MAHARASHTRA_DISTRICTS, getTalukasForDistrict } from '../../../data/maharashtraGeography';
 import {
   ArrowLeft,
   Check,
@@ -122,7 +123,76 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
   const [isVerifiedByCandidate, setIsVerifiedByCandidate] = useState<boolean>(false);
   const [submissionResult, setSubmissionResult] = useState<{ candidateId: string; scores: InternalAdminAssessmentScores } | null>(null);
 
-  // 8 ENTERPRISE SECTION MODULES (WITH VERBATIM CONTEXT DESCRIPTIONS - REQ 2)
+  // Gat Parcel Inputs State (Farmer Registration alignment)
+  const [parcelGatNoInput, setParcelGatNoInput] = useState('');
+  const [parcelAreaInput, setParcelAreaInput] = useState('');
+  const [parcelUnitInput, setParcelUnitInput] = useState<'Acre' | 'Hectare' | 'Guntha'>('Acre');
+
+  // Gat Parcel Add / Remove functions (Farmer Registration Gat entry)
+  const addGatParcel = () => {
+    if (!parcelGatNoInput.trim()) {
+      triggerToast('⚠️ Gat / Survey No. is required.');
+      return;
+    }
+    if (/[\u0900-\u097F]/.test(parcelGatNoInput)) {
+      triggerToast('⚠️ Gat No. must be in English (Marathi script not allowed).');
+      return;
+    }
+    const gatNo = parcelGatNoInput.trim().toUpperCase();
+    const newParcel = {
+      gatNumber: gatNo,
+      area: '',
+      areaUnit: 'Acre' as const,
+    };
+
+    updateFormSection('agriculture', (prev) => {
+      const currentParcels = prev.landDetails?.gatSurveyParcels || [];
+      const updatedParcels = [...currentParcels, newParcel];
+      const updatedGatNumbers = Array.from(new Set(updatedParcels.map((p) => p.gatNumber)));
+      return {
+        ...prev,
+        landDetails: {
+          ...prev.landDetails,
+          gatSurveyParcels: updatedParcels,
+          surveyGatNumbers: updatedGatNumbers,
+          gatSurveyNumber: updatedGatNumbers.join(', '),
+        } as any,
+      };
+    });
+
+    setParcelGatNoInput('');
+  };
+
+  const removeGatParcel = (index: number) => {
+    updateFormSection('agriculture', (prev) => {
+      const currentParcels = prev.landDetails?.gatSurveyParcels || [];
+      const updatedParcels = currentParcels.filter((_, i) => i !== index);
+      const updatedGatNumbers = Array.from(new Set(updatedParcels.map((p) => p.gatNumber)));
+      return {
+        ...prev,
+        landDetails: {
+          ...prev.landDetails,
+          gatSurveyParcels: updatedParcels,
+          surveyGatNumbers: updatedGatNumbers,
+          gatSurveyNumber: updatedGatNumbers.join(', '),
+        } as any,
+      };
+    });
+  };
+
+  const calculateGatWiseTotalAcres = () => {
+    const parcels = formData.agriculture.landDetails?.gatSurveyParcels || [];
+    let totalAcres = 0;
+    parcels.forEach((p: any) => {
+      const val = parseFloat(p.area) || 0;
+      if (p.areaUnit === 'Acre') totalAcres += val;
+      else if (p.areaUnit === 'Hectare') totalAcres += val * 2.47105;
+      else if (p.areaUnit === 'Guntha') totalAcres += val * 0.025;
+    });
+    return totalAcres.toFixed(2);
+  };
+
+  // 9 ENTERPRISE SECTION MODULES (WITH VERBATIM CONTEXT DESCRIPTIONS)
   const SECTIONS = [
     { id: 1, title: '🎓 Education Profile', shortTitle: 'Education', icon: GraduationCap, description: 'Build your educational profile for personalized recommendations.' },
     { id: 2, title: '💼 Occupation Profile', shortTitle: 'Occupation', icon: Briefcase, description: 'Tell us about your current professional journey.' },
@@ -132,6 +202,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
     { id: 6, title: '💰 Investment Capacity', shortTitle: 'Investment', icon: Coins, description: 'Evaluate your financial readiness for entrepreneurship.' },
     { id: 7, title: '🏦 Loan & Financial Profile', shortTitle: 'Financial', icon: FileText, description: 'This helps us recommend suitable funding & subsidy options.' },
     { id: 8, title: '📋 Review & Submit', shortTitle: 'Review', icon: ClipboardCheck, description: 'Verify your information before submission.' },
+    { id: 9, title: '🤖 AI Entrepreneur Insights', shortTitle: 'AI Insights', icon: Sparkles, description: 'Admin-friendly evaluation of applicant readiness, strengths & completion status.' },
   ];
 
   // AGRI QUALIFICATIONS FOR LICENSE DISPLAY
@@ -169,7 +240,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
 
   // CALCULATE PROGRESS PERCENTAGE
   const progressPercentage = useMemo(() => {
-    return Math.round((currentStep / 8) * 100);
+    return Math.round((currentStep / 9) * 100);
   }, [currentStep]);
 
   // VALIDATION ERRORS STATE
@@ -219,19 +290,56 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
     if (step === 1) {
       if (!formData.education.qualification) {
         rawErrors['qualification'] = 'Please select your Highest Educational Qualification.';
-      } else if (formData.education.qualification === 'Other' && !formData.education.qualificationOther?.trim()) {
-        rawErrors['qualificationOther'] = 'Please specify your qualification.';
+      } else if (formData.education.qualification === 'Other') {
+        const isMarathiScript = (str: string) => /[\u0900-\u097F]/.test(str || '');
+        if (!formData.education.qualificationOther?.trim()) {
+          rawErrors['qualificationOther'] = 'Please specify your qualification.';
+        } else if (isMarathiScript(formData.education.qualificationOther)) {
+          rawErrors['qualificationOther'] = 'Qualification must be in CAPITAL English / शिक्षण इंग्रजीत CAPITAL मध्ये लिहा.';
+        }
       }
 
       if (formData.education.isStudent) {
+        const isMarathiScript = (str: string) => /[\u0900-\u097F]/.test(str || '');
+        const is10th = formData.education.qualification === '10th Pass';
+        const is12th = formData.education.qualification === '12th Pass';
+        const isAgriCourse = [
+          'Agri Polytechnic',
+          'Diploma in Agriculture',
+          'B.Sc Agriculture',
+          'M.Sc Agriculture',
+          'B.Tech Agriculture',
+          'B.Tech Agricultural Engineering',
+        ].includes(formData.education.qualification);
+
         if (!formData.education.studentDetails?.collegeName?.trim()) {
           rawErrors['collegeName'] = 'Please enter College / University Name.';
+        } else if (isMarathiScript(formData.education.studentDetails?.collegeName)) {
+          rawErrors['collegeName'] = 'College / University Name must be in CAPITAL English / कॉलेजचे नाव इंग्रजीत CAPITAL मध्ये लिहा.';
         }
-        if (!formData.education.studentDetails?.courseName?.trim()) {
-          rawErrors['courseName'] = 'Please enter Course Name.';
+
+        // Course Name validation (Hidden for 10th Pass & Agri courses)
+        if (!is10th && !isAgriCourse) {
+          if (!formData.education.studentDetails?.courseName?.trim()) {
+            rawErrors['courseName'] = 'Please select or enter Course Name.';
+          } else if (is12th && formData.education.studentDetails?.courseName === 'Other') {
+            if (!formData.education.studentDetails?.courseNameOther?.trim()) {
+              rawErrors['courseNameOther'] = 'Please specify your Course Name.';
+            } else if (isMarathiScript(formData.education.studentDetails?.courseNameOther)) {
+              rawErrors['courseNameOther'] = 'Course Name must be in CAPITAL English / कोर्सचे नाव इंग्रजीत CAPITAL मध्ये लिहा.';
+            }
+          } else if (!is12th) {
+            if (isMarathiScript(formData.education.studentDetails?.courseName)) {
+              rawErrors['courseName'] = 'Course Name must be in CAPITAL English / कोर्सचे नाव इंग्रजीत CAPITAL मध्ये लिहा.';
+            }
+          }
         }
-        if (!formData.education.studentDetails?.currentYear?.trim()) {
-          rawErrors['currentYear'] = 'Please enter Current Year / Semester.';
+
+        // Current Year validation (Hidden for 10th Pass & 12th Pass)
+        if (!is10th && !is12th) {
+          if (!formData.education.studentDetails?.currentYear?.trim()) {
+            rawErrors['currentYear'] = 'Please select Current Year.';
+          }
         }
       }
 
@@ -280,6 +388,15 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
           rawErrors['businessStatus'] = 'Please select Business Status.';
         }
       }
+
+      if (formData.occupation.operatedPastBusiness) {
+        const pBizType = formData.occupation.pastBusinessDetails?.businessType || '';
+        if (!pBizType.trim()) {
+          rawErrors['pastBusinessType'] = 'Please enter Business Type.';
+        } else if (/[\u0900-\u097F]/.test(pBizType)) {
+          rawErrors['pastBusinessType'] = 'Business Type must be in CAPITAL English (Marathi script not allowed).';
+        }
+      }
     }
 
     else if (step === 3) {
@@ -300,11 +417,22 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
         if (!formData.agriculture.landUnit) {
           rawErrors['landUnit'] = 'Please select land measurement unit.';
         }
+        const villageVal = formData.agriculture.landDetails?.farmVillage || formData.village || '';
+        if (!villageVal?.trim()) {
+          rawErrors['farmVillage'] = 'Farm Village / Town is required.';
+        } else if (/[\u0900-\u097F]/.test(villageVal)) {
+          rawErrors['farmVillage'] = 'Farm Village / Town must be in CAPITAL English (Marathi script not allowed).';
+        }
       }
 
       if (formData.agriculture.hasFarmerId) {
-        if (!formData.agriculture.dontKnowFarmerId && !formData.agriculture.farmerIdNumber?.trim()) {
-          rawErrors['farmerIdNumber'] = 'Please enter Farmer Registration Number or check "I Don\'t Know".';
+        if (!formData.agriculture.dontKnowFarmerId) {
+          const fId = formData.agriculture.farmerIdNumber || '';
+          if (!fId.trim()) {
+            rawErrors['farmerIdNumber'] = 'Please enter Farmer Registration Number or check "I Don\'t Know".';
+          } else if (/[\u0900-\u097F]/.test(fId)) {
+            rawErrors['farmerIdNumber'] = 'Farmer Registration Number must be in CAPITAL English (Marathi script not allowed).';
+          }
         }
       }
 
@@ -312,29 +440,48 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
         if (!formData.agriculture.govtSchemesReceived || formData.agriculture.govtSchemesReceived.length === 0) {
           rawErrors['govtSchemesReceived'] = 'Please select at least one government scheme.';
         } else {
-          if (formData.agriculture.govtSchemesReceived.includes('Other' as any) && !formData.agriculture.govtSchemeOther?.trim()) {
-            rawErrors['govtSchemeOther'] = 'Please specify other scheme.';
+          if (formData.agriculture.govtSchemesReceived.includes('Other' as any)) {
+            const schOther = formData.agriculture.govtSchemeOther || '';
+            if (!schOther.trim()) {
+              rawErrors['govtSchemeOther'] = 'Please specify other scheme.';
+            } else if (/[\u0900-\u097F]/.test(schOther)) {
+              rawErrors['govtSchemeOther'] = 'Scheme Name must be in CAPITAL English (Marathi script not allowed).';
+            }
           }
         }
       }
 
       if (formData.agriculture.isFpoMember) {
-        if (!formData.agriculture.fpoName?.trim()) {
+        const fName = formData.agriculture.fpoName || '';
+        if (!fName.trim()) {
           rawErrors['fpoName'] = 'Please enter FPO Name.';
+        } else if (/[\u0900-\u097F]/.test(fName)) {
+          rawErrors['fpoName'] = 'FPO Name must be in CAPITAL English (Marathi script not allowed).';
         }
+
         if (!formData.agriculture.fpoPosition) {
           rawErrors['fpoPosition'] = 'Please select Position in FPO.';
-        } else if (formData.agriculture.fpoPosition === 'Other' && !formData.agriculture.fpoPositionOther?.trim()) {
-          rawErrors['fpoPositionOther'] = 'Please specify FPO position.';
+        } else if (formData.agriculture.fpoPosition === 'Other') {
+          const posOther = formData.agriculture.fpoPositionOther || '';
+          if (!posOther.trim()) {
+            rawErrors['fpoPositionOther'] = 'Please specify FPO position.';
+          } else if (/[\u0900-\u097F]/.test(posOther)) {
+            rawErrors['fpoPositionOther'] = 'Position must be in CAPITAL English (Marathi script not allowed).';
+          }
         }
+
         if (!formData.agriculture.fpoYearJoined) {
           rawErrors['fpoYearJoined'] = 'Please select Year Joined FPO.';
         }
-        if (!formData.agriculture.fpoFarmersConnected?.trim()) {
-          rawErrors['fpoFarmersConnected'] = 'Please enter Farmers Connected.';
+
+        const fConn = formData.agriculture.fpoFarmersConnected || '';
+        if (fConn && /[\u0900-\u097F]/.test(fConn)) {
+          rawErrors['fpoFarmersConnected'] = 'Farmers Connected must contain English digits only.';
         }
-        if (!formData.agriculture.fpoVillageCoverage?.trim()) {
-          rawErrors['fpoVillageCoverage'] = 'Please enter Village Coverage.';
+
+        const vCov = formData.agriculture.fpoVillageCoverage || '';
+        if (vCov && /[\u0900-\u097F]/.test(vCov)) {
+          rawErrors['fpoVillageCoverage'] = 'Village Coverage must be in CAPITAL English / Digits.';
         }
       }
     }
@@ -345,23 +492,17 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
       }
 
       if (formData.agriDrone.attendedTraining) {
-        if (!formData.agriDrone.trainingDetails?.instituteName?.trim()) {
+        const instName = formData.agriDrone.trainingDetails?.instituteName || '';
+        if (!instName.trim()) {
           rawErrors['instituteName'] = 'Please enter Training Institute Name.';
+        } else if (/[\u0900-\u097F]/.test(instName)) {
+          rawErrors['instituteName'] = 'Institute Name must be in CAPITAL English (Marathi script not allowed).';
         }
-        if (!formData.agriDrone.trainingDetails?.trainingYear?.trim()) {
-          rawErrors['trainingYear'] = 'Please enter Training Year.';
+        if (!formData.agriDrone.trainingDetails?.trainingYear) {
+          rawErrors['trainingYear'] = 'Please select Training Year.';
         }
       }
-
       if (formData.agriDrone.currentlyOwnsDrone) {
-        if (!formData.agriDrone.ownedDroneDetails?.manufacturer) {
-          rawErrors['droneManufacturer'] = 'Please select Drone Manufacturer.';
-        } else if (formData.agriDrone.ownedDroneDetails?.manufacturer === 'Other' && !formData.agriDrone.ownedDroneDetails?.manufacturerOther?.trim()) {
-          rawErrors['manufacturerOther'] = 'Please specify drone manufacturer.';
-        }
-        if (!formData.agriDrone.ownedDroneDetails?.model?.trim()) {
-          rawErrors['droneModel'] = 'Please enter Drone Model.';
-        }
         if (!formData.agriDrone.ownedDroneDetails?.capacity) {
           rawErrors['droneCapacity'] = 'Please select Drone Capacity.';
         }
@@ -534,18 +675,216 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
           const hasError = !!validationErrors[key];
           console.log(`  ${hasError ? '✖' : '✔'} [${key}] -> ${hasError ? validationErrors[key] : 'Valid / OK'}`);
         });
-        console.groupEnd();
       };
     }
   }, [currentStep, formData, validationErrors]);
 
+  // ============================================================================
+  // STEP 9: AI ENTREPRENEUR INSIGHTS CALCULATION ENGINE
+  // ============================================================================
+  const profileCompletion = useMemo(() => {
+    const missingFields: { section: string; fieldLabel: string }[] = [];
+    let totalApplicable = 0;
+    let completedCount = 0;
+
+    const checkField = (section: string, label: string, isPresent: boolean) => {
+      totalApplicable++;
+      if (isPresent) {
+        completedCount++;
+      } else {
+        missingFields.push({ section, fieldLabel: label });
+      }
+    };
+
+    // 1. Basic Info
+    checkField('Basic Info', 'Full Name', !!formData.fullName?.trim());
+    checkField('Basic Info', 'Mobile Number', !!formData.mobileNumber?.trim());
+    checkField('Basic Info', 'District', !!formData.district?.trim());
+    checkField('Basic Info', 'Taluka', !!formData.taluka?.trim());
+
+    // 2. Step 1: Education Profile
+    checkField('Step 1: Education', 'Highest Educational Qualification', !!formData.education?.qualification);
+    if (formData.education?.qualification === 'Other') {
+      checkField('Step 1: Education', 'Other Qualification Specification', !!formData.education?.qualificationOther?.trim());
+    }
+    if (formData.education?.isStudent) {
+      checkField('Step 1: Education', 'College / University Name', !!formData.education?.studentDetails?.collegeName?.trim());
+      const is10th = formData.education?.qualification === '10th Pass';
+      const is12th = formData.education?.qualification === '12th Pass';
+      const isAgriCourse = [
+        'Agri Polytechnic', 'Diploma in Agriculture', 'B.Sc Agriculture',
+        'M.Sc Agriculture', 'B.Tech Agriculture', 'B.Tech Agricultural Engineering'
+      ].includes(formData.education?.qualification || '');
+
+      if (!is10th && !isAgriCourse) {
+        checkField('Step 1: Education', 'Student Course Name', !!formData.education?.studentDetails?.courseName?.trim());
+      }
+      if (!is10th && !is12th) {
+        checkField('Step 1: Education', 'Student Current Year', !!formData.education?.studentDetails?.currentYear?.trim());
+      }
+    }
+
+    const AGRI_LIC_QUAL = [
+      'Agri Polytechnic', 'Diploma in Agriculture', 'B.Sc Agriculture',
+      'M.Sc Agriculture', 'B.Tech Agriculture', 'B.Tech Agricultural Engineering'
+    ];
+    if (AGRI_LIC_QUAL.includes(formData.education?.qualification || '')) {
+      checkField('Step 1: Education', 'Agri Licenses Selection', Array.isArray(formData.education?.agriLicenses) && formData.education.agriLicenses.length > 0);
+    }
+
+    // 3. Step 2: Occupation Profile
+    checkField('Step 2: Occupation', 'Current Occupation', !!formData.occupation?.occupation);
+    if (formData.occupation?.occupation === 'Other') {
+      checkField('Step 2: Occupation', 'Other Occupation Specification', !!formData.occupation?.occupationOther?.trim());
+    }
+    if (formData.occupation?.occupation === 'Agriculture Professional') {
+      checkField('Step 2: Occupation', 'Agri Professional Specialty', !!formData.occupation?.agriProfCategory);
+      if (formData.occupation?.agriProfCategory === 'Other') {
+        checkField('Step 2: Occupation', 'Other Agri Specialty Specification', !!formData.occupation?.agriProfCategoryOther?.trim());
+      }
+    }
+    if (formData.occupation?.occupation === 'Business Owner') {
+      checkField('Step 2: Occupation', 'Business Name', !!formData.occupation?.businessDetails?.businessName?.trim());
+      checkField('Step 2: Occupation', 'Business Category', !!formData.occupation?.businessDetails?.category);
+      if (formData.occupation?.businessDetails?.category === 'Agriculture') {
+        checkField('Step 2: Occupation', 'Agri Sub-Category', !!formData.occupation?.businessDetails?.agriSubCategory);
+      }
+      checkField('Step 2: Occupation', 'Business Experience', !!formData.occupation?.businessDetails?.experience);
+      checkField('Step 2: Occupation', 'Business Status', !!formData.occupation?.businessDetails?.status);
+    }
+
+    // 4. Step 3: Agriculture Profile
+    if (formData.agriculture?.isInvolvedInAgri) {
+      checkField('Step 3: Agriculture', 'Farming Activities', Array.isArray(formData.agriculture?.agriActivities) && formData.agriculture.agriActivities.length > 0);
+      checkField('Step 3: Agriculture', 'Farming Experience', !!formData.agriculture?.farmingExperience);
+    }
+    if (formData.agriculture?.ownsAgriLand) {
+      const area = parseFloat(formData.agriculture?.landDetails?.totalLandArea || '0');
+      checkField('Step 3: Agriculture', 'Total Agricultural Land Area', !isNaN(area) && area > 0);
+      checkField('Step 3: Agriculture', 'Land Measurement Unit', !!formData.agriculture?.landUnit);
+    }
+    if (formData.agriculture?.hasFarmerId && !formData.agriculture?.dontKnowFarmerId) {
+      checkField('Step 3: Agriculture', 'Farmer Registration Number', !!formData.agriculture?.farmerIdNumber?.trim());
+    }
+    if (formData.agriculture?.hasReceivedGovtBenefits) {
+      checkField('Step 3: Agriculture', 'Received Govt Schemes', Array.isArray(formData.agriculture?.govtSchemesReceived) && formData.agriculture.govtSchemesReceived.length > 0);
+    }
+    if (formData.agriculture?.isFpoMember) {
+      checkField('Step 3: Agriculture', 'FPO Name', !!formData.agriculture?.fpoName?.trim());
+    }
+
+    // 5. Step 4: Agri Drone Awareness & Ownership
+    checkField('Step 4: Drone', 'Agri Drone Awareness Level', !!formData.agriDrone?.knowsAgriDrones);
+    if (formData.agriDrone?.attendedTraining) {
+      checkField('Step 4: Drone', 'Training Institute Name', !!formData.agriDrone?.trainingDetails?.instituteName?.trim());
+      checkField('Step 4: Drone', 'Training Year', !!formData.agriDrone?.trainingDetails?.trainingYear);
+    }
+    if (formData.agriDrone?.currentlyOwnsDrone) {
+      checkField('Step 4: Drone', 'Owned Drone Capacity', !!formData.agriDrone?.ownedDroneDetails?.capacity);
+      checkField('Step 4: Drone', 'Owned Drone Category', !!formData.agriDrone?.ownedDroneDetails?.category);
+    } else if (formData.agriDrone?.wantsToPurchaseDrone) {
+      checkField('Step 4: Drone', 'Drone Purchase Method', !!formData.agriDrone?.purchaseMethod);
+      checkField('Step 4: Drone', 'Drone Purchase Timeline', !!formData.agriDrone?.purchaseTimeline);
+    }
+
+    // 6. Step 5: Entrepreneur Programs & Module A
+    checkField('Step 5: Programs', 'Selected Entrepreneur Programs', Array.isArray(formData.entrepreneurInterest?.selectedPrograms) && formData.entrepreneurInterest.selectedPrograms.length > 0);
+    if (formData.entrepreneurInterest?.selectedPrograms?.includes('Agri Drone Entrepreneur')) {
+      const edp = formData.entrepreneurInterest?.moduleADrone?.edpWorkshop;
+      checkField('Step 5: Programs (Module A)', 'Workshop Attendance', !!edp?.canAttendWorkshop);
+      checkField('Step 5: Programs (Module A)', 'Post-Training Business Plan', !!edp?.postTrainingPlan);
+      checkField('Step 5: Programs (Module A)', 'Career Paths Interest', Array.isArray(edp?.careerPathsInterest) && edp.careerPathsInterest.length > 0);
+      checkField('Step 5: Programs (Module A)', 'Preferred Business Model', !!edp?.preferredBusinessModel);
+      checkField('Step 5: Programs (Module A)', 'MAHA-AGRI Partnership Interest', !!edp?.wantsMahaAgriAssistance);
+      checkField('Step 5: Programs (Module A)', 'Target Village Coverage', !!edp?.villagesTargetToServe);
+      checkField('Step 5: Programs (Module A)', 'EDP Training Agreement', !!edp?.agreeToCompleteEdpBeforeOnboarding);
+    }
+
+    // 7. Step 6: Investment Capacity
+    checkField('Step 6: Investment', 'Initial Investment Capacity', !!formData.investment?.capacity);
+    checkField('Step 6: Investment', 'Primary Investment Source', !!formData.investment?.source);
+
+    // 8. Step 7: Loan & Financial Profile
+    if (formData.financial?.hasRunningLoan) {
+      checkField('Step 7: Financial', 'Running Loan Types', Array.isArray(formData.financial?.runningLoanTypes) && formData.financial.runningLoanTypes.length > 0);
+    }
+    checkField('Step 7: Financial', 'CIBIL Score', !!formData.financial?.cibilScore);
+
+    // 9. Step 8: Declarations
+    checkField('Step 8: Review', 'Information True Declaration', !!formData.declaration?.isInformationTrue);
+    checkField('Step 8: Review', 'No Guarantee Acknowledgement', !!formData.declaration?.understandsNoGuarantee);
+    checkField('Step 8: Review', 'Assessment Process Agreement', !!formData.declaration?.agreesToAssessmentProcess);
+    checkField('Step 8: Review', 'Candidate Verification Checkbox', !!isVerifiedByCandidate);
+
+    const completionPercentage = totalApplicable > 0 ? Math.round((completedCount / totalApplicable) * 100) : 100;
+    const isComplete = missingFields.length === 0;
+
+    return { completionPercentage, isComplete, missingFields };
+  }, [formData, isVerifiedByCandidate]);
+
+  const keyStrengths = useMemo(() => {
+    const list: string[] = [];
+    if (formData.investment?.capacity && formData.investment.capacity !== 'Up to ₹1 Lakh') {
+      list.push('Strong investment readiness');
+    }
+    if (formData.entrepreneurInterest?.selectedPrograms?.length > 0) {
+      list.push('Clear business intent');
+    }
+    if (formData.entrepreneurInterest?.moduleADrone?.edpWorkshop?.canAttendWorkshop === 'Yes' || formData.agriDrone?.attendedTraining) {
+      list.push('Willingness to complete required training');
+    }
+    if (formData.financial?.cibilScore === 'Above 750' || formData.financial?.cibilScore === '700–750') {
+      list.push('High creditworthiness & strong financial record');
+    }
+    if (formData.agriculture?.isInvolvedInAgri || formData.education?.qualification?.includes('Agri')) {
+      list.push('Active agricultural domain background');
+    }
+    return list.slice(0, 3);
+  }, [formData]);
+
+  const cmegpAssessment = useMemo(() => {
+    if (formData.financial?.hasCmegpBenefit === 'Yes') return 'Needs Verification';
+    if (formData.investment?.capacity && formData.investment.capacity !== 'Up to ₹1 Lakh') return 'Potentially Suitable';
+    return 'Not Indicated';
+  }, [formData]);
+
+  const mahaDbtAssessment = useMemo(() => {
+    if (formData.financial?.hasMahaDbtAgriMachineryBenefit === 'Yes') return 'Needs Verification';
+    if (formData.agriculture?.ownsAgriLand || formData.agriculture?.hasFarmerId) return 'Potentially Suitable';
+    return 'Not Indicated';
+  }, [formData]);
+
+  const bankLoanAssessment = useMemo(() => {
+    const score = formData.financial?.cibilScore;
+    if (score === 'Above 750' || score === '700–750' || score === '650–700') return 'Potentially Suitable';
+    if (score === '600–650' || score === 'Below 600') return 'Needs Verification';
+    return 'Not Indicated';
+  }, [formData]);
+
+  const priorityStatus = useMemo(() => {
+    const report = entrepreneurAssessmentService.generateV3IntelligenceReport(formData);
+    if (profileCompletion.isComplete && report.readinessScore >= 75) return 'High Priority';
+    if (profileCompletion.completionPercentage >= 80 && report.readinessScore >= 55) return 'Medium Priority';
+    return 'Low Priority';
+  }, [formData, profileCompletion]);
+
+  const recommendedAction = useMemo(() => {
+    if (!profileCompletion.isComplete) return 'Needs Additional Information';
+    const report = entrepreneurAssessmentService.generateV3IntelligenceReport(formData);
+    if (report.readinessScore >= 80) return 'Recommended for Document Verification';
+    if (formData.entrepreneurInterest?.selectedPrograms?.includes('Agri Drone Entrepreneur') && !formData.agriDrone?.hasRpc) {
+      return 'Recommended for Training Assessment';
+    }
+    return 'Hold for Further Verification';
+  }, [formData, profileCompletion]);
+
   const handleNextStep = () => {
     if (validateStep(currentStep)) {
-      if (currentStep < 8) {
+      if (currentStep < 9) {
         setSlideDirection('right');
         setCurrentStep((prev) => prev + 1);
         window.scrollTo({ top: 0, behavior: 'smooth' });
-      } else if (currentStep === 8) {
+      } else if (currentStep === 9) {
         handleFinalSubmit();
       }
     }
@@ -567,7 +906,10 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
   };
 
   const handleFinalSubmit = () => {
-    if (!validateStep(8)) return;
+    if (!validateStep(8)) {
+      setCurrentStep(8);
+      return;
+    }
 
     setIsSubmitting(true);
     setSubmitStageText('Submitting Application...');
@@ -1333,22 +1675,29 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       <label className={`font-medium text-[14px] block ${validationErrors['qualification'] ? 'text-rose-400 font-semibold' : 'text-slate-200'}`}>
                         Highest Educational Qualification <span className="text-rose-500">*</span>
                       </label>
-                      <div className="relative">
                         <WizardSelect
-    fieldId="field-qualification"
-    value={formData.education.qualification}
-    
-    options={[{"value":"{q}","label":"{q}"}]}
-    small
-  />
-                        
-                      </div>
-                      {validationErrors['qualification'] && (
-                        <p id="error-qualification" role="alert" className="text-[12px] font-medium text-rose-400 mt-[6px] flex items-center space-x-1.5 animate-in fade-in slide-in-from-top-1 duration-180">
-                          <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                          <span>This field is required.</span>
-                        </p>
-                      )}
+                          fieldId="field-qualification"
+                          value={formData.education.qualification}
+                          onChange={(v) => updateFormSection('education', (prev) => ({ ...prev, qualification: v as EducationalQualification }), 'qualification')}
+                          error={validationErrors['qualification']}
+                          placeholder="Select Educational Qualification"
+                          options={[
+                            { value: '10th Pass', label: '10th Pass', icon: '📜' },
+                            { value: '12th Pass', label: '12th Pass', icon: '📜' },
+                            { value: 'ITI', label: 'ITI', icon: '🛠️' },
+                            { value: 'Diploma', label: 'Diploma', icon: '🎓' },
+                            { value: 'Graduate', label: 'Graduate', icon: '🎓' },
+                            { value: 'Post Graduate', label: 'Post Graduate', icon: '🎓' },
+                            { value: 'Agri Polytechnic', label: 'Agri Polytechnic', icon: '🌱' },
+                            { value: 'Diploma in Agriculture', label: 'Diploma in Agriculture', icon: '🌱' },
+                            { value: 'B.Sc Agriculture', label: 'B.Sc Agriculture', icon: '🌾' },
+                            { value: 'M.Sc Agriculture', label: 'M.Sc Agriculture', icon: '🌾' },
+                            { value: 'B.Tech Agriculture', label: 'B.Tech Agriculture', icon: '🚜' },
+                            { value: 'B.Tech Agricultural Engineering', label: 'B.Tech Agricultural Engineering', icon: '🚜' },
+                            { value: 'Veterinary', label: 'Veterinary', icon: '🐄' },
+                            { value: 'Other', label: 'Other', icon: '🔄' },
+                          ]}
+                        />
                     </div>
 
                     {/* QUALIFICATION OTHER TEXT INPUT */}
@@ -1361,9 +1710,14 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                           id="field-qualificationOther"
                           type="text"
                           value={formData.education.qualificationOther || ''}
-                          onChange={(e) => updateFormSection('education', (prev) => ({ ...prev, qualificationOther: e.target.value }))}
-                          placeholder="e.g. Diploma in Electronics"
-                          className={`w-full h-[50px] bg-[#182234] border rounded-[12px] px-3.5 text-white text-[15px] focus:outline-none ${
+                          onChange={(e) => updateFormSection('education', (prev) => ({ ...prev, qualificationOther: e.target.value.toUpperCase() }), 'qualificationOther')}
+                          onBlur={() => {
+                            const val = formData.education.qualificationOther || '';
+                            if (!val.trim()) setValidationErrors(prev => ({ ...prev, qualificationOther: 'Please specify your qualification.' }));
+                            else if (/[\u0900-\u097F]/.test(val)) setValidationErrors(prev => ({ ...prev, qualificationOther: 'Qualification must be in CAPITAL English / शिक्षण इंग्रजीत CAPITAL मध्ये लिहा.' }));
+                          }}
+                          placeholder="e.g. DIPLOMA IN ELECTRONICS"
+                          className={`w-full h-[50px] bg-[#182234] border rounded-[12px] px-3.5 text-white uppercase text-[15px] focus:outline-none ${
                             validationErrors['qualificationOther'] ? 'border-rose-500 ring-2 ring-rose-500/40' : 'border-[#1F2937] focus:border-[#059669]'
                           }`}
                         />
@@ -1399,6 +1753,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
 
                     {formData.education.isStudent && (
                       <div className="p-3.5 bg-[#182234] rounded-[16px] border border-[#1F2937] space-y-3 animate-in fade-in duration-200">
+                        {/* 1. College / University Name (Uppercase & English-only validation) */}
                         <div className="space-y-1.5">
                           <label className={`font-medium text-[13px] block ${validationErrors['collegeName'] ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
                             College / University Name <span className="text-rose-500">*</span>
@@ -1407,84 +1762,195 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                             id="field-collegeName"
                             type="text"
                             value={formData.education.studentDetails?.collegeName || ''}
-                            onChange={(e) => updateFormSection('education', (prev) => ({ ...prev, studentDetails: { ...prev.studentDetails, collegeName: e.target.value } as any }), 'collegeName')}
-                            onBlur={() => { if (!formData.education.studentDetails?.collegeName?.trim()) setValidationErrors(prev => ({ ...prev, collegeName: 'This field is required.' })); }}
+                            onChange={(e) => updateFormSection('education', (prev) => ({ ...prev, studentDetails: { ...prev.studentDetails, collegeName: e.target.value.toUpperCase() } as any }), 'collegeName')}
+                            onBlur={() => {
+                              const val = formData.education.studentDetails?.collegeName || '';
+                              if (!val.trim()) setValidationErrors(prev => ({ ...prev, collegeName: 'This field is required.' }));
+                              else if (/[\u0900-\u097F]/.test(val)) setValidationErrors(prev => ({ ...prev, collegeName: 'College / University Name must be in CAPITAL English / कॉलेजचे नाव इंग्रजीत CAPITAL मध्ये लिहा.' }));
+                            }}
                             aria-invalid={!!validationErrors['collegeName']}
                             aria-describedby={validationErrors['collegeName'] ? 'error-collegeName' : undefined}
-                            placeholder="e.g. MPKV Rahuri"
-                            className={`w-full h-[50px] bg-[#111827] border rounded-[12px] px-3.5 text-white text-[15px] focus:outline-none input-focus-smooth ${
+                            placeholder="e.g. MPKV RAHURI"
+                            className={`w-full h-[50px] bg-[#111827] border rounded-[12px] px-3.5 text-white uppercase text-[15px] focus:outline-none input-focus-smooth ${
                               validationErrors['collegeName'] ? 'border-rose-500 bg-rose-500/10 ring-2 ring-rose-500/30' : 'border-[#1F2937] focus:border-[#059669]'
                             }`}
                           />
                           {validationErrors['collegeName'] && (
                             <p id="error-collegeName" role="alert" className="text-[12px] font-medium text-rose-400 mt-[6px] flex items-center space-x-1.5 animate-in fade-in slide-in-from-top-1 duration-180">
                               <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                              <span>This field is required.</span>
+                              <span>{validationErrors['collegeName']}</span>
                             </p>
                           )}
                         </div>
 
-                        <div className="space-y-1.5">
-                          <label className={`font-medium text-[13px] block ${validationErrors['courseName'] ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
-                            Course Name <span className="text-rose-500">*</span>
-                          </label>
-                          <input
-                            id="field-courseName"
-                            type="text"
-                            value={formData.education.studentDetails?.courseName || ''}
-                            onChange={(e) => updateFormSection('education', (prev) => ({ ...prev, studentDetails: { ...prev.studentDetails, courseName: e.target.value } as any }), 'courseName')}
-                            onBlur={() => { if (!formData.education.studentDetails?.courseName?.trim()) setValidationErrors(prev => ({ ...prev, courseName: 'This field is required.' })); }}
-                            aria-invalid={!!validationErrors['courseName']}
-                            aria-describedby={validationErrors['courseName'] ? 'error-courseName' : undefined}
-                            placeholder="e.g. B.Sc Agriculture"
-                            className={`w-full h-[50px] bg-[#111827] border rounded-[12px] px-3.5 text-white text-[15px] focus:outline-none input-focus-smooth ${
-                              validationErrors['courseName'] ? 'border-rose-500 bg-rose-500/10 ring-2 ring-rose-500/30' : 'border-[#1F2937] focus:border-[#059669]'
-                            }`}
-                          />
-                          {validationErrors['courseName'] && (
-                            <p id="error-courseName" role="alert" className="text-[12px] font-medium text-rose-400 mt-[6px] flex items-center space-x-1.5 animate-in fade-in slide-in-from-top-1 duration-180">
-                              <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                              <span>This field is required.</span>
-                            </p>
-                          )}
-                        </div>
+                        {/* 2. Course Name (Hidden for 10th Pass & Agriculture courses) */}
+                        {!['10th Pass', 'Agri Polytechnic', 'Diploma in Agriculture', 'B.Sc Agriculture', 'M.Sc Agriculture', 'B.Tech Agriculture', 'B.Tech Agricultural Engineering'].includes(formData.education.qualification) && (
+                          <div className="space-y-2">
+                            {formData.education.qualification === '12th Pass' ? (
+                              <div className="space-y-1.5">
+                                <label className={`font-medium text-[13px] block ${validationErrors['courseName'] ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
+                                  Course Name <span className="text-rose-500">*</span>
+                                </label>
+                                <WizardSelect
+                                  fieldId="field-courseName"
+                                  value={formData.education.studentDetails?.courseName || ''}
+                                  onChange={(v) => updateFormSection('education', (prev) => ({
+                                    ...prev,
+                                    studentDetails: { ...prev.studentDetails, courseName: v } as any
+                                  }), 'courseName')}
+                                  error={validationErrors['courseName']}
+                                  placeholder="Select Stream / Course"
+                                  options={[
+                                    { value: 'Arts', label: 'Arts', icon: '🎨' },
+                                    { value: 'Commerce', label: 'Commerce', icon: '📊' },
+                                    { value: 'Science', label: 'Science', icon: '🔬' },
+                                    { value: 'Other', label: 'Other', icon: '🔄' },
+                                  ]}
+                                  small
+                                />
 
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-1.5">
-                            <label className={`font-medium text-[13px] block ${validationErrors['currentYear'] ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
-                              Current Year <span className="text-rose-500">*</span>
-                            </label>
-                            <input
-                              id="field-currentYear"
-                              type="text"
-                              value={formData.education.studentDetails?.currentYear || ''}
-                              onChange={(e) => updateFormSection('education', (prev) => ({ ...prev, studentDetails: { ...prev.studentDetails, currentYear: e.target.value } as any }), 'currentYear')}
-                              onBlur={() => { if (!formData.education.studentDetails?.currentYear?.trim()) setValidationErrors(prev => ({ ...prev, currentYear: 'This field is required.' })); }}
-                              aria-invalid={!!validationErrors['currentYear']}
-                              aria-describedby={validationErrors['currentYear'] ? 'error-currentYear' : undefined}
-                              placeholder="e.g. 4th Year"
-                              className={`w-full h-[50px] bg-[#111827] border rounded-[12px] px-3.5 text-white text-[15px] focus:outline-none input-focus-smooth ${
-                                validationErrors['currentYear'] ? 'border-rose-500 bg-rose-500/10 ring-2 ring-rose-500/30' : 'border-[#1F2937] focus:border-[#059669]'
-                              }`}
-                            />
-                            {validationErrors['currentYear'] && (
-                              <p id="error-currentYear" role="alert" className="text-[12px] font-medium text-rose-400 mt-[6px] flex items-center space-x-1.5 animate-in fade-in slide-in-from-top-1 duration-180">
-                                <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                                <span>This field is required.</span>
-                              </p>
+                                {formData.education.studentDetails?.courseName === 'Other' && (
+                                  <div className="space-y-1.5 pt-1 animate-in fade-in duration-200">
+                                    <label className={`font-medium text-[13px] block ${validationErrors['courseNameOther'] ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
+                                      Please Specify Course Name <span className="text-rose-500">*</span>
+                                    </label>
+                                    <input
+                                      id="field-courseNameOther"
+                                      type="text"
+                                      value={formData.education.studentDetails?.courseNameOther || ''}
+                                      onChange={(e) => updateFormSection('education', (prev) => ({
+                                        ...prev,
+                                        studentDetails: { ...prev.studentDetails, courseNameOther: e.target.value.toUpperCase() } as any
+                                      }), 'courseNameOther')}
+                                      onBlur={() => {
+                                        const val = formData.education.studentDetails?.courseNameOther || '';
+                                        if (!val.trim()) setValidationErrors(prev => ({ ...prev, courseNameOther: 'This field is required.' }));
+                                        else if (/[\u0900-\u097F]/.test(val)) setValidationErrors(prev => ({ ...prev, courseNameOther: 'Course Name must be in CAPITAL English / कोर्सचे नाव इंग्रजीत CAPITAL मध्ये लिहा.' }));
+                                      }}
+                                      placeholder="e.g. VOCATIONAL"
+                                      className={`w-full h-[50px] bg-[#111827] border rounded-[12px] px-3.5 text-white uppercase text-[15px] focus:outline-none input-focus-smooth ${
+                                        validationErrors['courseNameOther'] ? 'border-rose-500 bg-rose-500/10 ring-2 ring-rose-500/30' : 'border-[#1F2937] focus:border-[#059669]'
+                                      }`}
+                                    />
+                                    {validationErrors['courseNameOther'] && (
+                                      <p id="error-courseNameOther" role="alert" className="text-[12px] font-medium text-rose-400 mt-[6px] flex items-center space-x-1.5 animate-in fade-in slide-in-from-top-1 duration-180">
+                                        <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                                        <span>{validationErrors['courseNameOther']}</span>
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="space-y-1.5">
+                                <label className={`font-medium text-[13px] block ${validationErrors['courseName'] ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
+                                  Course Name <span className="text-rose-500">*</span>
+                                </label>
+                                <input
+                                  id="field-courseName"
+                                  type="text"
+                                  value={formData.education.studentDetails?.courseName || ''}
+                                  onChange={(e) => updateFormSection('education', (prev) => ({
+                                    ...prev,
+                                    studentDetails: { ...prev.studentDetails, courseName: e.target.value.toUpperCase() } as any
+                                  }), 'courseName')}
+                                  onBlur={() => {
+                                    const val = formData.education.studentDetails?.courseName || '';
+                                    if (!val.trim()) setValidationErrors(prev => ({ ...prev, courseName: 'This field is required.' }));
+                                    else if (/[\u0900-\u097F]/.test(val)) setValidationErrors(prev => ({ ...prev, courseName: 'Course Name must be in CAPITAL English / कोर्सचे नाव इंग्रजीत CAPITAL मध्ये लिहा.' }));
+                                  }}
+                                  aria-invalid={!!validationErrors['courseName']}
+                                  aria-describedby={validationErrors['courseName'] ? 'error-courseName' : undefined}
+                                  placeholder="e.g. B.A. / B.COM"
+                                  className={`w-full h-[50px] bg-[#111827] border rounded-[12px] px-3.5 text-white uppercase text-[15px] focus:outline-none input-focus-smooth ${
+                                    validationErrors['courseName'] ? 'border-rose-500 bg-rose-500/10 ring-2 ring-rose-500/30' : 'border-[#1F2937] focus:border-[#059669]'
+                                  }`}
+                                />
+                                {validationErrors['courseName'] && (
+                                  <p id="error-courseName" role="alert" className="text-[12px] font-medium text-rose-400 mt-[6px] flex items-center space-x-1.5 animate-in fade-in slide-in-from-top-1 duration-180">
+                                    <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                                    <span>{validationErrors['courseName']}</span>
+                                  </p>
+                                )}
+                              </div>
                             )}
                           </div>
+                        )}
 
+                        {/* 3. Current Year / Expected Passing Year */}
+                        {['10th Pass', '12th Pass'].includes(formData.education.qualification) ? (
                           <div className="space-y-1.5">
-                            <label className="font-medium text-[13px] text-slate-300 block">Expected Passing Year</label>
+                            <label className="font-medium text-[13px] text-slate-300 block">
+                              Expected Passing Year <span className="text-rose-500">*</span>
+                            </label>
                             <WizardSelect
+                              fieldId="field-expectedPassingYear"
                               value={formData.education.studentDetails?.expectedPassingYear || '2025'}
-                              onChange={(v) => updateFormSection('education', (prev) => ({ ...prev, studentDetails: { ...prev.studentDetails, expectedPassingYear: v } as any }))}
-                              options={['2024', '2025', '2026', '2027', '2028', '2029'].map(yr => ({ value: yr, label: yr, icon: '📅' }))}
+                              onChange={(v) => updateFormSection('education', (prev) => ({
+                                ...prev,
+                                studentDetails: { ...prev.studentDetails, expectedPassingYear: v } as any
+                              }))}
+                              options={[
+                                { value: '2024', label: '2024', icon: '📅' },
+                                { value: '2025', label: '2025', icon: '📅' },
+                                { value: '2026', label: '2026', icon: '📅' },
+                                { value: '2027', label: '2027', icon: '📅' },
+                                { value: '2028', label: '2028', icon: '📅' },
+                                { value: '2029', label: '2029', icon: '📅' },
+                                { value: '2030', label: '2030', icon: '📅' },
+                              ]}
                               small
                             />
                           </div>
-                        </div>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1.5">
+                              <label className={`font-medium text-[13px] block ${validationErrors['currentYear'] ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
+                                Current Year <span className="text-rose-500">*</span>
+                              </label>
+                              <WizardSelect
+                                fieldId="field-currentYear"
+                                value={formData.education.studentDetails?.currentYear || ''}
+                                onChange={(v) => updateFormSection('education', (prev) => ({
+                                  ...prev,
+                                  studentDetails: { ...prev.studentDetails, currentYear: v } as any
+                                }), 'currentYear')}
+                                error={validationErrors['currentYear']}
+                                placeholder="Select Current Year"
+                                options={[
+                                  { value: '1st Year', label: '1st Year', icon: '1️⃣' },
+                                  { value: '2nd Year', label: '2nd Year', icon: '2️⃣' },
+                                  { value: '3rd Year', label: '3rd Year', icon: '3️⃣' },
+                                  { value: '4th Year', label: '4th Year', icon: '4️⃣' },
+                                  { value: 'Final Year / Internship', label: 'Final Year / Internship', icon: '🎓' },
+                                ]}
+                                small
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="font-medium text-[13px] text-slate-[#94A3B8] block">Expected Passing Year</label>
+                              <WizardSelect
+                                fieldId="field-expectedPassingYear"
+                                value={formData.education.studentDetails?.expectedPassingYear || '2025'}
+                                onChange={(v) => updateFormSection('education', (prev) => ({
+                                  ...prev,
+                                  studentDetails: { ...prev.studentDetails, expectedPassingYear: v } as any
+                                }))}
+                                options={[
+                                  { value: '2024', label: '2024', icon: '📅' },
+                                  { value: '2025', label: '2025', icon: '📅' },
+                                  { value: '2026', label: '2026', icon: '📅' },
+                                  { value: '2027', label: '2027', icon: '📅' },
+                                  { value: '2028', label: '2028', icon: '📅' },
+                                  { value: '2029', label: '2029', icon: '📅' },
+                                  { value: '2030', label: '2030', icon: '📅' },
+                                ]}
+                                small
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1695,14 +2161,29 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         {formData.occupation.operatedPastBusiness && (
                           <div className="p-3.5 bg-[#182234] rounded-[16px] border border-[#1F2937] space-y-3 mt-2 animate-in fade-in duration-200">
                             <div className="space-y-1.5">
-                              <label className="font-medium text-[13px] text-slate-300 block">Business Type</label>
+                              <label className={`font-medium text-[13px] block ${(validationErrors['pastBusinessType'] || /[\u0900-\u097F]/.test(formData.occupation.pastBusinessDetails?.businessType || '')) ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
+                                Business Type
+                              </label>
                               <input
+                                id="field-pastBusinessType"
                                 type="text"
                                 value={formData.occupation.pastBusinessDetails?.businessType || ''}
-                                onChange={(e) => updateFormSection('occupation', (prev) => ({ ...prev, pastBusinessDetails: { ...prev.pastBusinessDetails, businessType: e.target.value } as any }))}
-                                placeholder="e.g. Retail Shop / Trading"
-                                className="w-full h-[50px] bg-[#111827] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[15px] focus:border-[#059669] focus:outline-none"
+                                onChange={(e) => {
+                                  const upperVal = e.target.value.toUpperCase();
+                                  updateFormSection('occupation', (prev) => ({ ...prev, pastBusinessDetails: { ...prev.pastBusinessDetails, businessType: upperVal } as any }), 'pastBusinessType');
+                                }}
+                                placeholder="e.g. RETAIL SHOP / TRADING"
+                                className={`w-full h-[50px] bg-[#111827] border rounded-[12px] px-3.5 text-white uppercase font-bold text-[15px] focus:outline-none ${
+                                  validationErrors['pastBusinessType'] || /[\u0900-\u097F]/.test(formData.occupation.pastBusinessDetails?.businessType || '')
+                                    ? 'border-rose-500 bg-rose-500/10'
+                                    : 'border-[#1F2937] focus:border-[#059669]'
+                                }`}
                               />
+                              {/[\u0900-\u097F]/.test(formData.occupation.pastBusinessDetails?.businessType || '') ? (
+                                <p className="text-[11.5px] text-rose-400 font-bold mt-1">⚠️ Business Type must be in CAPITAL English (Marathi script not allowed).</p>
+                              ) : validationErrors['pastBusinessType'] ? (
+                                <p className="text-[11.5px] text-rose-400 font-medium mt-1">⚠️ {validationErrors['pastBusinessType']}</p>
+                              ) : null}
                             </div>
 
                             <div className="space-y-1.5">
@@ -1722,16 +2203,6 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       </div>
                     </div>
                   )}
-
-                  {/* STEP 2 LIVE SUMMARY CARD (REQ 7) */}
-                  <div className="p-3.5 bg-[#182234] rounded-[16px] border border-[#059669]/40 flex items-center justify-between text-[12px] text-slate-200 shadow-md">
-                    <div className="flex items-center space-x-2">
-                      <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" />
-                      <span>
-                        <strong>Occupation Summary:</strong> {formData.occupation.occupation} | Past Business: <strong className="text-teal-300">{formData.occupation.operatedPastBusiness ? `Yes (${formData.occupation.pastBusinessDetails?.yearsOperated || 'Operated'})` : 'No'}</strong>
-                      </span>
-                    </div>
-                  </div>
                 </div>
               )}
 
@@ -1847,64 +2318,221 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                   </div>
 
                   {formData.agriculture.ownsAgriLand && (
-                    <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-3 animate-in fade-in duration-200">
-                      {/* LAND UNIT DROPDOWN */}
-                      <div className="flex justify-between items-center pb-1">
-                        <label className="font-medium text-[13px] text-slate-300">Land Measurement Unit</label>
+                    <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-4 animate-in fade-in duration-200">
+                      {/* 1. TOTAL LAND AREA & 2. LAND MEASUREMENT UNIT */}
+                      <div className="space-y-2 pb-3 border-b border-[#1F2937]">
+                        <label className="font-bold text-[14px] text-white block">
+                          Total Land Area <span className="text-rose-500">*</span>
+                        </label>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <input
+                              id="field-totalLandArea"
+                              type="text"
+                              value={formData.agriculture.landDetails?.totalLandArea || ''}
+                              onChange={(e) => updateFormSection('agriculture', (prev) => ({
+                                ...prev,
+                                landDetails: { ...prev.landDetails, totalLandArea: e.target.value } as any
+                              }), 'totalLandArea')}
+                              placeholder="e.g. 4.50"
+                              className={`w-full h-[48px] bg-[#182234] border rounded-[12px] px-3.5 text-white font-mono text-[14px] focus:outline-none ${
+                                validationErrors['totalLandArea'] ? 'border-rose-500 bg-rose-500/10' : 'border-[#1F2937] focus:border-[#059669]'
+                              }`}
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <WizardSelect
+                              value={formData.agriculture.landUnit || 'Acre'}
+                              onChange={(v) => updateFormSection('agriculture', (prev) => ({ ...prev, landUnit: v as 'Acre' | 'Hectare' }))}
+                              options={[
+                                { value: 'Acre', label: 'Acres', icon: '📐' },
+                                { value: 'Hectare', label: 'Hectares', icon: '📐' },
+                                { value: 'Guntha', label: 'Guntha', icon: '📐' },
+                              ]}
+                            />
+                          </div>
+                        </div>
+
+                        {validationErrors['totalLandArea'] && (
+                          <p className="text-[11.5px] text-rose-400 font-medium mt-1">⚠️ {validationErrors['totalLandArea']}</p>
+                        )}
+                      </div>
+
+                      {/* 3. LAND OWNERSHIP */}
+                      <div className="space-y-1.5 pb-3 border-b border-[#1F2937]">
+                        <label className="font-medium text-[13px] text-slate-300 block">
+                          Land Ownership
+                        </label>
                         <WizardSelect
-    
-    value={formData.agriculture.landUnit || 'Acre'}
-    
-    options={[{"value":"Acre","label":"Acres"},{"value":"Hectare","label":"Hectares"}]}
-    small
-  />
+                          value={formData.agriculture.landOwnership || 'Self Owned'}
+                          onChange={(v) => updateFormSection('agriculture', (prev) => ({ ...prev, landOwnership: v as any }))}
+                          options={[
+                            { value: 'Self Owned', label: 'Self Owned', icon: '🏡' },
+                            { value: 'Family Owned', label: 'Family Owned', icon: '👨‍👩‍👧‍👦' },
+                            { value: 'Leased / Rented', label: 'Leased / Rented', icon: '📜' },
+                            { value: 'Jointly Owned', label: 'Jointly Owned', icon: '🤝' },
+                          ]}
+                          small
+                        />
                       </div>
 
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="space-y-1.5">
-                          <label className="font-medium text-[12px] text-slate-300 block">Total Land</label>
-                          <input
-                            type="text"
-                            value={formData.agriculture.landDetails?.totalLandArea || '4.50'}
-                            onChange={(e) => updateFormSection('agriculture', (prev) => ({ ...prev, landDetails: { ...prev.landDetails, totalLandArea: e.target.value } as any }))}
-                            className="w-full h-[48px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3 text-white font-mono text-[14px] focus:border-[#059669] focus:outline-none"
-                          />
+                      {/* 4. FARM LOCATION DETAILS */}
+                      <div className="p-3.5 bg-[#182234] rounded-[14px] border border-[#1F2937] space-y-3">
+                        <div className="flex items-center justify-between border-b border-[#1F2937] pb-2">
+                          <h4 className="font-bold text-[13.5px] text-white flex items-center space-x-2">
+                            <MapPin className="w-4 h-4 text-emerald-400" />
+                            <span>Farm Location Details <span className="text-rose-500">*</span></span>
+                          </h4>
                         </div>
-                        <div className="space-y-1.5">
-                          <label className="font-medium text-[12px] text-slate-300 block">Irrigated</label>
-                          <input
-                            type="text"
-                            value={formData.agriculture.landDetails?.irrigatedArea || '3.20'}
-                            onChange={(e) => updateFormSection('agriculture', (prev) => ({ ...prev, landDetails: { ...prev.landDetails, irrigatedArea: e.target.value } as any }))}
-                            className="w-full h-[48px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3 text-white font-mono text-[14px] focus:border-[#059669] focus:outline-none"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="font-medium text-[12px] text-slate-300 block">Rainfed</label>
-                          <input
-                            type="text"
-                            value={formData.agriculture.landDetails?.rainfedArea || '1.30'}
-                            onChange={(e) => updateFormSection('agriculture', (prev) => ({ ...prev, landDetails: { ...prev.landDetails, rainfedArea: e.target.value } as any }))}
-                            className="w-full h-[48px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3 text-white font-mono text-[14px] focus:border-[#059669] focus:outline-none"
-                          />
-                        </div>
-                      </div>
 
-                      {/* LAND AREA REAL-TIME VALIDATION WARNING */}
-                      {(() => {
-                        const total = parseFloat(formData.agriculture.landDetails?.totalLandArea || '0');
-                        const irr = parseFloat(formData.agriculture.landDetails?.irrigatedArea || '0');
-                        const rain = parseFloat(formData.agriculture.landDetails?.rainfedArea || '0');
+                        {(() => {
+                          const currentDist = formData.agriculture.landDetails?.farmDistrict || formData.district || initialDistrict;
+                          const availableTalukas = getTalukasForDistrict(currentDist);
+                          const currentTaluka = formData.agriculture.landDetails?.farmTaluka || formData.taluka || (availableTalukas[0] || initialTaluka);
+                          const villageVal = formData.agriculture.landDetails?.farmVillage ?? formData.village ?? initialVillage;
+                          const hasMarathiVillage = /[\u0900-\u097F]/.test(villageVal);
 
-                        if (irr > total || (irr + rain) > total) {
                           return (
-                            <div className="p-2.5 bg-amber-500/10 border border-amber-500/40 rounded-xl text-amber-300 text-[12px] font-medium flex items-center space-x-2">
-                              <span>⚠️ Validation Alert: Irrigated + Rainfed area cannot exceed Total Land Area ({total} {formData.agriculture.landUnit || 'Acres'}).</span>
-                            </div>
+                            <>
+                              <div className="grid grid-cols-2 gap-2">
+                                <WizardSelect
+                                  label="Farm District"
+                                  value={currentDist}
+                                  onChange={(v) => {
+                                    const talukas = getTalukasForDistrict(v);
+                                    const nextTaluka = talukas.length > 0 ? talukas[0] : '';
+                                    updateFormSection('agriculture', (prev) => ({
+                                      ...prev,
+                                      landDetails: { ...prev.landDetails, farmDistrict: v, farmTaluka: nextTaluka } as any
+                                    }));
+                                  }}
+                                  options={MAHARASHTRA_DISTRICTS.map((d) => ({
+                                    value: d,
+                                    label: d,
+                                    icon: <MapPin className="w-4 h-4 text-rose-500 shrink-0" />
+                                  }))}
+                                  small
+                                />
+
+                                <WizardSelect
+                                  label="Farm Taluka"
+                                  value={currentTaluka}
+                                  onChange={(v) => updateFormSection('agriculture', (prev) => ({
+                                    ...prev,
+                                    landDetails: { ...prev.landDetails, farmTaluka: v } as any
+                                  }))}
+                                  options={availableTalukas.map((t) => ({
+                                    value: t,
+                                    label: t,
+                                    icon: '📌'
+                                  }))}
+                                  small
+                                />
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className={`text-[12px] font-medium block ${(validationErrors['farmVillage'] || hasMarathiVillage) ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
+                                  Farm Village / Town <span className="text-rose-500">*</span>
+                                </label>
+                                <input
+                                  id="field-farmVillage"
+                                  type="text"
+                                  value={villageVal}
+                                  onChange={(e) => {
+                                    const upperVal = e.target.value.toUpperCase();
+                                    updateFormSection('agriculture', (prev) => ({
+                                      ...prev,
+                                      landDetails: { ...prev.landDetails, farmVillage: upperVal } as any
+                                    }), 'farmVillage');
+                                  }}
+                                  placeholder="e.g. PAVANAR"
+                                  className={`w-full h-[46px] bg-[#111827] border rounded-[10px] px-3 font-bold text-white uppercase text-[13.5px] focus:outline-none ${
+                                    (validationErrors['farmVillage'] || hasMarathiVillage) ? 'border-rose-500 bg-rose-500/10' : 'border-[#1F2937] focus:border-[#059669]'
+                                  }`}
+                                />
+                                {hasMarathiVillage ? (
+                                  <p className="text-[11.5px] text-rose-400 font-bold mt-1 flex items-center space-x-1">
+                                    <span>⚠️ Farm Village / Town must be in CAPITAL English (Marathi script not allowed).</span>
+                                  </p>
+                                ) : validationErrors['farmVillage'] ? (
+                                  <p className="text-[11.5px] text-rose-400 font-medium mt-1">⚠️ {validationErrors['farmVillage']}</p>
+                                ) : null}
+                              </div>
+                            </>
                           );
-                        }
-                        return null;
-                      })()}
+                        })()}
+                      </div>
+
+                      {/* 5. GAT / SURVEY PARCEL ENTRY */}
+                      <div className="p-3.5 bg-[#182234] border border-[#1F2937] rounded-xl space-y-3">
+                        <div className="border-b border-[#1F2937] pb-2">
+                          <span className="font-bold text-[13.5px] text-white block leading-tight">Gat / Survey Parcel Entry</span>
+                          <span className="text-[11.5px] text-slate-400 font-normal block leading-tight">Add Gat / Survey numbers one by one</span>
+                        </div>
+
+                        <div className="flex flex-col space-y-1">
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="text"
+                              value={parcelGatNoInput}
+                              onChange={(e) => setParcelGatNoInput(e.target.value.toUpperCase())}
+                              placeholder="Gat (e.g. 45/1)"
+                              className={`flex-1 h-[44px] bg-[#111827] border rounded-lg px-3 font-mono font-bold text-white text-xs uppercase focus:outline-none ${
+                                /[\u0900-\u097F]/.test(parcelGatNoInput) ? 'border-rose-500 bg-rose-500/10' : 'border-[#1F2937] focus:border-[#059669]'
+                              }`}
+                            />
+                            <button
+                              type="button"
+                              onClick={addGatParcel}
+                              className="h-[44px] px-5 bg-[#059669] hover:bg-[#047857] text-white font-bold rounded-lg text-xs transition-all cursor-pointer flex items-center justify-center shrink-0"
+                            >
+                              + Add
+                            </button>
+                          </div>
+                          {/[\u0900-\u097F]/.test(parcelGatNoInput) && (
+                            <p className="text-[11.5px] text-rose-400 font-bold mt-1">⚠️ Gat No. must be in CAPITAL English (Marathi script not allowed).</p>
+                          )}
+                        </div>
+
+                        {/* COMPACT REMOVABLE PARCEL CARDS */}
+                        {formData.agriculture.landDetails?.gatSurveyParcels && formData.agriculture.landDetails.gatSurveyParcels.length > 0 && (
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            {formData.agriculture.landDetails.gatSurveyParcels.map((parcel: any, idx: number) => (
+                              <span
+                                key={idx}
+                                className="inline-flex items-center space-x-2 px-3 py-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-mono font-bold"
+                              >
+                                <span>Gat {parcel.gatNumber}</span>
+                                <button type="button" onClick={() => removeGatParcel(idx)} className="text-emerald-400 hover:text-rose-400 font-bold cursor-pointer ml-1">×</button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* COMBINED GAT SUMMARY INPUT */}
+                        <div className="pt-2 border-t border-[#1F2937]/60 space-y-1">
+                          <label className={`text-[11.5px] font-medium block ${/[\u0900-\u097F]/.test(formData.agriculture.landDetails?.gatSurveyNumber || '') ? 'text-rose-400 font-bold' : 'text-slate-400'}`}>
+                            Combined Gat / Survey Summary No.
+                          </label>
+                          <input
+                            type="text"
+                            value={formData.agriculture.landDetails?.gatSurveyNumber || ''}
+                            onChange={(e) => updateFormSection('agriculture', (prev) => ({
+                              ...prev,
+                              landDetails: { ...prev.landDetails, gatSurveyNumber: e.target.value.toUpperCase() } as any
+                            }))}
+                            placeholder="e.g. GAT NO. 45/1, 102/2A"
+                            className={`w-full h-[44px] bg-[#111827] border rounded-lg px-3 text-white font-mono uppercase text-xs focus:outline-none ${
+                              /[\u0900-\u097F]/.test(formData.agriculture.landDetails?.gatSurveyNumber || '') ? 'border-rose-500 bg-rose-500/10' : 'border-[#1F2937] focus:border-[#059669]'
+                            }`}
+                          />
+                          {/[\u0900-\u097F]/.test(formData.agriculture.landDetails?.gatSurveyNumber || '') && (
+                            <p className="text-[11.5px] text-rose-400 font-bold mt-1">⚠️ Gat / Survey Summary No. must be in CAPITAL English (Marathi script not allowed).</p>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -1936,15 +2564,31 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                   {formData.agriculture.hasFarmerId && (
                     <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-3 animate-in fade-in duration-200">
                       <div className="space-y-1.5">
-                        <label className="font-medium text-[13px] text-slate-300 block">Farmer Registration Number</label>
+                        <label className={`font-medium text-[13px] block ${(validationErrors['farmerIdNumber'] || (!formData.agriculture.dontKnowFarmerId && /[\u0900-\u097F]/.test(formData.agriculture.farmerIdNumber || ''))) ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
+                          Farmer Registration Number
+                        </label>
                         <input
+                          id="field-farmerIdNumber"
                           type="text"
                           disabled={formData.agriculture.dontKnowFarmerId}
                           value={formData.agriculture.farmerIdNumber || ''}
-                          onChange={(e) => updateFormSection('agriculture', (prev) => ({ ...prev, farmerIdNumber: e.target.value }))}
+                          onChange={(e) => {
+                            const upperVal = e.target.value.toUpperCase();
+                            updateFormSection('agriculture', (prev) => ({ ...prev, farmerIdNumber: upperVal }), 'farmerIdNumber');
+                          }}
                           placeholder={formData.agriculture.dontKnowFarmerId ? "ID Not Known" : "e.g. MH-WDA-2024-98765"}
-                          className={`w-full h-[50px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white font-mono text-[15px] focus:border-[#059669] focus:outline-none ${formData.agriculture.dontKnowFarmerId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          className={`w-full h-[50px] bg-[#182234] border rounded-[12px] px-3.5 text-white uppercase font-mono text-[15px] focus:outline-none ${
+                            formData.agriculture.dontKnowFarmerId ? 'opacity-50 cursor-not-allowed border-[#1F2937]' :
+                            validationErrors['farmerIdNumber'] || /[\u0900-\u097F]/.test(formData.agriculture.farmerIdNumber || '')
+                              ? 'border-rose-500 bg-rose-500/10'
+                              : 'border-[#1F2937] focus:border-[#059669]'
+                          }`}
                         />
+                        {!formData.agriculture.dontKnowFarmerId && /[\u0900-\u097F]/.test(formData.agriculture.farmerIdNumber || '') ? (
+                          <p className="text-[11.5px] text-rose-400 font-bold mt-1">⚠️ Farmer Registration Number must be in CAPITAL English (Marathi script not allowed).</p>
+                        ) : validationErrors['farmerIdNumber'] ? (
+                          <p className="text-[11.5px] text-rose-400 font-medium mt-1">⚠️ {validationErrors['farmerIdNumber']}</p>
+                        ) : null}
                       </div>
                       <label className="flex items-center space-x-2.5 cursor-pointer">
                         <input
@@ -2014,7 +2658,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                     <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-3 animate-in fade-in duration-200">
                       <label className="font-medium text-[13px] text-slate-300 block">Select Schemes Received</label>
                       <div className="grid grid-cols-2 gap-2">
-                        {['PM-KISAN', 'MAHA-DBT', 'Solar Pump', 'Drip Irrigation', 'Farm Mechanization', 'Soil Health Card', 'Other'].map((sch) => {
+                        {['PM-KISAN', 'MAHA-DBT', 'PoCRA Yojana', 'Solar Pump', 'Drip Irrigation', 'Farm Mechanization', 'Soil Health Card', 'Other'].map((sch) => {
                           const schList = formData.agriculture.govtSchemesReceived || [];
                           const isSelected = schList.includes(sch as GovtSchemeType);
 
@@ -2043,35 +2687,34 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         })}
                       </div>
 
-                      {/* PM-KISAN STATUS */}
-                      {formData.agriculture.govtSchemesReceived?.includes('PM-KISAN') && (
-                        <div className="space-y-1.5 pt-2 border-t border-[#1F2937] animate-in fade-in duration-200">
-                          <label className="font-medium text-[13px] text-slate-200 block">PM-KISAN Beneficiary Status</label>
-                          <WizardSelect
-                            value={formData.agriculture.pmKisanStatus || 'Active'}
-                            onChange={(v) => updateFormSection('agriculture', (prev) => ({ ...prev, pmKisanStatus: v as any }))}
-                            options={[
-                              { value: 'Active', label: 'Active Beneficiary', icon: '✅' },
-                              { value: 'Stopped', label: 'Stopped / Paused', icon: '⏸️' },
-                              { value: 'Applied', label: 'Applied & Pending', icon: '⏳' },
-                              { value: 'Rejected', label: 'Rejected', icon: '❌' },
-                            ]}
-                            small
-                          />
-                        </div>
-                      )}
+                      {/* PM-KISAN STATUS REMOVED */}
 
                       {/* GOVT SCHEME OTHER SPECIFY */}
                       {formData.agriculture.govtSchemesReceived?.includes('Other' as any) && (
                         <div className="space-y-1.5 pt-1 animate-in fade-in duration-200">
-                          <label className="font-medium text-[12px] text-slate-300 block">Please Specify Other Scheme <span className="text-rose-500">*</span></label>
+                          <label className={`font-medium text-[12px] block ${(validationErrors['govtSchemeOther'] || /[\u0900-\u097F]/.test(formData.agriculture.govtSchemeOther || '')) ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
+                            Please Specify Other Scheme <span className="text-rose-500">*</span>
+                          </label>
                           <input
+                            id="field-govtSchemeOther"
                             type="text"
                             value={formData.agriculture.govtSchemeOther || ''}
-                            onChange={(e) => updateFormSection('agriculture', (prev) => ({ ...prev, govtSchemeOther: e.target.value }))}
-                            placeholder="e.g. PoCRA Sub-Project"
-                            className="w-full h-[48px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none"
+                            onChange={(e) => {
+                              const upperVal = e.target.value.toUpperCase();
+                              updateFormSection('agriculture', (prev) => ({ ...prev, govtSchemeOther: upperVal }), 'govtSchemeOther');
+                            }}
+                            placeholder="e.g. POCRA SUB-PROJECT"
+                            className={`w-full h-[48px] bg-[#182234] border rounded-[12px] px-3.5 text-white uppercase font-bold text-[14px] focus:outline-none ${
+                              validationErrors['govtSchemeOther'] || /[\u0900-\u097F]/.test(formData.agriculture.govtSchemeOther || '')
+                                ? 'border-rose-500 bg-rose-500/10'
+                                : 'border-[#1F2937] focus:border-[#059669]'
+                            }`}
                           />
+                          {/[\u0900-\u097F]/.test(formData.agriculture.govtSchemeOther || '') ? (
+                            <p className="text-[11.5px] text-rose-400 font-bold mt-1">⚠️ Scheme Name must be in CAPITAL English (Marathi script not allowed).</p>
+                          ) : validationErrors['govtSchemeOther'] ? (
+                            <p className="text-[11.5px] text-rose-400 font-medium mt-1">⚠️ {validationErrors['govtSchemeOther']}</p>
+                          ) : null}
                         </div>
                       )}
                     </div>
@@ -2105,73 +2748,139 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                   {formData.agriculture.isFpoMember && (
                     <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-3 animate-in fade-in duration-200">
                       <div className="space-y-1.5">
-                        <label className="font-medium text-[13px] text-slate-300 block">FPO Name</label>
+                        <label className={`font-medium text-[13px] block ${(validationErrors['fpoName'] || /[\u0900-\u097F]/.test(formData.agriculture.fpoName || '')) ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
+                          FPO Name <span className="text-rose-500">*</span>
+                        </label>
                         <input
+                          id="field-fpoName"
                           type="text"
                           value={formData.agriculture.fpoName || ''}
-                          onChange={(e) => updateFormSection('agriculture', (prev) => ({ ...prev, fpoName: e.target.value }))}
-                          placeholder="e.g. Wardha Farmer Producer Co. Ltd."
-                          className="w-full h-[50px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[15px] focus:border-[#059669] focus:outline-none"
+                          onChange={(e) => {
+                            const upperVal = e.target.value.toUpperCase();
+                            updateFormSection('agriculture', (prev) => ({ ...prev, fpoName: upperVal }), 'fpoName');
+                          }}
+                          placeholder="e.g. WARDHA FARMER PRODUCER CO. LTD."
+                          className={`w-full h-[50px] bg-[#182234] border rounded-[12px] px-3.5 text-white uppercase font-bold text-[15px] focus:outline-none ${
+                            validationErrors['fpoName'] || /[\u0900-\u097F]/.test(formData.agriculture.fpoName || '')
+                              ? 'border-rose-500 bg-rose-500/10'
+                              : 'border-[#1F2937] focus:border-[#059669]'
+                          }`}
                         />
+                        {/[\u0900-\u097F]/.test(formData.agriculture.fpoName || '') ? (
+                          <p className="text-[11.5px] text-rose-400 font-bold mt-1">⚠️ FPO Name must be in CAPITAL English (Marathi script not allowed).</p>
+                        ) : validationErrors['fpoName'] ? (
+                          <p className="text-[11.5px] text-rose-400 font-medium mt-1">⚠️ {validationErrors['fpoName']}</p>
+                        ) : null}
                       </div>
 
                       <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1.5">
-                          <label className="font-medium text-[13px] text-slate-300 block">Position in FPO</label>
-                          <WizardSelect
-    
-    value={formData.agriculture.fpoPosition || 'Farmer Member'}
-    
-    options={[{"value":"{pos}","label":"{pos}"}]}
-    small
-  />
-                        </div>
+                        <WizardSelect
+                          label="Position in FPO *"
+                          value={formData.agriculture.fpoPosition || 'Director'}
+                          onChange={(v) => updateFormSection('agriculture', (prev) => ({ ...prev, fpoPosition: v as any }), 'fpoPosition')}
+                          options={[
+                            { value: 'Director', label: 'Director', icon: '👔' },
+                            { value: 'Chairman', label: 'Chairman / President', icon: '👑' },
+                            { value: 'Secretary', label: 'Secretary', icon: '📝' },
+                            { value: 'Treasurer', label: 'Treasurer', icon: '💰' },
+                            { value: 'CEO', label: 'CEO / Manager', icon: '💼' },
+                            { value: 'Shareholder Member', label: 'Shareholder Member', icon: '👥' },
+                            { value: 'Farmer Member', label: 'Farmer Member', icon: '🌾' },
+                            { value: 'Other', label: 'Other', icon: '🔄' },
+                          ]}
+                          small
+                        />
 
-                        <div className="space-y-1.5">
-                          <label className="font-medium text-[13px] text-slate-300 block">Year Joined FPO</label>
-                          <input
-                            type="text"
-                            value={formData.agriculture.fpoYearJoined || '2022'}
-                            onChange={(e) => updateFormSection('agriculture', (prev) => ({ ...prev, fpoYearJoined: e.target.value }))}
-                            placeholder="e.g. 2022"
-                            className="w-full h-[48px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3 text-white font-mono text-[14px] focus:border-[#059669] focus:outline-none"
-                          />
-                        </div>
+                        <WizardSelect
+                          label="Year Joined FPO *"
+                          value={formData.agriculture.fpoYearJoined || '2022'}
+                          onChange={(v) => updateFormSection('agriculture', (prev) => ({ ...prev, fpoYearJoined: v }), 'fpoYearJoined')}
+                          options={Array.from({ length: 29 }, (_, i) => String(2028 - i)).map((yr) => ({
+                            value: yr,
+                            label: yr,
+                            icon: '📅'
+                          }))}
+                          small
+                        />
                       </div>
 
                       {formData.agriculture.fpoPosition === 'Other' && (
                         <div className="space-y-1.5 animate-in fade-in duration-200">
-                          <label className="font-medium text-[12px] text-slate-300 block">Specify Position <span className="text-rose-500">*</span></label>
+                          <label className={`font-medium text-[12px] block ${(validationErrors['fpoPositionOther'] || /[\u0900-\u097F]/.test(formData.agriculture.fpoPositionOther || '')) ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
+                            Specify Position <span className="text-rose-500">*</span>
+                          </label>
                           <input
+                            id="field-fpoPositionOther"
                             type="text"
                             value={formData.agriculture.fpoPositionOther || ''}
-                            onChange={(e) => updateFormSection('agriculture', (prev) => ({ ...prev, fpoPositionOther: e.target.value }))}
-                            placeholder="e.g. Technical Advisor"
-                            className="w-full h-[48px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none"
+                            onChange={(e) => {
+                              const upperVal = e.target.value.toUpperCase();
+                              updateFormSection('agriculture', (prev) => ({ ...prev, fpoPositionOther: upperVal }), 'fpoPositionOther');
+                            }}
+                            placeholder="e.g. TECHNICAL ADVISOR"
+                            className={`w-full h-[48px] bg-[#182234] border rounded-[12px] px-3.5 text-white uppercase font-bold text-[14px] focus:outline-none ${
+                              validationErrors['fpoPositionOther'] || /[\u0900-\u097F]/.test(formData.agriculture.fpoPositionOther || '')
+                                ? 'border-rose-500 bg-rose-500/10'
+                                : 'border-[#1F2937] focus:border-[#059669]'
+                            }`}
                           />
+                          {/[\u0900-\u097F]/.test(formData.agriculture.fpoPositionOther || '') ? (
+                            <p className="text-[11.5px] text-rose-400 font-bold mt-1">⚠️ Position must be in CAPITAL English (Marathi script not allowed).</p>
+                          ) : validationErrors['fpoPositionOther'] ? (
+                            <p className="text-[11.5px] text-rose-400 font-medium mt-1">⚠️ {validationErrors['fpoPositionOther']}</p>
+                          ) : null}
                         </div>
                       )}
 
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1.5">
-                          <label className="font-medium text-[12px] text-slate-300 block">Farmers Connected</label>
+                          <label className={`font-medium text-[12px] block ${(validationErrors['fpoFarmersConnected'] || /[\u0900-\u097F]/.test(formData.agriculture.fpoFarmersConnected || '')) ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
+                            Farmers Connected
+                          </label>
                           <input
                             type="text"
                             value={formData.agriculture.fpoFarmersConnected || ''}
-                            onChange={(e) => updateFormSection('agriculture', (prev) => ({ ...prev, fpoFarmersConnected: e.target.value }))}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              updateFormSection('agriculture', (prev) => ({ ...prev, fpoFarmersConnected: val }), 'fpoFarmersConnected');
+                            }}
                             placeholder="e.g. 150"
-                            className="w-full h-[48px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3 text-white font-mono text-[14px] focus:border-[#059669] focus:outline-none"
+                            className={`w-full h-[48px] bg-[#182234] border rounded-[12px] px-3 text-white font-mono text-[14px] focus:outline-none ${
+                              validationErrors['fpoFarmersConnected'] || /[\u0900-\u097F]/.test(formData.agriculture.fpoFarmersConnected || '')
+                                ? 'border-rose-500 bg-rose-500/10'
+                                : 'border-[#1F2937] focus:border-[#059669]'
+                            }`}
                           />
+                          {/[\u0900-\u097F]/.test(formData.agriculture.fpoFarmersConnected || '') ? (
+                            <p className="text-[11.5px] text-rose-400 font-bold mt-1">⚠️ English digits only (Marathi font not allowed).</p>
+                          ) : validationErrors['fpoFarmersConnected'] ? (
+                            <p className="text-[11.5px] text-rose-400 font-medium mt-1">⚠️ {validationErrors['fpoFarmersConnected']}</p>
+                          ) : null}
                         </div>
+
                         <div className="space-y-1.5">
-                          <label className="font-medium text-[12px] text-slate-300 block">Village Coverage</label>
+                          <label className={`font-medium text-[12px] block ${(validationErrors['fpoVillageCoverage'] || /[\u0900-\u097F]/.test(formData.agriculture.fpoVillageCoverage || '')) ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
+                            Village Coverage
+                          </label>
                           <input
                             type="text"
                             value={formData.agriculture.fpoVillageCoverage || ''}
-                            onChange={(e) => updateFormSection('agriculture', (prev) => ({ ...prev, fpoVillageCoverage: e.target.value }))}
-                            placeholder="e.g. 5 Villages"
-                            className="w-full h-[48px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3 text-white font-mono text-[14px] focus:border-[#059669] focus:outline-none"
+                            onChange={(e) => {
+                              const upperVal = e.target.value.toUpperCase();
+                              updateFormSection('agriculture', (prev) => ({ ...prev, fpoVillageCoverage: upperVal }), 'fpoVillageCoverage');
+                            }}
+                            placeholder="e.g. 5 VILLAGES"
+                            className={`w-full h-[48px] bg-[#182234] border rounded-[12px] px-3 text-white uppercase font-bold text-[14px] focus:outline-none ${
+                              validationErrors['fpoVillageCoverage'] || /[\u0900-\u097F]/.test(formData.agriculture.fpoVillageCoverage || '')
+                                ? 'border-rose-500 bg-rose-500/10'
+                                : 'border-[#1F2937] focus:border-[#059669]'
+                            }`}
                           />
+                          {/[\u0900-\u097F]/.test(formData.agriculture.fpoVillageCoverage || '') ? (
+                            <p className="text-[11.5px] text-rose-400 font-bold mt-1">⚠️ CAPITAL English / Digits only (Marathi font not allowed).</p>
+                          ) : validationErrors['fpoVillageCoverage'] ? (
+                            <p className="text-[11.5px] text-rose-400 font-medium mt-1">⚠️ {validationErrors['fpoVillageCoverage']}</p>
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -2196,8 +2905,8 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         Do you know about Agricultural Drones? <span className="text-rose-500">*</span>
                       </label>
                     </div>
-                    <div className="p-1 bg-[#182234] rounded-[14px] border border-[#1F2937] grid grid-cols-3 gap-1">
-                      {['Yes', 'Somewhat', 'No'].map((opt) => (
+                    <div className="p-1 bg-[#182234] rounded-[14px] border border-[#1F2937] grid grid-cols-2 gap-1">
+                      {['Yes', 'No'].map((opt) => (
                         <button
                           key={opt}
                           type="button"
@@ -2217,53 +2926,6 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       </p>
                     )}
                   </div>
-
-                  {formData.agriDrone.knowsAgriDrones !== 'No' && (
-                    <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-2 animate-in fade-in duration-200">
-                      <label className="font-medium text-[13px] text-slate-300 block">Where did you learn about Agri Drones?</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {[
-                          'MAHA-AGRI',
-                          'Agriculture Department',
-                          'YouTube',
-                          'Facebook',
-                          'WhatsApp',
-                          'Newspaper',
-                          'TV',
-                          'Friend / Relative',
-                          'Farmer',
-                          'Exhibition',
-                          'Other',
-                        ].map((src) => {
-                          const srcList = formData.agriDrone.learnSources || [];
-                          const isSelected = srcList.includes(src as DroneLearnSource);
-
-                          return (
-                            <div
-                              key={src}
-                              onClick={() => {
-                                updateFormSection('agriDrone', (prev) => {
-                                  const list = prev.learnSources || [];
-                                  return {
-                                    ...prev,
-                                    learnSources: isSelected ? list.filter((s) => s !== src) : [...list, src as DroneLearnSource],
-                                  };
-                                });
-                              }}
-                              className={`p-3 rounded-[12px] border flex items-center space-x-2 cursor-pointer transition-all ${
-                                isSelected ? 'bg-[#182234] border-[#059669] text-white' : 'bg-[#182234]/60 border-[#1F2937] text-[#94A3B8]'
-                              }`}
-                            >
-                              <div className={`w-4 h-4 rounded flex items-center justify-center border ${isSelected ? 'bg-[#059669] border-[#059669] text-white' : 'border-slate-600'}`}>
-                                {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                              </div>
-                              <span className="text-[13px] font-medium text-white">{src}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
 
                   {/* CARD 2: ATTENDED TRAINING */}
                   <div
@@ -2310,41 +2972,42 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                   {formData.agriDrone.attendedTraining && (
                     <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-3 animate-in fade-in duration-200">
                       <div className="space-y-1.5">
-                        <label className={`font-medium text-[13px] block ${validationErrors['instituteName'] ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
+                        <label className={`font-medium text-[13px] block ${(validationErrors['instituteName'] || /[\u0900-\u097F]/.test(formData.agriDrone.trainingDetails?.instituteName || '')) ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
                           Training Institute Name <span className="text-rose-500">*</span>
                         </label>
                         <input
                           id="field-instituteName"
                           type="text"
                           value={formData.agriDrone.trainingDetails?.instituteName || ''}
-                          onChange={(e) => updateFormSection('agriDrone', (prev) => ({ ...prev, trainingDetails: { ...prev.trainingDetails, instituteName: e.target.value } as any }))}
-                          placeholder="e.g. MPKV Rahuri / DGCA RPTO"
-                          className={`w-full h-[50px] bg-[#182234] border rounded-[12px] px-3.5 text-white text-[15px] focus:outline-none ${
-                            validationErrors['instituteName'] ? 'border-rose-500 ring-2 ring-rose-500/40' : 'border-[#1F2937] focus:border-[#059669]'
+                          onChange={(e) => {
+                            const upperVal = e.target.value.toUpperCase();
+                            updateFormSection('agriDrone', (prev) => ({ ...prev, trainingDetails: { ...prev.trainingDetails, instituteName: upperVal } as any }), 'instituteName');
+                          }}
+                          placeholder="e.g. MPKV RAHURI / DGCA RPTO"
+                          className={`w-full h-[50px] bg-[#182234] border rounded-[12px] px-3.5 text-white uppercase font-bold text-[15px] focus:outline-none ${
+                            validationErrors['instituteName'] || /[\u0900-\u097F]/.test(formData.agriDrone.trainingDetails?.instituteName || '')
+                              ? 'border-rose-500 bg-rose-500/10'
+                              : 'border-[#1F2937] focus:border-[#059669]'
                           }`}
                         />
-                        {validationErrors['instituteName'] && (
-                          <p className="text-[12px] text-rose-400 font-medium mt-1 animate-in fade-in">⚠️ {validationErrors['instituteName']}</p>
-                        )}
+                        {/[\u0900-\u097F]/.test(formData.agriDrone.trainingDetails?.instituteName || '') ? (
+                          <p className="text-[11.5px] text-rose-400 font-bold mt-1">⚠️ Institute Name must be in CAPITAL English (Marathi script not allowed).</p>
+                        ) : validationErrors['instituteName'] ? (
+                          <p className="text-[11.5px] text-rose-400 font-medium mt-1 animate-in fade-in">⚠️ {validationErrors['instituteName']}</p>
+                        ) : null}
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1.5">
-                          <label className={`font-medium text-[13px] block ${validationErrors['trainingYear'] ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
-                            Training Year <span className="text-rose-500">*</span>
-                          </label>
-                          <input
-                            id="field-trainingYear"
-                            type="text"
-                            value={formData.agriDrone.trainingDetails?.trainingYear || '2024'}
-                            onChange={(e) => updateFormSection('agriDrone', (prev) => ({ ...prev, trainingDetails: { ...prev.trainingDetails, trainingYear: e.target.value } as any }))}
-                            className={`w-full h-[50px] bg-[#182234] border rounded-[12px] px-3.5 text-white text-[15px] focus:outline-none ${
-                              validationErrors['trainingYear'] ? 'border-rose-500 ring-2 ring-rose-500/40' : 'border-[#1F2937] focus:border-[#059669]'
-                            }`}
-                          />
-                          {validationErrors['trainingYear'] && (
-                            <p className="text-[12px] text-rose-400 font-medium mt-1 animate-in fade-in">⚠️ {validationErrors['trainingYear']}</p>
-                          )}
-                        </div>
+                        <WizardSelect
+                          label="Training Year *"
+                          value={formData.agriDrone.trainingDetails?.trainingYear || '2024'}
+                          onChange={(v) => updateFormSection('agriDrone', (prev) => ({ ...prev, trainingDetails: { ...prev.trainingDetails, trainingYear: v } as any }), 'trainingYear')}
+                          options={Array.from({ length: 29 }, (_, i) => String(2028 - i)).map((yr) => ({
+                            value: yr,
+                            label: yr,
+                            icon: '📅'
+                          }))}
+                          small
+                        />
                         <div className="space-y-1.5">
                           <label className="font-medium text-[13px] text-slate-300 block">DGCA Approved?</label>
                           <div className="p-1 bg-[#182234] rounded-[12px] border border-[#1F2937] grid grid-cols-2 gap-1 h-[50px]">
@@ -2439,87 +3102,48 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                   {/* IF CURRENTLY OWNS DRONE */}
                   {formData.agriDrone.currentlyOwnsDrone && (
                     <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-3 animate-in fade-in duration-200">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1.5">
-                          <label className={`font-medium text-[13px] block ${validationErrors['droneManufacturer'] ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
-                            Manufacturer <span className="text-rose-500">*</span>
-                          </label>
-                          <WizardSelect
-    fieldId="field-droneManufacturer"
-    value={formData.agriDrone.ownedDroneDetails?.manufacturer || 'IoTechWorld'}
-    
-    options={[{"value":"{mf}","label":"{mf}"}]}
-    small
-  />
-                          {validationErrors['droneManufacturer'] && (
-                            <p className="text-[12px] text-rose-400 font-medium mt-1 animate-in fade-in">⚠️ {validationErrors['droneManufacturer']}</p>
-                          )}
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <label className="font-medium text-[13px] text-slate-300 block">Drone Model</label>
-                          <input
-                            id="field-droneModel"
-                            type="text"
-                            value={formData.agriDrone.ownedDroneDetails?.model || ''}
-                            onChange={(e) => updateFormSection('agriDrone', (prev) => ({ ...prev, ownedDroneDetails: { ...prev.ownedDroneDetails, model: e.target.value } }))}
-                            placeholder="e.g. AGRIBOT MX"
-                            className="w-full h-[48px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none"
-                          />
-                        </div>
-                      </div>
-
-                      {formData.agriDrone.ownedDroneDetails?.manufacturer === 'Other' && (
-                        <div className="space-y-1.5 animate-in fade-in duration-200">
-                          <label className={`font-medium text-[12px] block ${validationErrors['manufacturerOther'] ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
-                            Please Specify Manufacturer <span className="text-rose-500">*</span>
-                          </label>
-                          <input
-                            id="field-manufacturerOther"
-                            type="text"
-                            value={formData.agriDrone.ownedDroneDetails?.manufacturerOther || ''}
-                            onChange={(e) => updateFormSection('agriDrone', (prev) => ({ ...prev, ownedDroneDetails: { ...prev.ownedDroneDetails, manufacturerOther: e.target.value } }))}
-                            placeholder="Specify Manufacturer Name"
-                            className={`w-full h-[48px] bg-[#182234] border rounded-[12px] px-3.5 text-white text-[14px] focus:outline-none ${
-                              validationErrors['manufacturerOther'] ? 'border-rose-500 ring-2 ring-rose-500/40' : 'border-[#1F2937] focus:border-[#059669]'
-                            }`}
-                          />
-                          {validationErrors['manufacturerOther'] && (
-                            <p className="text-[12px] text-rose-400 font-medium mt-1 animate-in fade-in">⚠️ {validationErrors['manufacturerOther']}</p>
-                          )}
-                        </div>
-                      )}
-
                       <div className="grid grid-cols-3 gap-2">
                         <div className="space-y-1.5">
                           <label className="font-medium text-[12px] text-slate-300 block">Capacity</label>
                           <WizardSelect
-    fieldId="field-droneCapacity"
-    value={formData.agriDrone.ownedDroneDetails?.capacity || '10 Liters'}
-    
-    options={[{"value":"10 Liters","label":"10 Liters"},{"value":"16 Liters","label":"16 Liters"},{"value":"25 Liters","label":"25 Liters"},{"value":"30 Liters","label":"30 Liters"}]}
-    small
-  />
+                            fieldId="field-droneCapacity"
+                            value={formData.agriDrone.ownedDroneDetails?.capacity || '10 Liters'}
+                            onChange={(v) => updateFormSection('agriDrone', (prev) => ({ ...prev, ownedDroneDetails: { ...prev.ownedDroneDetails, capacity: v } as any }))}
+                            options={[
+                              { value: '10 Liters', label: '10 Liters' },
+                              { value: '16 Liters', label: '16 Liters' },
+                              { value: '25 Liters', label: '25 Liters' },
+                              { value: '30 Liters', label: '30 Liters' },
+                            ]}
+                            small
+                          />
                         </div>
                         <div className="space-y-1.5">
                           <label className="font-medium text-[12px] text-slate-300 block">Category</label>
                           <WizardSelect
-    fieldId="field-droneCategory"
-    value={formData.agriDrone.ownedDroneDetails?.category || 'Small'}
-    
-    options={[{"value":"Micro","label":"Micro (&lt;2kg)"},{"value":"Small","label":"Small (2-25kg)"},{"value":"Medium","label":"Medium (25-150kg)"}]}
-    small
-  />
+                            fieldId="field-droneCategory"
+                            value={formData.agriDrone.ownedDroneDetails?.category || 'Small'}
+                            onChange={(v) => updateFormSection('agriDrone', (prev) => ({ ...prev, ownedDroneDetails: { ...prev.ownedDroneDetails, category: v } as any }))}
+                            options={[
+                              { value: 'Micro', label: 'Micro (<2kg)' },
+                              { value: 'Small', label: 'Small (2-25kg)' },
+                              { value: 'Medium', label: 'Medium (25-150kg)' },
+                            ]}
+                            small
+                          />
                         </div>
                         <div className="space-y-1.5">
                           <label className="font-medium text-[12px] text-slate-300 block">Drone Condition</label>
                           <WizardSelect
-    
-    value={formData.agriDrone.ownedDroneDetails?.condition || 'Operational'}
-    
-    options={[{"value":"Operational","label":"Operational"},{"value":"Repair Required","label":"Repair Required"},{"value":"Not Working","label":"Not Working"}]}
-    small
-  />
+                            value={formData.agriDrone.ownedDroneDetails?.condition || 'Operational'}
+                            onChange={(v) => updateFormSection('agriDrone', (prev) => ({ ...prev, ownedDroneDetails: { ...prev.ownedDroneDetails, condition: v } as any }))}
+                            options={[
+                              { value: 'Operational', label: 'Operational' },
+                              { value: 'Repair Required', label: 'Repair Required' },
+                              { value: 'Not Working', label: 'Not Working' },
+                            ]}
+                            small
+                          />
                         </div>
                       </div>
                     </div>
@@ -2556,15 +3180,21 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         <div className="space-y-3 pt-2">
                           <div className="space-y-1.5">
                             <label className={`font-medium text-[13px] block ${validationErrors['purchaseMethod'] ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
-                              Preferred Purchase Method <span className="text-rose-500">*</span>
+                              How do you plan to finance your drone purchase? <span className="text-rose-500">*</span>
                             </label>
                             <WizardSelect
-    fieldId="field-purchaseMethod"
-    value={formData.agriDrone.purchaseMethod || 'MAHA-DBT Subsidy'}
-    
-    options={[{"value":"{m}","label":"{m}"}]}
-    small
-  />
+                              fieldId="field-purchaseMethod"
+                              value={formData.agriDrone.purchaseMethod || 'Government Subsidy / Subsidized Scheme'}
+                              onChange={(v) => updateFormSection('agriDrone', (prev) => ({ ...prev, purchaseMethod: v as any }), 'purchaseMethod')}
+                              options={[
+                                { value: 'Government Subsidy / Subsidized Scheme', label: 'Government Subsidy / Subsidized Scheme', icon: '🏛️' },
+                                { value: 'Bank Loan', label: 'Bank Loan', icon: '🏦' },
+                                { value: 'Self-Funded Purchase', label: 'Self-Funded Purchase', icon: '💰' },
+                                { value: 'Leasing', label: 'Leasing', icon: '🤝' },
+                                { value: 'Other', label: 'Other', icon: '🔄' },
+                              ]}
+                              small
+                            />
                             {validationErrors['purchaseMethod'] && (
                               <p className="text-[12px] text-rose-400 font-medium mt-1 animate-in fade-in">⚠️ {validationErrors['purchaseMethod']}</p>
                             )}
@@ -2594,16 +3224,19 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                           )}
 
                           {/* SCHEME APPLIED STATUS */}
-                          {(formData.agriDrone.purchaseMethod === 'CMEGP Scheme' || formData.agriDrone.purchaseMethod === 'PMEGP Scheme') && (
+                          {formData.agriDrone.purchaseMethod === 'Government Subsidy / Subsidized Scheme' && (
                             <div className="space-y-1.5 animate-in fade-in duration-200">
                               <label className="font-medium text-[13px] text-slate-200 block">Govt Subsidy Scheme Application Status</label>
                               <WizardSelect
-    
-    value={formData.agriDrone.schemeAppliedStatus || 'Planning to Apply'}
-    
-    options={[{"value":"Already Applied","label":"Already Applied"},{"value":"Planning to Apply","label":"Planning to Apply"},{"value":"No","label":"Not Applied Yet"}]}
-    small
-  />
+                                value={formData.agriDrone.schemeAppliedStatus || 'Planning to Apply'}
+                                onChange={(v) => updateFormSection('agriDrone', (prev) => ({ ...prev, schemeAppliedStatus: v as any }))}
+                                options={[
+                                  { value: 'Already Applied', label: 'Already Applied', icon: '✅' },
+                                  { value: 'Planning to Apply', label: 'Planning to Apply', icon: '📝' },
+                                  { value: 'No', label: 'Not Applied Yet', icon: '❌' },
+                                ]}
+                                small
+                              />
                             </div>
                           )}
 
@@ -2612,12 +3245,18 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                               Expected Timeline <span className="text-rose-500">*</span>
                             </label>
                             <WizardSelect
-    fieldId="field-purchaseTimeline"
-    value={formData.agriDrone.purchaseTimeline || 'Within 3 Months'}
-    
-    options={[{"value":"{t}","label":"{t}"}]}
-    small
-  />
+                              fieldId="field-purchaseTimeline"
+                              value={formData.agriDrone.purchaseTimeline || 'Within 3 Months'}
+                              onChange={(v) => updateFormSection('agriDrone', (prev) => ({ ...prev, purchaseTimeline: v as any }), 'purchaseTimeline')}
+                              options={[
+                                { value: 'Immediately', label: 'Immediately (Within 1 Month)', icon: '⚡' },
+                                { value: 'Within 3 Months', label: 'Within 3 Months', icon: '📅' },
+                                { value: 'Within 6 Months', label: 'Within 6 Months', icon: '📅' },
+                                { value: 'Within 1 Year', label: 'Within 1 Year', icon: '🗓️' },
+                                { value: 'After Training Completion', label: 'After Training Completion', icon: '🎓' },
+                              ]}
+                              small
+                            />
                             {validationErrors['purchaseTimeline'] && (
                               <p className="text-[12px] text-rose-400 font-medium mt-1 animate-in fade-in">⚠️ {validationErrors['purchaseTimeline']}</p>
                             )}
@@ -2651,15 +3290,29 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       {[
                         {
                           category: '🚁 Drone Enterprise Programs',
-                          items: ['Agri Drone Entrepreneur', 'Drone Service Provider', 'Professional Drone Pilot'],
+                          items: ['Agri Drone Entrepreneur', 'Professional Drone Pilot'],
                         },
                         {
                           category: '🌾 Agri Business & Inputs',
-                          items: ['MAHA-AGRI Krushi Seva Kendra', 'Soil Testing Entrepreneur', 'Agri Service Centre', 'Seed Business', 'Fertilizer Business', 'Pesticide Business', 'Bio-input Business', 'Nursery', 'Custom Hiring Centre', 'Farm Machinery Rental'],
+                          items: [
+                            'MAHA-AGRI Krushi Seva Kendra / Agri Service Centre',
+                            'Soil Testing Entrepreneur',
+                            'Nursery',
+                            'Custom Hiring / Farm Machinery Rental',
+                          ],
                         },
                         {
                           category: '💻 Agri Technology & Allied Sector',
-                          items: ['Agri Consultancy', 'Food Processing', 'Dairy', 'Goat Farming', 'Poultry', 'Fisheries', 'Organic Farming', 'FPO Entrepreneur', 'Other'],
+                          items: [
+                            'Food Processing',
+                            'Dairy',
+                            'Goat Farming',
+                            'Poultry',
+                            'Fisheries',
+                            'Organic Farming',
+                            'FPO Entrepreneur',
+                            'Other',
+                          ],
                         },
                       ].map((catGroup) => (
                         <div key={catGroup.category} className="space-y-1.5">
@@ -2705,7 +3358,9 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                   </div>
 
                   {/* CONDITIONAL MODULE A: AGRI DRONE ENTERPRISE (REQ 6) */}
-                  {formData.entrepreneurInterest.selectedPrograms.includes('Agri Drone Entrepreneur') && (
+                  {['Agri Drone Entrepreneur', 'Professional Drone Pilot'].some((p) =>
+                    (formData.entrepreneurInterest.selectedPrograms || []).includes(p as EntrepreneurProgram)
+                  ) && (
                     <div className="p-4 bg-[#111827] rounded-[18px] border-2 border-[#059669] space-y-4 shadow-xl animate-in fade-in duration-200">
                       <div className="border-b border-[#059669]/40 pb-2.5">
                         <h4 className="font-extrabold text-[15px] text-[#059669] uppercase tracking-wider flex items-center space-x-2">
@@ -2716,294 +3371,63 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         </p>
                       </div>
 
+                      {/* OUTSIDE QUESTION A: DRONE OWNERSHIP PREFERENCE */}
                       <div className="space-y-1.5">
                         <label className="font-medium text-[13px] text-slate-300 block">Drone Ownership Preference</label>
                         <WizardSelect
-    
-    value={formData.entrepreneurInterest.moduleADrone?.ownershipInterest || 'Own'}
-    
-    options={[{"value":"Own","label":"Own Purchase"},{"value":"Lease","label":"Leasing / Rental"},{"value":"Franchise","label":"Franchise Model"}]}
-    small
-  />
+                          value={formData.entrepreneurInterest.moduleADrone?.ownershipInterest || 'Own'}
+                          onChange={(v) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, ownershipInterest: v as any } }))}
+                          options={[
+                            { value: 'Own', label: 'Own Purchase', icon: '🛒' },
+                            { value: 'Lease', label: 'Leasing / Rental', icon: '🤝' },
+                            { value: 'Franchise', label: 'Franchise Model', icon: '🏢' },
+                          ]}
+                          small
+                        />
                       </div>
 
-                      {/* ========================================================================= */}
-                      {/* V5.1 SUBSECTION: ENTREPRENEUR DEVELOPMENT PROGRAM (EDP) – AGRI DRONE */}
-                      {/* ========================================================================= */}
-                      <div className="pt-3 border-t border-[#1F2937] space-y-3.5">
-                        <div>
-                          <h5 className="font-bold text-[14px] text-emerald-400 flex items-center space-x-1.5">
-                            <span>🎓 Entrepreneur Development Program (EDP) – Agri Drone</span>
-                          </h5>
-                          <p className="text-[12px] text-slate-400 font-normal mt-0.5">
-                            2-Day Practical Entrepreneurship & Business Development Workshop.
-                          </p>
-                        </div>
-
-                        {/* 1. ATTENDANCE AT TALUKA / DISTRICT HQ */}
-                        <div className="space-y-1.5">
-                          <label className="font-medium text-[13px] text-slate-200 block">Will you be able to attend the 2-Day EDP Workshop at the Taluka or District Headquarters?</label>
-                          <div className="p-1 bg-[#182234] rounded-[12px] border border-[#1F2937] grid grid-cols-3 gap-1">
-                            {['Yes', 'No', 'Maybe'].map((opt) => (
-                              <button
-                                key={opt}
-                                type="button"
-                                onClick={() => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, canAttendWorkshop: opt as any } } as any }))}
-                                className={`h-[42px] rounded-[8px] text-[13px] font-semibold transition-all ${
-                                  formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.canAttendWorkshop === opt ? 'bg-[#059669] text-white shadow-sm' : 'text-[#94A3B8] hover:text-white'
-                                }`}
-                              >
-                                {opt}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* IF CANNOT ATTEND: REASON */}
-                        {formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.canAttendWorkshop === 'No' && (
-                          <div className="space-y-1.5 animate-in fade-in duration-200">
-                            <label className="font-medium text-[13px] text-slate-300 block">Reason for Not Attending</label>
-                            <WizardSelect
-    
-    value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.cannotAttendReason || 'Distance'}
-    
-    options={[{"value":"{r}","label":"{r}"}]}
-    small
-  />
-                            {formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.cannotAttendReason === 'Other' && (
-                              <input
-                                type="text"
-                                value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.cannotAttendReasonOther || ''}
-                                onChange={(e) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, cannotAttendReasonOther: e.target.value } } as any }))}
-                                placeholder="Please Specify Reason"
-                                className="w-full h-[44px] mt-1 bg-[#182234] border border-[#1F2937] rounded-[10px] px-3.5 text-white text-[13px] focus:border-[#059669] focus:outline-none"
-                              />
-                            )}
-                          </div>
-                        )}
-
-                        {/* 2. BUSINESS INTENTION AFTER WORKSHOP (MANDATORY) */}
-                        <div className="space-y-1.5">
-                          <label className="font-medium text-[13px] text-slate-200 block">
-                            After successfully completing the EDP – Agri Drone Workshop, what would you like to do? <span className="text-rose-500">*</span>
-                          </label>
-                          <WizardSelect
-    
-    value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.postTrainingPlan || 'Start My Own Agri Drone Spray Business'}
-    
-    options={[{"value":"{plan}","label":"{plan}"}]}
-    small
-  />
-                          {formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.postTrainingPlan === 'Other' && (
-                            <input
-                              type="text"
-                              value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.postTrainingPlanOther || ''}
-                              onChange={(e) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, postTrainingPlanOther: e.target.value } } as any }))}
-                              placeholder="Please Specify Your Plan"
-                              className="w-full h-[44px] mt-1 bg-[#182234] border border-[#1F2937] rounded-[10px] px-3.5 text-white text-[13px] focus:border-[#059669] focus:outline-none"
-                            />
-                          )}
-                        </div>
-
-                        {/* 3. FUTURE CAREER INTEREST (MULTI SELECT) */}
-                        <div className="space-y-1.5">
-                          <label className="font-medium text-[13px] text-slate-200 block">After completing the EDP Workshop, which field would you like to work in?</label>
-                          <div className="grid grid-cols-2 gap-1.5 max-h-[220px] overflow-y-auto pr-1">
-                            {[
-                              'Agri Drone Spray Service Business',
-                              'Professional Drone Pilot',
-                              'Drone Repair & Maintenance',
-                              'Drone Sales & Marketing',
-                              'Drone Training & Demonstration',
-                              'Drone Survey & GIS Mapping',
-                              'Crop Health Monitoring',
-                              'Seed Broadcasting',
-                              'Fertilizer Broadcasting',
-                              'Pesticide Spraying',
-                              'Precision Agriculture',
-                              'Government Drone Projects',
-                              'Disaster Management Drone Operations',
-                              'Agriculture Consultancy',
-                              'Custom Hiring Centre',
-                              'Drone Franchise',
-                              'Other',
-                            ].map((cp) => {
-                              const cpList = formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.careerPathsInterest || ['Agri Drone Spray Service Business'];
-                              const isSelected = cpList.includes(cp);
-
-                              return (
-                                <div
-                                  key={cp}
-                                  onClick={() => {
-                                    updateFormSection('entrepreneurInterest', (prev) => {
-                                      const currentEdp = prev.moduleADrone?.edpWorkshop || {};
-                                      const currentList = currentEdp.careerPathsInterest || [];
-                                      const newList = isSelected ? currentList.filter((c) => c !== cp) : [...currentList, cp];
-                                      return {
-                                        ...prev,
-                                        moduleADrone: {
-                                          ...prev.moduleADrone,
-                                          edpWorkshop: { ...currentEdp, careerPathsInterest: newList },
-                                        } as any,
-                                      };
-                                    });
-                                  }}
-                                  className={`p-2.5 rounded-[10px] border flex items-center space-x-2 cursor-pointer transition-all ${
-                                    isSelected ? 'bg-[#182234] border-[#059669] text-white' : 'bg-[#182234]/60 border-[#1F2937] text-[#94A3B8]'
-                                  }`}
-                                >
-                                  <div className={`w-3.5 h-3.5 rounded flex items-center justify-center border ${isSelected ? 'bg-[#059669] border-[#059669] text-white' : 'border-slate-600'}`}>
-                                    {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                                  </div>
-                                  <span className="text-[12px] font-medium text-white">{cp}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                          {formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.careerPathsInterest?.includes('Other') && (
-                            <input
-                              type="text"
-                              value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.careerPathsInterestOther || ''}
-                              onChange={(e) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, careerPathsInterestOther: e.target.value } } as any }))}
-                              placeholder="Please Specify Other Field"
-                              className="w-full h-[44px] mt-1 bg-[#182234] border border-[#1F2937] rounded-[10px] px-3.5 text-white text-[13px] focus:border-[#059669] focus:outline-none"
-                            />
-                          )}
-                        </div>
-
-                        {/* 4. PREFERRED BUSINESS MODEL */}
-                        <div className="space-y-1.5">
-                          <label className="font-medium text-[13px] text-slate-200 block">Preferred Business Model</label>
-                          <WizardSelect
-    
-    value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.preferredBusinessModel || 'Individual Entrepreneur'}
-    
-    options={[{"value":"Individual Entrepreneur","label":"Individual Entrepreneur"},{"value":"Partnership","label":"Partnership"},{"value":"FPO Based","label":"FPO Based"},{"value":"Franchise Model","label":"Franchise Model"},{"value":"Cooperative Model","label":"Cooperative Model"}]}
-    small
-  />
-                        </div>
-
-                        {/* 5. MAHA-AGRI BUSINESS PARTNERSHIP */}
-                        <div className="space-y-1.5">
-                          <label className="font-medium text-[13px] text-slate-200 block">After completing the EDP Workshop, would you like to work with MAHA-AGRI for Agri Drone Spray Services?</label>
-                          <div className="p-1 bg-[#182234] rounded-[12px] border border-[#1F2937] grid grid-cols-3 gap-1">
-                            {['Yes', 'No', 'Maybe'].map((opt) => (
-                              <button
-                                key={opt}
-                                type="button"
-                                onClick={() => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, wantsMahaAgriAssistance: opt as any } } as any }))}
-                                className={`h-[42px] rounded-[8px] text-[12px] font-semibold transition-all ${
-                                  formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.wantsMahaAgriAssistance === opt ? 'bg-[#059669] text-white shadow-sm' : 'text-[#94A3B8] hover:text-white'
-                                }`}
-                              >
-                                {opt}
-                              </button>
-                            ))}
-                          </div>
-
-                          {/* IF YES: PREFERRED WORKING MODEL */}
-                          {formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.wantsMahaAgriAssistance === 'Yes' && (
-                            <div className="space-y-1.5 pt-1 animate-in fade-in duration-200">
-                              <label className="font-medium text-[13px] text-slate-300 block">Preferred Working Model</label>
-                              <WizardSelect
-    
-    value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.mahaAgriWorkingModel || 'District Partner'}
-    
-    options={[{"value":"{wm}","label":"{wm}"}]}
-    small
-  />
-                            </div>
-                          )}
-
-                          {/* IF NO: INDEPENDENT BUSINESS & LAUNCH TIMELINE */}
-                          {formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.wantsMahaAgriAssistance === 'No' && (
-                            <div className="space-y-2 pt-1 animate-in fade-in duration-200">
-                              <label className="font-medium text-[13px] text-slate-300 block">Would you like to establish your own independent Agri Drone Business?</label>
-                              <div className="p-1 bg-[#182234] rounded-[12px] border border-[#1F2937] grid grid-cols-2 gap-1 h-[42px]">
-                                <button
-                                  type="button"
-                                  onClick={() => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, wantsIndependentBusiness: 'Yes' } } as any }))}
-                                  className={`rounded-[8px] text-[12px] font-semibold transition-all ${
-                                    formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.wantsIndependentBusiness === 'Yes' ? 'bg-[#059669] text-white' : 'text-[#94A3B8]'
-                                  }`}
-                                >
-                                  Yes
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, wantsIndependentBusiness: 'No' } } as any }))}
-                                  className={`rounded-[8px] text-[12px] font-semibold transition-all ${
-                                    formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.wantsIndependentBusiness === 'No' ? 'bg-[#059669] text-white' : 'text-[#94A3B8]'
-                                  }`}
-                                >
-                                  No
-                                </button>
-                              </div>
-
-                              {formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.wantsIndependentBusiness === 'Yes' && (
-                                <div className="space-y-1.5 pt-1 animate-in fade-in duration-200">
-                                  <label className="font-medium text-[13px] text-slate-300 block">Expected Business Launch Timeline</label>
-                                  <WizardSelect
-    
-    value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.independentBusinessTimeline || 'Immediately'}
-    
-    options={[{"value":"{tl}","label":"{tl}"}]}
-    small
-  />
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* 6. SERVICE COVERAGE */}
-                        <div className="space-y-1.5">
-                          <label className="font-medium text-[13px] text-slate-200 block">How many villages are you planning to serve initially?</label>
-                          <WizardSelect
-    
-    value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.villagesTargetToServe || '1–5'}
-    
-    options={[{"value":"1–5","label":"1–5"},{"value":"6–10","label":"6–10"},{"value":"11–25","label":"11–25"},{"value":"26–50","label":"26–50"},{"value":"More than 50","label":"More than 50"}]}
-    small
-  />
-                        </div>
-
-                        {/* 7. MANDATORY AGREEMENT BEFORE ONBOARDING */}
-                        <div className="space-y-1.5 p-3 bg-[#182234]/80 rounded-[14px] border border-emerald-500/30">
-                          <label className="font-medium text-[13px] text-emerald-300 block">
-                            Do you agree to complete the mandatory EDP training before project onboarding? <span className="text-rose-500">*</span>
-                          </label>
-                          <div className="p-1 bg-[#111827] rounded-[10px] border border-[#1F2937] grid grid-cols-2 gap-1 h-[44px]">
-                            <button
-                              type="button"
-                              onClick={() => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, agreeToCompleteEdpBeforeOnboarding: 'Yes' } } as any }))}
-                              className={`rounded-[8px] text-[13px] font-semibold transition-all ${
-                                (formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.agreeToCompleteEdpBeforeOnboarding || 'Yes') === 'Yes' ? 'bg-[#059669] text-white shadow-sm' : 'text-[#94A3B8]'
-                              }`}
-                            >
-                              Yes
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, agreeToCompleteEdpBeforeOnboarding: 'No' } } as any }))}
-                              className={`rounded-[8px] text-[13px] font-semibold transition-all ${
-                                formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.agreeToCompleteEdpBeforeOnboarding === 'No' ? 'bg-[#059669] text-white shadow-sm' : 'text-[#94A3B8]'
-                              }`}
-                            >
-                              No
-                            </button>
-                          </div>
-                        </div>
-                      </div>
+                      {/* OUTSIDE QUESTION B: FINANCING PLAN */}
                       <div className="space-y-1.5">
-                        <label className="font-medium text-[13px] text-slate-300 block">Purchase Funding Mode</label>
+                        <label className="font-medium text-[13px] text-slate-300 block">How do you plan to finance your drone purchase?</label>
                         <WizardSelect
-    
-    value={formData.entrepreneurInterest.moduleADrone?.purchasePreference || 'Subsidized Scheme'}
-    
-    options={[{"value":"Subsidized Scheme","label":"Subsidized Scheme"},{"value":"Bank Loan","label":"Bank Loan"},{"value":"Outright Purchase","label":"Outright Purchase"},{"value":"Leasing","label":"Leasing"}]}
-    small
-  />
+                          value={formData.entrepreneurInterest.moduleADrone?.purchasePreference || 'Government Subsidy / Subsidized Scheme'}
+                          onChange={(v) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, purchasePreference: v } as any }))}
+                          options={[
+                            { value: 'Government Subsidy / Subsidized Scheme', label: 'Government Subsidy / Subsidized Scheme', icon: '🏛️' },
+                            { value: 'Bank Loan', label: 'Bank Loan', icon: '🏦' },
+                            { value: 'Self-Funded Purchase', label: 'Self-Funded Purchase', icon: '💰' },
+                            { value: 'Leasing', label: 'Leasing', icon: '🤝' },
+                            { value: 'Other', label: 'Other', icon: '🔄' },
+                          ]}
+                          small
+                        />
+                      </div>
+
+                      {/* OUTSIDE QUESTION C: MANDATORY EDP AGREEMENT */}
+                      <div className="space-y-1.5 p-3 bg-[#182234]/80 rounded-[14px] border border-emerald-500/30">
+                        <label className="font-medium text-[13px] text-emerald-300 block">
+                          Do you agree to complete the mandatory EDP training before project onboarding? <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="p-1 bg-[#111827] rounded-[10px] border border-[#1F2937] grid grid-cols-2 gap-1 h-[44px]">
+                          <button
+                            type="button"
+                            onClick={() => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, agreeToCompleteEdpBeforeOnboarding: 'Yes' } } as any }))}
+                            className={`rounded-[8px] text-[13px] font-semibold transition-all ${
+                              (formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.agreeToCompleteEdpBeforeOnboarding || 'Yes') === 'Yes' ? 'bg-[#059669] text-white shadow-sm' : 'text-[#94A3B8]'
+                            }`}
+                          >
+                            Yes
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, agreeToCompleteEdpBeforeOnboarding: 'No' } } as any }))}
+                            className={`rounded-[8px] text-[13px] font-semibold transition-all ${
+                              formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.agreeToCompleteEdpBeforeOnboarding === 'No' ? 'bg-[#059669] text-white shadow-sm' : 'text-[#94A3B8]'
+                            }`}
+                          >
+                            No
+                          </button>
+                        </div>
                       </div>
 
                       {/* ========================================================================= */}
@@ -3015,11 +3439,11 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                             <span>🎓 Entrepreneur Development Program (EDP) – Agri Drone</span>
                           </h5>
                           <p className="text-[12px] text-slate-400 font-normal mt-0.5">
-                            This is a 2-Day Practical Entrepreneurship & Business Development Workshop.
+                            2-Day Practical Entrepreneurship & Business Development Workshop.
                           </p>
                         </div>
 
-                        {/* Q1: ATTEND WORKSHOP */}
+                        {/* Q1: EDP WORKSHOP ATTENDANCE */}
                         <div className="space-y-1.5">
                           <label className="font-medium text-[13px] text-slate-200 block">Q1. Will you be able to attend the 2-Day EDP Workshop?</label>
                           <div className="p-1 bg-[#182234] rounded-[12px] border border-[#1F2937] grid grid-cols-3 gap-1">
@@ -3029,7 +3453,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                                 type="button"
                                 onClick={() => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, canAttendWorkshop: opt as any } } as any }))}
                                 className={`h-[42px] rounded-[8px] text-[13px] font-semibold transition-all ${
-                                  formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.canAttendWorkshop === opt ? 'bg-[#059669] text-white shadow-sm' : 'text-[#94A3B8] hover:text-white'
+                                  (formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.canAttendWorkshop || 'Yes') === opt ? 'bg-[#059669] text-white shadow-sm' : 'text-[#94A3B8] hover:text-white'
                                 }`}
                               >
                                 {opt}
@@ -3038,230 +3462,137 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                           </div>
                         </div>
 
-                        {/* Q2: PREFERRED LOCATION */}
+                        {formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.canAttendWorkshop === 'No' && (
+                          <div className="space-y-1.5 animate-in fade-in duration-200">
+                            <label className="font-medium text-[13px] text-slate-300 block">Reason for Not Attending</label>
+                            <WizardSelect
+                              value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.cannotAttendReason || 'Distance / Venue Location'}
+                              onChange={(v) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, cannotAttendReason: v as any } } as any }))}
+                              options={[
+                                { value: 'Distance / Venue Location', label: 'Distance / Venue Location', icon: '📍' },
+                                { value: 'Occupied with Work / Business', label: 'Occupied with Work / Business', icon: '💼' },
+                                { value: 'Financial Constraints', label: 'Financial Constraints', icon: '💰' },
+                                { value: 'Health / Personal Reason', label: 'Health / Personal Reason', icon: '🏥' },
+                                { value: 'Other', label: 'Other', icon: '🔄' },
+                              ]}
+                              small
+                            />
+                            {formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.cannotAttendReason === 'Other' && (
+                              <input
+                                type="text"
+                                value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.cannotAttendReasonOther || ''}
+                                onChange={(e) => {
+                                  const upperVal = e.target.value.toUpperCase();
+                                  updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, cannotAttendReasonOther: upperVal } } as any }));
+                                }}
+                                placeholder="PLEASE SPECIFY REASON"
+                                className="w-full h-[44px] mt-1 bg-[#182234] border border-[#1F2937] rounded-[10px] px-3.5 text-white uppercase font-bold text-[13px] focus:border-[#059669] focus:outline-none"
+                              />
+                            )}
+                          </div>
+                        )}
+
+                        {/* Q2: PREFERRED TRAINING LOCATION */}
                         <div className="space-y-1.5">
                           <label className="font-medium text-[13px] text-slate-200 block">Q2. Preferred Training Location</label>
                           <WizardSelect
-    
-    value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.preferredTrainingLocation || 'Taluka HQ'}
-    
-    options={[{"value":"Taluka HQ","label":"Taluka HQ"},{"value":"District HQ","label":"District HQ"},{"value":"Online (Theory Only)","label":"Online (Theory Only)"}]}
-    small
-  />
+                            value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.preferredTrainingLocation || 'Taluka HQ'}
+                            onChange={(v) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, preferredTrainingLocation: v as any } } as any }))}
+                            options={[
+                              { value: 'Taluka HQ', label: 'Taluka HQ', icon: '🏛️' },
+                              { value: 'District HQ', label: 'District HQ', icon: '🏢' },
+                              { value: 'Either Taluka or District HQ', label: 'Either Taluka or District HQ', icon: '📍' },
+                            ]}
+                            small
+                          />
                         </div>
 
-                        {/* Q3: POST TRAINING PLAN */}
+                        {/* Q3: POST-EDP PLAN */}
                         <div className="space-y-1.5">
-                          <label className="font-medium text-[13px] text-slate-200 block">Q3. After completing the EDP Workshop, what do you plan to do?</label>
+                          <label className="font-medium text-[13px] text-slate-200 block">
+                            Q3. After completing the EDP Workshop, what do you plan to do? <span className="text-rose-500">*</span>
+                          </label>
                           <WizardSelect
-    
-    value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.postTrainingPlan || 'Start My Own Drone Spray Business'}
-    
-    options={[{"value":"{p}","label":"{p}"}]}
-    small
-  />
+                            value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.postTrainingPlan || 'Start My Own Agri Drone Spraying Business'}
+                            onChange={(v) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, postTrainingPlan: v } } as any }))}
+                            options={[
+                              { value: 'Start My Own Agri Drone Spraying Business', label: '🚁 Start My Own Agri Drone Spraying Business' },
+                              { value: 'Become a Professional Drone Pilot', label: '👨‍✈️ Become a Professional Drone Pilot' },
+                              { value: 'Start a Drone Rental / Custom Hiring Center', label: '🚜 Start a Drone Rental / Custom Hiring Center' },
+                              { value: 'Work as a Drone Operator with MAHA-AGRI', label: '🏢 Work as a Drone Operator with MAHA-AGRI' },
+                              { value: 'Start a Drone Sales, Service & Repair Center', label: '🛠️ Start a Drone Sales, Service & Repair Center' },
+                              { value: 'Provide Agri Drone Services in My Village / Local Area', label: '🌾 Provide Agri Drone Services in My Village / Local Area' },
+                              { value: 'Other', label: 'Other' },
+                            ]}
+                            small
+                          />
                         </div>
 
-                        {/* Q4: CAREER PATHS INTEREST (MULTI SELECT) */}
+                        {/* Q4: INITIAL SERVICE COVERAGE */}
                         <div className="space-y-1.5">
-                          <label className="font-medium text-[13px] text-slate-200 block">Q4. Which career path interests you most?</label>
-                          <div className="grid grid-cols-2 gap-1.5 max-h-[180px] overflow-y-auto pr-1">
-                            {[
-                              'Agri Drone Spray Service',
-                              'Drone Pilot',
-                              'Drone Repair & Maintenance',
-                              'Drone Sales',
-                              'Drone Training',
-                              'Drone Survey & Mapping',
-                              'Precision Agriculture',
-                              'Government Projects',
-                              'Crop Health Monitoring',
-                              'Seed Broadcasting',
-                              'Fertilizer Broadcasting',
-                              'Agriculture Consultancy',
-                            ].map((cp) => {
-                              const cpList = formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.careerPathsInterest || ['Agri Drone Spray Service'];
-                              const isSelected = cpList.includes(cp);
-
-                              return (
-                                <div
-                                  key={cp}
-                                  onClick={() => {
-                                    updateFormSection('entrepreneurInterest', (prev) => {
-                                      const currentEdp = prev.moduleADrone?.edpWorkshop || {};
-                                      const currentList = currentEdp.careerPathsInterest || [];
-                                      const newList = isSelected ? currentList.filter((c) => c !== cp) : [...currentList, cp];
-                                      return {
-                                        ...prev,
-                                        moduleADrone: {
-                                          ...prev.moduleADrone,
-                                          edpWorkshop: { ...currentEdp, careerPathsInterest: newList },
-                                        } as any,
-                                      };
-                                    });
-                                  }}
-                                  className={`p-2.5 rounded-[10px] border flex items-center space-x-2 cursor-pointer transition-all ${
-                                    isSelected ? 'bg-[#182234] border-[#059669] text-white' : 'bg-[#182234]/60 border-[#1F2937] text-[#94A3B8]'
-                                  }`}
-                                >
-                                  <div className={`w-3.5 h-3.5 rounded flex items-center justify-center border ${isSelected ? 'bg-[#059669] border-[#059669] text-white' : 'border-slate-600'}`}>
-                                    {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                                  </div>
-                                  <span className="text-[12px] font-medium text-white">{cp}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Q5: VILLAGES TO SERVE */}
-                        <div className="space-y-1.5">
-                          <label className="font-medium text-[13px] text-slate-200 block">Q5. How many villages would you like to serve?</label>
+                          <label className="font-medium text-[13px] text-slate-200 block">Q4. How many villages do you plan to serve initially?</label>
                           <WizardSelect
-    
-    value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.villagesTargetToServe || '5–10'}
-    
-    options={[{"value":"1–5","label":"1–5 Villages"},{"value":"5–10","label":"5–10 Villages"},{"value":"10–25","label":"10–25 Villages"},{"value":"25+","label":"25+ Villages"}]}
-    small
-  />
+                            value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.villagesTargetToServe || '1–5 Villages'}
+                            onChange={(v) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, villagesTargetToServe: v as any } } as any }))}
+                            options={[
+                              { value: '1–5 Villages', label: '1–5 Villages' },
+                              { value: '5–10 Villages', label: '5–10 Villages' },
+                              { value: '11–20 Villages', label: '11–20 Villages' },
+                              { value: '21–50 Villages', label: '21–50 Villages' },
+                              { value: '50+ Villages', label: '50+ Villages' },
+                            ]}
+                            small
+                          />
                         </div>
 
-                        {/* Q6: MAHA AGRI ASSISTANCE */}
+                        {/* Q5: WORKING WITH MAHA-AGRI */}
                         <div className="space-y-1.5">
-                          <label className="font-medium text-[13px] text-slate-200 block">Q6. Would you like MAHA-AGRI to assist you in starting your business?</label>
-                          <div className="p-1 bg-[#182234] rounded-[12px] border border-[#1F2937] grid grid-cols-3 gap-1">
-                            {['Yes', 'No', 'Need More Information'].map((opt) => (
-                              <button
-                                key={opt}
-                                type="button"
-                                onClick={() => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, wantsMahaAgriAssistance: opt as any } } as any }))}
-                                className={`h-[42px] rounded-[8px] text-[12px] font-semibold transition-all ${
-                                  formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.wantsMahaAgriAssistance === opt ? 'bg-[#059669] text-white shadow-sm' : 'text-[#94A3B8] hover:text-white'
-                                }`}
-                              >
-                                {opt}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Q7: PREFERRED BUSINESS MODEL */}
-                        <div className="space-y-1.5">
-                          <label className="font-medium text-[13px] text-slate-200 block">Q7. Preferred Business Model</label>
+                          <label className="font-medium text-[13px] text-slate-200 block">Q5. How would you like to work with MAHA-AGRI?</label>
                           <WizardSelect
-    
-    value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.preferredBusinessModel || 'Individual Entrepreneur'}
-    
-    options={[{"value":"Individual Entrepreneur","label":"Individual Entrepreneur"},{"value":"Partnership","label":"Partnership"},{"value":"FPO Based","label":"FPO Based"},{"value":"Franchise Model","label":"Franchise Model"},{"value":"Cooperative Model","label":"Cooperative Model"}]}
-    small
-  />
+                            value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.mahaAgriWorkingModel || 'MAHA-AGRI Business Partner'}
+                            onChange={(v) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, mahaAgriWorkingModel: v as any } } as any }))}
+                            options={[
+                              { value: 'I do not plan to work with MAHA-AGRI', label: '🚫 I do not plan to work with MAHA-AGRI' },
+                              { value: 'MAHA-AGRI Business Partner', label: '🤝 MAHA-AGRI Business Partner' },
+                              { value: 'Agri Drone Pilot / Operator with MAHA-AGRI', label: '👨‍✈️ Agri Drone Pilot / Operator with MAHA-AGRI' },
+                              { value: 'Business Partner + Drone Pilot / Operator', label: '🤝👨‍✈️ Business Partner + Drone Pilot / Operator' },
+                              { value: 'MAHA-AGRI District / Local Partner', label: '📍 MAHA-AGRI District / Local Partner' },
+                              { value: 'Other', label: 'Other' },
+                            ]}
+                            small
+                          />
+                        </div>
+
+                        {/* Q6: DRONE BUSINESS OPERATION */}
+                        <div className="space-y-1.5">
+                          <label className="font-medium text-[13px] text-slate-200 block">Q6. How do you plan to operate your Agri Drone business?</label>
+                          <WizardSelect
+                            value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.droneBusinessOperation || 'I will operate the drone myself as an individual entrepreneur'}
+                            onChange={(v) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, droneBusinessOperation: v } } as any }))}
+                            options={[
+                              { value: 'I will operate the drone myself as an individual entrepreneur', label: '👤 I will operate the drone myself as an individual entrepreneur' },
+                              { value: 'I will own the drone and work with a trained drone pilot', label: '👨‍✈️ I will own the drone and work with a trained drone pilot' },
+                              { value: 'I will operate the business with a partner / team', label: '👥 I will operate the business with a partner / team' },
+                              { value: 'I will hire a trained drone operator to provide services', label: '🚜 I will hire a trained drone operator to provide services' },
+                              { value: 'I will operate through an FPO / Farmer Group', label: '🌾 I will operate through an FPO / Farmer Group' },
+                              { value: 'I will operate through an SHG / Cooperative', label: '🏛️ I will operate through an SHG / Cooperative' },
+                              { value: 'Other', label: '🔄 Other' },
+                            ]}
+                            small
+                          />
                         </div>
                       </div>
                     </div>
                   )}
 
-                  {/* CONDITIONAL MODULE B: KRUSHI SEVA KENDRA */}
-                  {formData.entrepreneurInterest.selectedPrograms.includes('MAHA-AGRI Krushi Seva Kendra') && (
-                    <div className="p-4 bg-[#111827] rounded-[16px] border border-[#059669]/60 space-y-3 animate-in fade-in duration-200">
-                      <h4 className="font-bold text-sm text-[#059669] uppercase tracking-wider">
-                        🏬 Dynamic Module B: Krushi Seva Kendra
-                      </h4>
-                      <div className="space-y-1.5">
-                        <label className="font-medium text-[13px] text-slate-300 block">Shop Location Availability</label>
-                        <WizardSelect
-    
-    value={formData.entrepreneurInterest.moduleBKrushiSeva?.shopAvailability || 'Owned'}
-    
-    options={[{"value":"Owned","label":"Owned Shop Space"},{"value":"Rented","label":"Rented Shop Space"},{"value":"Will Acquire","label":"Will Acquire Space"}]}
-    small
-  />
-                      </div>
-                    </div>
-                  )}
 
-                  {/* CONDITIONAL MODULE C: SOIL TESTING */}
-                  {formData.entrepreneurInterest.selectedPrograms.includes('Soil Testing Entrepreneur') && (
-                    <div className="p-4 bg-[#111827] rounded-[16px] border border-[#059669]/60 space-y-3 animate-in fade-in duration-200">
-                      <h4 className="font-bold text-sm text-[#059669] uppercase tracking-wider">
-                        🧪 Dynamic Module C: Soil Testing Lab
-                      </h4>
-                      <div className="space-y-1.5">
-                        <label className="font-medium text-[13px] text-slate-300 block">Soil Testing Knowledge Level</label>
-                        <WizardSelect
-    
-    value={formData.entrepreneurInterest.moduleCSoilTesting?.soilTestingKnowledge || 'Intermediate'}
-    
-    options={[{"value":"Basic","label":"Basic Understanding"},{"value":"Intermediate","label":"Intermediate Lab Skills"},{"value":"Advanced","label":"Advanced Chemist Level"}]}
-    small
-  />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* CONDITIONAL MODULE D: INPUT BUSINESS */}
-                  {(formData.entrepreneurInterest.selectedPrograms.includes('Seed Business') ||
-                    formData.entrepreneurInterest.selectedPrograms.includes('Fertilizer Business') ||
-                    formData.entrepreneurInterest.selectedPrograms.includes('Pesticide Business')) && (
-                    <div className="p-4 bg-[#111827] rounded-[16px] border border-[#059669]/60 space-y-3 animate-in fade-in duration-200">
-                      <h4 className="font-bold text-sm text-[#059669] uppercase tracking-wider">
-                        🌱 Dynamic Module D: Agri Input Dealer Business
-                      </h4>
-                      <div className="space-y-1.5">
-                        <label className="font-medium text-[13px] text-slate-300 block">Dealer / Sales Experience</label>
-                        <WizardSelect
-    
-    value={formData.entrepreneurInterest.moduleDInputBusiness?.dealerExperienceYears || '1–3 Years'}
-    
-    options={[{"value":"Less than 1 Year","label":"Less than 1 Year"},{"value":"1–3 Years","label":"1–3 Years"},{"value":"3–5 Years","label":"3–5 Years"},{"value":"5–10 Years","label":"5–10 Years"},{"value":"More than 10 Years","label":"More than 10 Years"}]}
-    small
-  />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* CONDITIONAL MODULE E: FPO */}
-                  {formData.entrepreneurInterest.selectedPrograms.includes('FPO Entrepreneur') && (
-                    <div className="p-4 bg-[#111827] rounded-[16px] border border-[#059669]/60 space-y-3 animate-in fade-in duration-200">
-                      <h4 className="font-bold text-sm text-[#059669] uppercase tracking-wider">
-                        👥 Dynamic Module E: FPO Enterprise Cluster
-                      </h4>
-                      <div className="space-y-1.5">
-                        <label className="font-medium text-[13px] text-slate-300 block">Connected Farmers Count</label>
-                        <input
-                          type="text"
-                          value={formData.entrepreneurInterest.moduleEFpo?.farmersConnectedCount || '250 Farmers'}
-                          onChange={(e) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleEFpo: { ...prev.moduleEFpo, farmersConnectedCount: e.target.value } as any }))}
-                          className="w-full h-[48px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* CONDITIONAL MODULE F: AGRI CONSULTANCY */}
-                  {(formData.entrepreneurInterest.selectedPrograms.includes('Agri Consultancy') ||
-                    formData.entrepreneurInterest.selectedPrograms.includes('Agri Service Centre')) && (
-                    <div className="p-4 bg-[#111827] rounded-[16px] border border-[#059669]/60 space-y-3 animate-in fade-in duration-200">
-                      <h4 className="font-bold text-sm text-[#059669] uppercase tracking-wider">
-                        💼 Dynamic Module F: Agri Consultancy & Advisory
-                      </h4>
-                      <div className="space-y-1.5">
-                        <label className="font-medium text-[13px] text-slate-300 block">Farmers Served / Client Base</label>
-                        <input
-                          type="text"
-                          value={formData.entrepreneurInterest.moduleFAgriConsultancy?.farmersServedCount || '150+ Clients'}
-                          onChange={(e) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleFAgriConsultancy: { ...prev.moduleFAgriConsultancy, farmersServedCount: e.target.value } as any }))}
-                          className="w-full h-[48px] bg-[#182234] border border-[#1F2937] rounded-[12px] px-3.5 text-white text-[14px] focus:border-[#059669] focus:outline-none"
-                        />
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
 
-              {/* SECTION 6: INVESTMENT CAPACITY (IA REQ 2, 7, 13) */}
+              {/* SECTION 6: INVESTMENT CAPACITY */}
               {currentStep === 6 && (
                 <div className="space-y-4 animate-in fade-in duration-200">
-                  {/* CARD 1: INVESTMENT & CAPITAL */}
+                  {/* CARD 1: INVESTMENT CAPACITY & OWN CAPITAL */}
                   <div className="p-4 bg-[#111827] rounded-[18px] border border-[#1F2937] space-y-3.5 shadow-md">
                     <div className="border-b border-[#1F2937] pb-2">
                       <h3 className="text-[14px] font-bold text-white flex items-center space-x-2">
@@ -3277,13 +3608,19 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       </label>
                       <div className="relative">
                         <WizardSelect
-    fieldId="field-investmentCapacity"
-    value={formData.investment.capacity}
-    
-    options={[{"value":"{cap}","label":"{cap}"}]}
-    small
-  />
-                        
+                          fieldId="field-investmentCapacity"
+                          value={formData.investment.capacity || 'Up to ₹50,000'}
+                          onChange={(v) => updateFormSection('investment', (prev) => ({ ...prev, capacity: v as InvestmentCapacityRange }), 'investmentCapacity')}
+                          options={[
+                            { value: 'Up to ₹50,000', label: 'Up to ₹50,000', icon: '💵' },
+                            { value: '₹50,000–₹1 Lakh', label: '₹50,000–₹1 Lakh', icon: '💵' },
+                            { value: '₹1–2 Lakh', label: '₹1–2 Lakh', icon: '💰' },
+                            { value: '₹2–5 Lakh', label: '₹2–5 Lakh', icon: '💰' },
+                            { value: '₹5–10 Lakh', label: '₹5–10 Lakh', icon: '🏦' },
+                            { value: '₹10 Lakh & Above', label: '₹10 Lakh & Above', icon: '🏛️' },
+                          ]}
+                          small
+                        />
                       </div>
                       {validationErrors['investmentCapacity'] && (
                         <p id="error-investmentCapacity" role="alert" className="text-[12px] text-rose-400 font-medium mt-1.5 flex items-center space-x-1.5 animate-in fade-in duration-180">
@@ -3295,17 +3632,23 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
 
                     <div className="space-y-2">
                       <label className={`font-medium text-[15px] block ${validationErrors['investmentSource'] ? 'text-rose-400 font-semibold' : 'text-slate-200'}`}>
-                        Primary Investment Source <span className="text-rose-500">*</span>
+                        Primary Source of Initial Investment <span className="text-rose-500">*</span>
                       </label>
                       <div className="relative">
                         <WizardSelect
-    fieldId="field-investmentSource"
-    value={formData.investment.source}
-    
-    options={[{"value":"{src}","label":"{src}"}]}
-    small
-  />
-                        
+                          fieldId="field-investmentSource"
+                          value={formData.investment.source || 'Self Investment / Own Capital'}
+                          onChange={(v) => updateFormSection('investment', (prev) => ({ ...prev, source: v as InvestmentSourceType }), 'investmentSource')}
+                          options={[
+                            { value: 'Self Investment / Own Capital', label: 'Self Investment / Own Capital', icon: '👤' },
+                            { value: 'Family / Relatives Savings', label: 'Family / Relatives Savings', icon: '👨‍👩‍👧' },
+                            { value: 'Bank Loan / Business Loan', label: 'Bank Loan / Business Loan', icon: '🏦' },
+                            { value: 'Government Scheme / Subsidy', label: 'Government Scheme / Subsidy', icon: '🏛️' },
+                            { value: 'Private Investor / Angel Funding', label: 'Private Investor / Angel Funding', icon: '🤝' },
+                            { value: 'Other', label: 'Other', icon: '🔄' },
+                          ]}
+                          small
+                        />
                       </div>
                       {validationErrors['investmentSource'] && (
                         <p id="error-investmentSource" role="alert" className="text-[12px] text-rose-400 font-medium mt-1.5 flex items-center space-x-1.5 animate-in fade-in duration-180">
@@ -3316,80 +3659,41 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                     </div>
                   </div>
 
-                  {/* CARD 2: FUNDING PREFERENCE PRIORITIES (REQ 13) */}
+                  {/* CARD 2: FUNDING ASSISTANCE */}
                   <div className="p-4 bg-[#111827] rounded-[18px] border border-[#1F2937] space-y-3.5 shadow-md">
                     <div className="border-b border-[#1F2937] pb-2">
                       <h3 className="text-[14px] font-bold text-white flex items-center space-x-2">
                         <Award className="w-4 h-4 text-emerald-400" />
-                        <span>Funding Preference Priorities</span>
+                        <span>Funding Assistance</span>
                       </h3>
-                      <p className="text-[11.5px] text-[#94A3B8]">Select your Priority 1 and Priority 2 financing modes.</p>
+                      <p className="text-[11.5px] text-[#94A3B8]">Select your preferred type of funding assistance.</p>
                     </div>
 
-                    <div className="space-y-3">
-                      <div className="space-y-1.5">
-                        <label className="font-medium text-[13px] text-slate-300 block">Priority 1 Funding Preference</label>
-                        <WizardSelect
-    
-    value={formData.investment.fundingPriority1 || 'Government Subsidy Scheme (CMEGP / MAHA-DBT)'}
-    
-    options={[{"value":"Government Subsidy Scheme (CMEGP / MAHA-DBT)","label":"Government Subsidy Scheme (CMEGP / MAHA-DBT)"},{"value":"Bank Loan (Mudra / PMEGP)","label":"Bank Loan (Mudra / PMEGP)"},{"value":"Self Investment / Family Savings","label":"Self Investment / Family Savings"},{"value":"Private Investor / Angel Funding","label":"Private Investor / Angel Funding"}]}
-    small
-  />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="font-medium text-[13px] text-slate-300 block">Priority 2 Funding Preference</label>
-                        <WizardSelect
-    
-    value={formData.investment.fundingPriority2 || 'Bank Loan (Mudra / PMEGP)'}
-    
-    options={[{"value":"Bank Loan (Mudra / PMEGP)","label":"Bank Loan (Mudra / PMEGP)"},{"value":"Government Subsidy Scheme (CMEGP / MAHA-DBT)","label":"Government Subsidy Scheme (CMEGP / MAHA-DBT)"},{"value":"Self Investment / Family Savings","label":"Self Investment / Family Savings"},{"value":"Private Investor / Angel Funding","label":"Private Investor / Angel Funding"}]}
-    small
-  />
-                      </div>
+                    <div className="space-y-1.5">
+                      <label className="font-medium text-[13px] text-slate-300 block">What type of financial support are you interested in?</label>
+                      <WizardSelect
+                        value={formData.investment.preferredFundingAssistance || 'Government Subsidy Scheme (CMEGP / MAHA-DBT)'}
+                        onChange={(v) => updateFormSection('investment', (prev) => ({ ...prev, preferredFundingAssistance: v }))}
+                        options={[
+                          { value: 'Government Subsidy Scheme (CMEGP / MAHA-DBT)', label: 'Government Subsidy Scheme (CMEGP / MAHA-DBT)', icon: '🏛️' },
+                          { value: 'Bank Loan / Business Loan', label: 'Bank Loan / Business Loan', icon: '🏦' },
+                          { value: 'Self Investment / Family Savings', label: 'Self Investment / Family Savings', icon: '💰' },
+                          { value: 'Private Investor / Angel Funding', label: 'Private Investor / Angel Funding', icon: '🤝' },
+                          { value: 'Combination of Government Scheme + Bank Loan', label: 'Combination of Government Scheme + Bank Loan', icon: '🔗' },
+                          { value: 'Not Sure / Need Guidance', label: 'Not Sure / Need Guidance', icon: '❓' },
+                          { value: 'Other', label: 'Other', icon: '🔄' },
+                        ]}
+                        small
+                      />
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* SECTION 7: LOAN & FINANCIAL PROFILE (IA REQ 2, 7, 11) */}
+              {/* SECTION 7: LOAN & FINANCIAL PROFILE */}
               {currentStep === 7 && (
                 <div className="space-y-4 animate-in fade-in duration-200">
-                  {/* CARD 1: BANK ACCOUNT DETAILS (REQ 11) */}
-                  <div className="p-4 bg-[#111827] rounded-[18px] border border-[#1F2937] space-y-3.5 shadow-md">
-                    <div className="border-b border-[#1F2937] pb-2">
-                      <h3 className="text-[14px] font-bold text-white flex items-center space-x-2">
-                        <FileText className="w-4 h-4 text-teal-400" />
-                        <span>Primary Bank Account Details</span>
-                      </h3>
-                      <p className="text-[11.5px] text-[#94A3B8]">Banking profile for direct benefit transfer and subsidy disbursement.</p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className={`font-medium text-[14px] block ${validationErrors['bankAccountType'] ? 'text-rose-400 font-semibold' : 'text-slate-200'}`}>
-                        Select Primary Bank Account Type <span className="text-rose-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <WizardSelect
-    fieldId="field-bankAccountType"
-    value={formData.financial.bankAccountType || 'Savings Account'}
-    
-    options={[{"value":"Savings Account","label":"Savings Account"},{"value":"Current Account","label":"Current Account"},{"value":"Overdraft (OD) Account","label":"Overdraft (OD) Account"},{"value":"Business Account","label":"Business Account"}]}
-    small
-  />
-                        
-                      </div>
-                      {validationErrors['bankAccountType'] && (
-                        <p id="error-bankAccountType" role="alert" className="text-[12px] text-rose-400 font-medium mt-1.5 flex items-center space-x-1.5 animate-in fade-in duration-180">
-                          <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                          <span>{validationErrors['bankAccountType']}</span>
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* CARD 2: EXISTING LOANS & CREDIT PROFILE */}
+                  {/* SECTION 1: EXISTING LOANS & CREDIT PROFILE */}
                   <div className="p-4 bg-[#111827] rounded-[18px] border border-[#1F2937] space-y-3.5 shadow-md">
                     <div className="border-b border-[#1F2937] pb-2">
                       <h3 className="text-[14px] font-bold text-white flex items-center space-x-2">
@@ -3399,6 +3703,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       <p className="text-[11.5px] text-[#94A3B8]">Financial liability and approximate credit rating.</p>
                     </div>
 
+                    {/* Q1: RUNNING LOANS STATUS */}
                     <div className="space-y-2">
                       <label className="font-medium text-[14px] text-slate-200 block">Do you have any running loans?</label>
                       <div className="p-1 bg-[#182234] rounded-[16px] border border-[#1F2937] grid grid-cols-2 gap-1">
@@ -3423,67 +3728,97 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       </div>
                     </div>
 
+                    {/* CONDITIONAL LOAN QUESTIONS (Q2 & Q3) */}
                     {formData.financial.hasRunningLoan && (
-                      <div
-                        id="field-runningLoanTypes"
-                        className={`p-3.5 bg-[#182234] rounded-[16px] border space-y-2 animate-in fade-in duration-200 transition-all ${
-                          validationErrors['runningLoanTypes'] ? 'border-rose-500 bg-rose-500/10 ring-2 ring-rose-500/30' : 'border-[#1F2937]'
-                        }`}
-                      >
-                        <label className={`font-medium text-[13px] block ${validationErrors['runningLoanTypes'] ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
-                          Running Loan Types <span className="text-rose-500">*</span>
-                        </label>
-                        <div className="grid grid-cols-2 gap-2">
-                          {['Home', 'Vehicle', 'Education', 'Agriculture', 'Business', 'Gold', 'Personal', 'Other'].map((ln) => {
-                            const lnList = formData.financial.runningLoanTypes || [];
-                            const isSelected = lnList.includes(ln as LoanType);
+                      <div className="space-y-3.5 animate-in fade-in duration-200">
+                        {/* Q2: RUNNING LOAN TYPES (MULTI-SELECT) */}
+                        <div
+                          id="field-runningLoanTypes"
+                          className={`p-3.5 bg-[#182234] rounded-[16px] border space-y-2 transition-all ${
+                            validationErrors['runningLoanTypes'] ? 'border-rose-500 bg-rose-500/10 ring-2 ring-rose-500/30' : 'border-[#1F2937]'
+                          }`}
+                        >
+                          <label className={`font-medium text-[13px] block ${validationErrors['runningLoanTypes'] ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
+                            Running Loan Types <span className="text-rose-500">*</span>
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {['Home', 'Vehicle', 'Education', 'Agriculture', 'Business', 'Gold', 'Personal', 'Other'].map((ln) => {
+                              const lnList = formData.financial.runningLoanTypes || [];
+                              const isSelected = lnList.includes(ln as LoanType);
 
-                            return (
-                              <div
-                                key={ln}
-                                onClick={() => {
-                                  updateFormSection('financial', (prev) => {
-                                    const list = prev.runningLoanTypes || [];
-                                    return {
-                                      ...prev,
-                                      runningLoanTypes: isSelected ? list.filter((l) => l !== ln) : [...list, ln as LoanType],
-                                    };
-                                  }, 'runningLoanTypes');
-                                }}
-                                className={`p-3 rounded-[12px] border flex items-center space-x-2 cursor-pointer transition-all ${
-                                  isSelected ? 'bg-[#111827] border-[#059669] text-white' : 'bg-[#111827]/60 border-[#1F2937] text-[#94A3B8]'
-                                }`}
-                              >
-                                <div className={`w-4 h-4 rounded flex items-center justify-center border ${isSelected ? 'bg-[#059669] border-[#059669] text-white' : 'border-slate-600'}`}>
-                                  {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                              return (
+                                <div
+                                  key={ln}
+                                  onClick={() => {
+                                    updateFormSection('financial', (prev) => {
+                                      const list = prev.runningLoanTypes || [];
+                                      return {
+                                        ...prev,
+                                        runningLoanTypes: isSelected ? list.filter((l) => l !== ln) : [...list, ln as LoanType],
+                                      };
+                                    }, 'runningLoanTypes');
+                                  }}
+                                  className={`p-3 rounded-[12px] border flex items-center space-x-2 cursor-pointer transition-all ${
+                                    isSelected ? 'bg-[#111827] border-[#059669] text-white' : 'bg-[#111827]/60 border-[#1F2937] text-[#94A3B8]'
+                                  }`}
+                                >
+                                  <div className={`w-4 h-4 rounded flex items-center justify-center border ${isSelected ? 'bg-[#059669] border-[#059669] text-white' : 'border-slate-600'}`}>
+                                    {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                                  </div>
+                                  <span className="text-[13px] font-medium text-white">{ln} Loan</span>
                                 </div>
-                                <span className="text-[13px] font-medium text-white">{ln} Loan</span>
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
+                          {validationErrors['runningLoanTypes'] && (
+                            <p id="error-runningLoanTypes" role="alert" className="text-[12px] text-rose-400 font-medium mt-1.5 flex items-center space-x-1.5 animate-in fade-in duration-180">
+                              <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                              <span>{validationErrors['runningLoanTypes']}</span>
+                            </p>
+                          )}
                         </div>
-                        {validationErrors['runningLoanTypes'] && (
-                          <p id="error-runningLoanTypes" role="alert" className="text-[12px] text-rose-400 font-medium mt-1.5 flex items-center space-x-1.5 animate-in fade-in duration-180">
-                            <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                            <span>{validationErrors['runningLoanTypes']}</span>
-                          </p>
-                        )}
+
+                        {/* Q3: APPROXIMATE TOTAL MONTHLY EMI OBLIGATION */}
+                        <div className="space-y-1.5">
+                          <label className="font-medium text-[13px] text-slate-300 block">Approximate Total Monthly EMI Obligation</label>
+                          <WizardSelect
+                            value={formData.financial.monthlyEmiObligation || 'Up to ₹5,000'}
+                            onChange={(v) => updateFormSection('financial', (prev) => ({ ...prev, monthlyEmiObligation: v }))}
+                            options={[
+                              { value: 'No EMI / Not Applicable', label: 'No EMI / Not Applicable', icon: '💳' },
+                              { value: 'Up to ₹5,000', label: 'Up to ₹5,000', icon: '💵' },
+                              { value: '₹5,001–₹10,000', label: '₹5,001–₹10,000', icon: '💵' },
+                              { value: '₹10,001–₹20,000', label: '₹10,001–₹20,000', icon: '💰' },
+                              { value: '₹20,001–₹30,000', label: '₹20,001–₹30,000', icon: '💰' },
+                              { value: '₹30,001–₹50,000', label: '₹30,001–₹50,000', icon: '🏦' },
+                              { value: 'Above ₹50,000', label: 'Above ₹50,000', icon: '🏛️' },
+                            ]}
+                            small
+                          />
+                        </div>
                       </div>
                     )}
 
+                    {/* Q4: CIBIL SCORE */}
                     <div className="space-y-2">
                       <label className={`font-medium text-[14px] block ${validationErrors['cibilScore'] ? 'text-rose-400 font-semibold' : 'text-slate-200'}`}>
                         Approximate CIBIL Score <span className="text-rose-500">*</span>
                       </label>
                       <div className="relative">
                         <WizardSelect
-    fieldId="field-cibilScore"
-    value={formData.financial.cibilScore}
-    
-    options={[{"value":"{score}","label":"{score}"}]}
-    small
-  />
-                        
+                          fieldId="field-cibilScore"
+                          value={formData.financial.cibilScore || '700–750'}
+                          onChange={(v) => updateFormSection('financial', (prev) => ({ ...prev, cibilScore: v as CibilScoreRange }), 'cibilScore')}
+                          options={[
+                            { value: 'Above 750', label: 'Above 750 (Excellent)', icon: '⭐' },
+                            { value: '700–750', label: '700–750 (Good)', icon: '✅' },
+                            { value: '650–700', label: '650–700 (Average)', icon: '📊' },
+                            { value: '600–650', label: '600–650 (Below Average)', icon: '⚠️' },
+                            { value: 'Below 600', label: 'Below 600 (Low Credit Score)', icon: '❌' },
+                            { value: "Don't Know", label: "Don't Know / No CIBIL History", icon: '❓' },
+                          ]}
+                          small
+                        />
                       </div>
                       {validationErrors['cibilScore'] && (
                         <p id="error-cibilScore" role="alert" className="text-[12px] text-rose-400 font-medium mt-1.5 flex items-center space-x-1.5 animate-in fade-in duration-180">
@@ -3492,6 +3827,95 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         </p>
                       )}
                     </div>
+                  </div>
+
+                  {/* SECTION 2: PREVIOUS GOVERNMENT SCHEME BENEFITS */}
+                  <div className="p-4 bg-[#111827] rounded-[18px] border border-[#1F2937] space-y-3.5 shadow-md">
+                    <div className="border-b border-[#1F2937] pb-2">
+                      <h3 className="text-[14px] font-bold text-white flex items-center space-x-2">
+                        <Award className="w-4 h-4 text-emerald-400" />
+                        <span>Previous Government Scheme Benefits</span>
+                      </h3>
+                      <p className="text-[11.5px] text-[#94A3B8]">Details of previous benefits received under specific government schemes for admin shortlisting.</p>
+                    </div>
+
+                    {/* Q5: CMEGP BENEFIT */}
+                    <div className="space-y-1.5">
+                      <label className="font-medium text-[13px] text-slate-200 block">Have you previously availed benefits under CMEGP?</label>
+                      <div className="p-1 bg-[#182234] rounded-[12px] border border-[#1F2937] grid grid-cols-3 gap-1">
+                        {(['Yes', 'No', 'Not Sure'] as const).map((opt) => (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => updateFormSection('financial', (prev) => ({ ...prev, hasCmegpBenefit: opt }))}
+                            className={`h-[42px] rounded-[8px] text-[13px] font-semibold transition-all ${
+                              (formData.financial.hasCmegpBenefit || 'No') === opt ? 'bg-[#059669] text-white shadow-sm' : 'text-[#94A3B8] hover:text-white'
+                            }`}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Q6: MAHA-DBT AGRI MACHINERY BENEFIT */}
+                    <div className="space-y-1.5">
+                      <label className="font-medium text-[13px] text-slate-200 block">
+                        Have you previously availed benefits under MAHA-DBT Agriculture Machinery Scheme?
+                      </label>
+                      <div className="p-1 bg-[#182234] rounded-[12px] border border-[#1F2937] grid grid-cols-3 gap-1">
+                        {(['Yes', 'No', 'Not Sure'] as const).map((opt) => (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => updateFormSection('financial', (prev) => ({ ...prev, hasMahaDbtAgriMachineryBenefit: opt }))}
+                            className={`h-[42px] rounded-[8px] text-[13px] font-semibold transition-all ${
+                              (formData.financial.hasMahaDbtAgriMachineryBenefit || 'No') === opt ? 'bg-[#059669] text-white shadow-sm' : 'text-[#94A3B8] hover:text-white'
+                            }`}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Q7: OTHER GOVT SCHEME BENEFIT */}
+                    <div className="space-y-1.5">
+                      <label className="font-medium text-[13px] text-slate-200 block">
+                        Have you previously availed benefits under any other Government Scheme?
+                      </label>
+                      <div className="p-1 bg-[#182234] rounded-[12px] border border-[#1F2937] grid grid-cols-3 gap-1">
+                        {(['Yes', 'No', 'Not Sure'] as const).map((opt) => (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => updateFormSection('financial', (prev) => ({ ...prev, hasOtherGovtSchemeBenefit: opt }))}
+                            className={`h-[42px] rounded-[8px] text-[13px] font-semibold transition-all ${
+                              (formData.financial.hasOtherGovtSchemeBenefit || 'No') === opt ? 'bg-[#059669] text-white shadow-sm' : 'text-[#94A3B8] hover:text-white'
+                            }`}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Q8 (CONDITIONAL ON Q7 = YES): WHICH GOVERNMENT SCHEME? */}
+                    {formData.financial.hasOtherGovtSchemeBenefit === 'Yes' && (
+                      <div className="space-y-1.5 animate-in fade-in duration-200">
+                        <label className="font-medium text-[13px] text-slate-300 block">Which Government Scheme?</label>
+                        <input
+                          type="text"
+                          value={formData.financial.otherGovtSchemeName || ''}
+                          onChange={(e) => {
+                            const upperVal = e.target.value.toUpperCase();
+                            updateFormSection('financial', (prev) => ({ ...prev, otherGovtSchemeName: upperVal }));
+                          }}
+                          placeholder="PLEASE SPECIFY SCHEME NAME"
+                          className="w-full h-[44px] bg-[#182234] border border-[#1F2937] rounded-[10px] px-3.5 text-white uppercase font-bold text-[13px] focus:border-[#059669] focus:outline-none"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -3575,7 +3999,22 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       <div><span className="text-[#94A3B8] block">Total Agricultural Land</span><strong className="text-white font-medium">{formData.agriculture.ownsAgriLand ? `${formData.agriculture.landDetails?.totalLandArea || 0} ${formData.agriculture.landUnit || 'Acre'}` : 'No Land'}</strong></div>
                       <div><span className="text-[#94A3B8] block">Farmer Registration</span><strong className="text-white font-medium">{formData.agriculture.hasFarmerId ? (formData.agriculture.dontKnowFarmerId ? 'ID Not Known (Retrieval Assistance Requested)' : formData.agriculture.farmerIdNumber || 'Registered') : 'Not Registered'}</strong></div>
                       <div><span className="text-[#94A3B8] block">Govt Schemes</span><strong className="text-emerald-400 font-medium">{formData.agriculture.hasReceivedGovtBenefits ? `${formData.agriculture.govtSchemesReceived?.join(', ')}${formData.agriculture.pmKisanStatus ? ` (PM-KISAN: ${formData.agriculture.pmKisanStatus})` : ''}` : 'None'}</strong></div>
-                      <div><span className="text-[#94A3B8] block">FPO Membership</span><strong className="text-white font-medium">{formData.agriculture.isFpoMember ? `${formData.agriculture.fpoName || 'FPO'} (${formData.agriculture.fpoPosition}, Joined ${formData.agriculture.fpoYearJoined}, ${formData.agriculture.fpoFarmersConnected} Farmers)` : 'No'}</strong></div>
+                      <div>
+                        <span className="text-[#94A3B8] block">FPO Membership</span>
+                        <strong className="text-white font-medium">
+                          {formData.agriculture.isFpoMember
+                            ? (() => {
+                                const parts: string[] = [];
+                                if (formData.agriculture.fpoPosition) parts.push(formData.agriculture.fpoPosition === 'Other' ? (formData.agriculture.fpoPositionOther || 'Other') : formData.agriculture.fpoPosition);
+                                if (formData.agriculture.fpoYearJoined) parts.push(`Joined ${formData.agriculture.fpoYearJoined}`);
+                                if (formData.agriculture.fpoFarmersConnected) parts.push(`${formData.agriculture.fpoFarmersConnected} Farmers`);
+                                if (formData.agriculture.fpoVillageCoverage) parts.push(formData.agriculture.fpoVillageCoverage);
+                                const detailsStr = parts.length > 0 ? ` (${parts.join(', ')})` : '';
+                                return `${formData.agriculture.fpoName || 'FPO'}${detailsStr}`;
+                              })()
+                            : 'No'}
+                        </strong>
+                      </div>
                     </div>
                   </div>
 
@@ -3598,12 +4037,28 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       <div><span className="text-[#94A3B8] block">Knows Drones?</span><strong className="text-white font-medium">{formData.agriDrone.knowsAgriDrones}</strong></div>
                       <div><span className="text-[#94A3B8] block">Attended Training?</span><strong className="text-white font-medium">{formData.agriDrone.attendedTraining ? `${formData.agriDrone.trainingDetails?.instituteName} (${formData.agriDrone.trainingDetails?.trainingYear})` : 'No'}</strong></div>
                       <div><span className="text-[#94A3B8] block">Possess RPC Certificate?</span><strong className="text-emerald-400 font-medium">{formData.agriDrone.hasRpc ? 'Yes (Certified Pilot)' : 'No'}</strong></div>
-                      <div><span className="text-[#94A3B8] block">Currently Owns Drone?</span><strong className="text-white font-medium">{formData.agriDrone.currentlyOwnsDrone ? `${formData.agriDrone.ownedDroneDetails?.manufacturer === 'Other' ? formData.agriDrone.ownedDroneDetails?.manufacturerOther : formData.agriDrone.ownedDroneDetails?.manufacturer} (${formData.agriDrone.ownedDroneDetails?.model || 'Drone'})` : 'No'}</strong></div>
+                      <div>
+                        <span className="text-[#94A3B8] block">Currently Owns Drone?</span>
+                        <strong className="text-white font-medium">
+                          {formData.agriDrone.currentlyOwnsDrone
+                            ? (() => {
+                                const mfr = formData.agriDrone.ownedDroneDetails?.manufacturer === 'Other'
+                                  ? formData.agriDrone.ownedDroneDetails?.manufacturerOther
+                                  : formData.agriDrone.ownedDroneDetails?.manufacturer;
+                                const mdl = formData.agriDrone.ownedDroneDetails?.model;
+                                if (mfr && mdl) return `${mfr} (${mdl})`;
+                                if (mfr) return mfr;
+                                if (mdl) return `Owned (${mdl})`;
+                                return 'Yes (Owned)';
+                              })()
+                            : 'No'}
+                        </strong>
+                      </div>
                     </div>
                   </div>
 
                   {/* CARD 5: ENTREPRENEUR PROGRAMS & EDP RESPONSES */}
-                  <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-3">
+                  <div className="p-[#111827] bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-3 p-4">
                     <div className="flex items-center justify-between border-b border-[#1F2937] pb-2.5">
                       <div className="flex items-center space-x-2">
                         <BookOpen className="w-4 h-4 text-[#0D9488]" />
@@ -3618,22 +4073,26 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       </button>
                     </div>
                     <div className="space-y-2 text-[13px]">
-                      <div><span className="text-[#94A3B8] block">Selected Programs ({formData.entrepreneurInterest.selectedPrograms.length})</span>
+                      <div>
+                        <span className="text-[#94A3B8] block">Selected Programs ({formData.entrepreneurInterest.selectedPrograms.length})</span>
                         <div className="flex flex-wrap gap-1 mt-1">
-                          {formData.entrepreneurInterest.selectedPrograms.map(p => (
-                            <span key={p} className="px-2 py-0.5 bg-[#182234] border border-[#1F2937] rounded-md text-[11px] text-emerald-300">{p}</span>
+                          {formData.entrepreneurInterest.selectedPrograms.map((p) => (
+                            <span key={p} className="px-2 py-0.5 bg-[#182234] border border-[#1F2937] rounded-md text-[11px] text-emerald-300">
+                              {p}
+                            </span>
                           ))}
                         </div>
                       </div>
-                      {formData.entrepreneurInterest.selectedPrograms.includes('Agri Drone Entrepreneur') && (
+                      {formData.entrepreneurInterest.selectedPrograms.some((p) => p === 'Agri Drone Entrepreneur' || p === 'Professional Drone Pilot') && (
                         <div className="pt-2 border-t border-[#1F2937] space-y-1">
-                          <span className="text-xs text-emerald-400 font-semibold uppercase tracking-wider block">🎓 Agri Drone EDP Workshop Details</span>
-                          <div className="grid grid-cols-2 gap-1 text-[12px] text-slate-300">
-                            <div>HQ Attendance: <strong className="text-white">{formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.canAttendWorkshop}</strong></div>
-                            <div>Post-Training Plan: <strong className="text-white">{formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.postTrainingPlan}</strong></div>
-                            <div>Business Model: <strong className="text-white">{formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.preferredBusinessModel}</strong></div>
-                            <div>MAHA-AGRI Partnership: <strong className="text-white">{formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.wantsMahaAgriAssistance}</strong></div>
-                            <div>Village Coverage: <strong className="text-white">{formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.villagesTargetToServe} Villages</strong></div>
+                          <span className="text-xs text-emerald-400 font-semibold uppercase tracking-wider block">🎓 Dynamic Module A: Agri Drone Enterprise</span>
+                          <div className="grid grid-cols-2 gap-1.5 text-[12px] text-slate-300">
+                            <div>Workshop Attendance: <strong className="text-white">{formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.canAttendWorkshop || 'Yes'}</strong></div>
+                            <div>Training Location: <strong className="text-white">{formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.preferredTrainingLocation || 'Taluka HQ'}</strong></div>
+                            <div>Post-Training Plan: <strong className="text-white">{formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.postTrainingPlan || 'Start My Own Agri Drone Spraying Business'}</strong></div>
+                            <div>Village Coverage: <strong className="text-white">{formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.villagesTargetToServe || '1–5 Villages'}</strong></div>
+                            <div>Work with MAHA-AGRI: <strong className="text-white">{formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.mahaAgriWorkingModel || 'MAHA-AGRI Business Partner'}</strong></div>
+                            <div>Business Operation: <strong className="text-white">{formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.droneBusinessOperation || 'I will operate the drone myself as an individual entrepreneur'}</strong></div>
                             <div>EDP Agreement: <strong className="text-emerald-400">{formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.agreeToCompleteEdpBeforeOnboarding || 'Yes'}</strong></div>
                           </div>
                         </div>
@@ -3657,8 +4116,9 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       </button>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-[13px]">
-                      <div><span className="text-[#94A3B8] block">Investment Limit</span><strong className="text-white font-medium">{formData.investment.capacity}</strong></div>
-                      <div><span className="text-[#94A3B8] block">Primary Source</span><strong className="text-white font-medium">{formData.investment.source}</strong></div>
+                      <div><span className="text-[#94A3B8] block">Initial Investment Capacity</span><strong className="text-white font-medium">{formData.investment.capacity}</strong></div>
+                      <div><span className="text-[#94A3B8] block">Primary Source of Initial Investment</span><strong className="text-white font-medium">{formData.investment.source}</strong></div>
+                      <div className="col-span-2"><span className="text-[#94A3B8] block">Financial Support Interested In</span><strong className="text-emerald-400 font-medium">{formData.investment.preferredFundingAssistance || 'Not Specified'}</strong></div>
                     </div>
                   </div>
 
@@ -3667,7 +4127,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                     <div className="flex items-center justify-between border-b border-[#1F2937] pb-2.5">
                       <div className="flex items-center space-x-2">
                         <FileText className="w-4 h-4 text-teal-400" />
-                        <h4 className="font-bold text-[14px] text-white">7. Financial Profile</h4>
+                        <h4 className="font-bold text-[14px] text-white">7. Loan & Financial Profile</h4>
                       </div>
                       <button
                         type="button"
@@ -3679,7 +4139,13 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-[13px]">
                       <div><span className="text-[#94A3B8] block">Running Loans?</span><strong className="text-white font-medium">{formData.financial.hasRunningLoan ? (formData.financial.runningLoanTypes?.join(', ') || 'Yes') : 'No'}</strong></div>
-                      <div><span className="text-[#94A3B8] block">CIBIL Score Range</span><strong className="text-emerald-400 font-medium">{formData.financial.cibilScore}</strong></div>
+                      {formData.financial.hasRunningLoan && (
+                        <div><span className="text-[#94A3B8] block">Monthly EMI Obligation</span><strong className="text-white font-medium">{formData.financial.monthlyEmiObligation || 'Not Specified'}</strong></div>
+                      )}
+                      <div><span className="text-[#94A3B8] block">Approximate CIBIL Score</span><strong className="text-emerald-400 font-medium">{formData.financial.cibilScore}</strong></div>
+                      <div><span className="text-[#94A3B8] block">CMEGP Benefit</span><strong className="text-white font-medium">{formData.financial.hasCmegpBenefit || 'No'}</strong></div>
+                      <div><span className="text-[#94A3B8] block">MAHA-DBT Machinery Benefit</span><strong className="text-white font-medium">{formData.financial.hasMahaDbtAgriMachineryBenefit || 'No'}</strong></div>
+                      <div><span className="text-[#94A3B8] block">Other Govt Scheme</span><strong className="text-white font-medium">{formData.financial.hasOtherGovtSchemeBenefit === 'Yes' ? `Yes (${formData.financial.otherGovtSchemeName || ''})` : (formData.financial.hasOtherGovtSchemeBenefit || 'No')}</strong></div>
                     </div>
                   </div>
 
@@ -3793,6 +4259,181 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                 </div>
               )}
 
+              {/* SECTION 9: AI ENTREPRENEUR INSIGHTS */}
+              {currentStep === 9 && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  {/* STEP HEADER */}
+                  <div className="p-3.5 bg-[#111827] rounded-[16px] border border-[#1F2937] flex items-center justify-between">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
+                        <Sparkles className="w-5 h-5 text-emerald-400" />
+                      </div>
+                      <div>
+                        <h3 className="font-extrabold text-[15px] text-white tracking-tight">🤖 Step 9 — AI Entrepreneur Insights</h3>
+                        <p className="text-[11.5px] text-[#94A3B8]">Admin & Applicant Evaluation Insights</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentStep(8)}
+                      className="px-2.5 py-1 bg-[#182234] hover:bg-[#1F2937] text-emerald-400 hover:text-white text-[12px] font-medium rounded-lg border border-[#1F2937] transition-all cursor-pointer"
+                    >
+                      Review Data
+                    </button>
+                  </div>
+
+                  {/* SECTION 1 — ENTREPRENEUR READINESS & SECTION 6 — PRIORITY */}
+                  {(() => {
+                    const v3Report = entrepreneurAssessmentService.generateV3IntelligenceReport(formData);
+                    return (
+                      <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-3">
+                        <div className="flex items-center justify-between border-b border-[#1F2937] pb-2">
+                          <span className="text-[11px] text-[#0D9488] font-bold uppercase tracking-wider block">SECTION 1 & 6 — READINESS & PRIORITY</span>
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                            priorityStatus === 'High Priority'
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                              : priorityStatus === 'Medium Priority'
+                              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                              : 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+                          }`}>
+                            {priorityStatus === 'High Priority' ? '🟢 High Priority' : priorityStatus === 'Medium Priority' ? '🟡 Medium Priority' : '🔴 Low Priority'}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 text-[13px]">
+                          <div className="p-3 bg-[#182234] rounded-xl border border-[#1F2937]">
+                            <span className="text-[#94A3B8] text-[11px] block">Readiness Score</span>
+                            <strong className="text-[20px] font-extrabold text-emerald-400">{v3Report.readinessScore}/100</strong>
+                          </div>
+                          <div className="p-3 bg-[#182234] rounded-xl border border-[#1F2937]">
+                            <span className="text-[#94A3B8] text-[11px] block">Readiness Label</span>
+                            <strong className="text-[15px] font-bold text-white mt-1 block">{v3Report.readinessLevel}</strong>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* SECTION 2 — ENTREPRENEUR PROFILE */}
+                  <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-2">
+                    <span className="text-[11px] text-[#0D9488] font-bold uppercase tracking-wider block border-b border-[#1F2937] pb-1.5">SECTION 2 — ENTREPRENEUR PROFILE</span>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {formData.entrepreneurInterest?.selectedPrograms?.length > 0 ? (
+                        formData.entrepreneurInterest.selectedPrograms.map((p) => (
+                          <span key={p} className="px-3 py-1 bg-[#182234] border border-[#1F2937] rounded-lg text-xs font-semibold text-emerald-300 flex items-center space-x-1">
+                            <span>{p === 'Agri Drone Entrepreneur' ? '🚁' : p === 'Professional Drone Pilot' ? '👨‍✈️' : p === 'MAHA-AGRI Krushi Seva Kendra' ? '🏬' : '🌾'}</span>
+                            <span>{p}</span>
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-slate-400">Not Specified</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* SECTION 3 — KEY STRENGTHS */}
+                  <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-2">
+                    <span className="text-[11px] text-[#0D9488] font-bold uppercase tracking-wider block border-b border-[#1F2937] pb-1.5">SECTION 3 — KEY STRENGTHS</span>
+                    <ul className="space-y-1.5 text-[12.5px] text-slate-200">
+                      {keyStrengths.map((str, idx) => (
+                        <li key={idx} className="flex items-start space-x-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                          <span>{str}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* SECTION 4 — PROFILE COMPLETION & MISSING INFORMATION */}
+                  <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-3">
+                    <span className="text-[11px] text-[#0D9488] font-bold uppercase tracking-wider block border-b border-[#1F2937] pb-2">SECTION 4 — PROFILE COMPLETION & MISSING INFORMATION</span>
+
+                    <div className="p-3 bg-[#182234] rounded-xl border border-[#1F2937]">
+                      <div className="flex justify-between items-center text-[14px] font-bold">
+                        <span className={profileCompletion.isComplete ? 'text-emerald-400' : 'text-amber-400'}>
+                          {profileCompletion.isComplete ? '🟢 Profile Complete — 100%' : `🟡 Profile Incomplete — ${profileCompletion.completionPercentage}%`}
+                        </span>
+                      </div>
+
+                      {!profileCompletion.isComplete && (
+                        <div className="mt-3 pt-2.5 border-t border-[#1F2937] space-y-1.5">
+                          <span className="text-xs font-semibold text-rose-400 block uppercase tracking-wide">Missing Information ({profileCompletion.missingFields.length}):</span>
+                          <ul className="space-y-1 text-[12px] text-slate-300">
+                            {profileCompletion.missingFields.map((item, idx) => (
+                              <li key={idx} className="flex items-center space-x-1.5 text-rose-300">
+                                <span className="text-rose-400 font-bold">•</span>
+                                <span>[{item.section}] {item.fieldLabel}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* SECTION 5 — FUNDING & SCHEME ASSESSMENT */}
+                  <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-3">
+                    <span className="text-[11px] text-[#0D9488] font-bold uppercase tracking-wider block border-b border-[#1F2937] pb-2">SECTION 5 — FUNDING & SCHEME ASSESSMENT</span>
+                    <div className="space-y-2 text-[12.5px]">
+                      <div className="flex items-center justify-between p-2.5 bg-[#182234] rounded-lg border border-[#1F2937]">
+                        <span className="text-slate-300 font-medium">CMEGP Scheme:</span>
+                        <span className={`font-semibold px-2 py-0.5 rounded text-[11px] ${
+                          cmegpAssessment === 'Potentially Suitable' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                          cmegpAssessment === 'Needs Verification' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                          'bg-slate-700 text-slate-300'
+                        }`}>{cmegpAssessment}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between p-2.5 bg-[#182234] rounded-lg border border-[#1F2937]">
+                        <span className="text-slate-300 font-medium">MAHA-DBT Scheme:</span>
+                        <span className={`font-semibold px-2 py-0.5 rounded text-[11px] ${
+                          mahaDbtAssessment === 'Potentially Suitable' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                          mahaDbtAssessment === 'Needs Verification' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                          'bg-slate-700 text-slate-300'
+                        }`}>{mahaDbtAssessment}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between p-2.5 bg-[#182234] rounded-lg border border-[#1F2937]">
+                        <span className="text-slate-300 font-medium">Bank Loan:</span>
+                        <span className={`font-semibold px-2 py-0.5 rounded text-[11px] ${
+                          bankLoanAssessment === 'Potentially Suitable' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                          bankLoanAssessment === 'Needs Verification' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                          'bg-slate-700 text-slate-300'
+                        }`}>{bankLoanAssessment}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SECTION 7 — RECOMMENDED ACTION */}
+                  <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-2">
+                    <span className="text-[11px] text-[#0D9488] font-bold uppercase tracking-wider block border-b border-[#1F2937] pb-1.5">SECTION 7 — RECOMMENDED ACTION</span>
+                    <div className="p-3 bg-[#182234] rounded-xl border border-[#059669]/40 flex items-center space-x-2.5">
+                      <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />
+                      <strong className="text-white text-[13.5px] font-bold">{recommendedAction}</strong>
+                    </div>
+                  </div>
+
+                  {/* SECTION 8 — NEXT STEPS */}
+                  <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-2.5">
+                    <span className="text-[11px] text-[#0D9488] font-bold uppercase tracking-wider block border-b border-[#1F2937] pb-1.5">SECTION 8 — NEXT STEPS</span>
+                    <div className="space-y-1.5 text-[12.5px]">
+                      <div className="p-2 bg-[#182234] rounded-lg border border-[#1F2937] flex items-center space-x-2">
+                        <span className="w-5 h-5 rounded-full bg-[#059669] text-white text-[11px] font-bold flex items-center justify-center">1</span>
+                        <span className="text-white font-medium">Document Verification</span>
+                      </div>
+                      <div className="p-2 bg-[#182234] rounded-lg border border-[#1F2937] flex items-center space-x-2">
+                        <span className="w-5 h-5 rounded-full bg-[#059669] text-white text-[11px] font-bold flex items-center justify-center">2</span>
+                        <span className="text-white font-medium">EDP / Required Training</span>
+                      </div>
+                      <div className="p-2 bg-[#182234] rounded-lg border border-[#1F2937] flex items-center space-x-2">
+                        <span className="w-5 h-5 rounded-full bg-[#059669] text-white text-[11px] font-bold flex items-center justify-center">3</span>
+                        <span className="text-white font-medium">Funding & Business Setup</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
             </main>
 
             {/* ========================================================================= */}
@@ -3827,7 +4468,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                   </div>
                 ) : (
                   <>
-                    <span>{currentStep === 8 ? 'Submit Assessment' : 'Next'}</span>
+                    <span>{currentStep === 9 ? 'Submit Assessment' : 'Next'}</span>
                     <span className="group-hover:translate-x-1.5 transition-transform duration-150 text-[18px]">→</span>
                   </>
                 )}
