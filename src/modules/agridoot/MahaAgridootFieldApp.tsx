@@ -4413,6 +4413,9 @@ export const MahaAgridootFieldApp: React.FC = () => {
               onSubmitSuccess={() => {
                 setIsEntrepreneurWizardOpen(false);
                 setIsRegWizardOpen(false);
+                setWizardSection(1);
+                setActiveMainView('DASHBOARD');
+                setActiveBottomTab('home');
                 triggerToast('🎉 Entrepreneur Assessment Profile Submitted Successfully!');
               }}
               triggerToast={triggerToast}

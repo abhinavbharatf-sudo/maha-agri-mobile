@@ -24,6 +24,7 @@ import {
   FileText,
   ClipboardCheck,
   User,
+  Home,
   Bell,
   Menu as MenuIcon,
   CheckSquare,
@@ -112,9 +113,10 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
     };
   });
 
-  // STEP NAVIGATION STATE (1 to 8)
+  // STEP NAVIGATION STATE (1 to 9)
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [slideDirection, setSlideDirection] = useState<'right' | 'left'>('right');
+  const [isEditingFromReview, setIsEditingFromReview] = useState<boolean>(false);
   const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submitStageText, setSubmitStageText] = useState<string>('Submit Assessment');
@@ -122,6 +124,25 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
   const [validationHeaderChip, setValidationHeaderChip] = useState<string | null>(null);
   const [isVerifiedByCandidate, setIsVerifiedByCandidate] = useState<boolean>(false);
   const [submissionResult, setSubmissionResult] = useState<{ candidateId: string; scores: InternalAdminAssessmentScores } | null>(null);
+  const [redirectCountdown, setRedirectCountdown] = useState<number>(15);
+
+  const handleNavigateHome = () => {
+    setIsSubmitted(false);
+    setCurrentStep(1);
+
+    if (onSubmitSuccess && submissionResult) {
+      onSubmitSuccess(submissionResult.candidateId, submissionResult.scores);
+    } else if (onBack) {
+      onBack();
+    }
+  };
+
+  const handleEditStep = (stepNumber: number) => {
+    setIsEditingFromReview(true);
+    setSlideDirection('left');
+    setCurrentStep(stepNumber);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   // Gat Parcel Inputs State (Farmer Registration alignment)
   const [parcelGatNoInput, setParcelGatNoInput] = useState('');
@@ -202,7 +223,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
     { id: 6, title: '💰 Investment Capacity', shortTitle: 'Investment', icon: Coins, description: 'Evaluate your financial readiness for entrepreneurship.' },
     { id: 7, title: '🏦 Loan & Financial Profile', shortTitle: 'Financial', icon: FileText, description: 'This helps us recommend suitable funding & subsidy options.' },
     { id: 8, title: '📋 Review & Submit', shortTitle: 'Review', icon: ClipboardCheck, description: 'Verify your information before submission.' },
-    { id: 9, title: '🤖 AI Entrepreneur Insights', shortTitle: 'AI Insights', icon: Sparkles, description: 'Admin-friendly evaluation of applicant readiness, strengths & completion status.' },
+    { id: 9, title: '✅ Application Submitted Successfully', shortTitle: 'Submitted', icon: CheckCircle2, description: 'Your application has been successfully submitted.' },
   ];
 
   // AGRI QUALIFICATIONS FOR LICENSE DISPLAY
@@ -214,6 +235,15 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
     'B.Tech Agriculture',
     'B.Tech Agricultural Engineering',
     'Veterinary',
+  ];
+
+  const AGRI_LICENSE_QUALIFICATIONS = [
+    'Agri Polytechnic',
+    'Diploma in Agriculture',
+    'B.Sc Agriculture',
+    'M.Sc Agriculture',
+    'B.Tech Agriculture',
+    'B.Tech Agricultural Engineering',
   ];
 
   const hasAgriDegree = AGRI_QUALIFICATIONS.includes(formData.education.qualification);
@@ -238,10 +268,35 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
     }
   }, [formData, isSubmitted]);
 
+  // 15-SECOND AUTOMATIC REDIRECT TIMER FOR STEP 9
+  useEffect(() => {
+    if (currentStep !== 9) {
+      setRedirectCountdown(15);
+      return;
+    }
+
+    setRedirectCountdown(15);
+
+    const timer = setInterval(() => {
+      setRedirectCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          handleNavigateHome();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, [currentStep]);
+
   // CALCULATE PROGRESS PERCENTAGE
   const progressPercentage = useMemo(() => {
-    return Math.round((currentStep / 9) * 100);
-  }, [currentStep]);
+    return Math.round((currentStep / SECTIONS.length) * 100);
+  }, [currentStep, SECTIONS.length]);
 
   // VALIDATION ERRORS STATE
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -270,16 +325,6 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
       clearError(fieldKeyToClear);
     }
   };
-
-  // QUALIFICATIONS THAT RENDER AGRICULTURE LICENSES IN UI
-  const AGRI_LICENSE_QUALIFICATIONS = [
-    'Agri Polytechnic',
-    'Diploma in Agriculture',
-    'B.Sc Agriculture',
-    'M.Sc Agriculture',
-    'B.Tech Agriculture',
-    'B.Tech Agricultural Engineering',
-  ];
 
   // ============================================================================
   // V5.4 CENTRALIZED VALIDATION ENGINE & UNRENDERED FIELD GUARD
@@ -359,33 +404,11 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
       }
 
       if (formData.occupation.occupation === 'Agriculture Professional') {
-        if (!formData.occupation.agriProfCategory) {
+        const agriCat = formData.occupation.agriProfCategory || 'Agriculture Consultant';
+        if (!agriCat) {
           rawErrors['agriProfCategory'] = 'Please select your Agriculture Professional specialty.';
-        } else if (formData.occupation.agriProfCategory === 'Other' && !formData.occupation.agriProfCategoryOther?.trim()) {
+        } else if (agriCat === 'Other' && !formData.occupation.agriProfCategoryOther?.trim()) {
           rawErrors['agriProfCategoryOther'] = 'Please specify your specialty.';
-        }
-      }
-
-      if (formData.occupation.occupation === 'Business Owner') {
-        if (!formData.occupation.businessDetails?.businessName?.trim()) {
-          rawErrors['businessName'] = 'Please enter Business Name.';
-        }
-        if (!formData.occupation.businessDetails?.category) {
-          rawErrors['businessCategory'] = 'Please select Business Category.';
-        } else if (formData.occupation.businessDetails?.category === 'Other' && !formData.occupation.businessDetails?.categoryOther?.trim()) {
-          rawErrors['categoryOther'] = 'Please specify business category.';
-        } else if (formData.occupation.businessDetails?.category === 'Agriculture') {
-          if (!formData.occupation.businessDetails?.agriSubCategory) {
-            rawErrors['agriSubCategory'] = 'Please select Agri Business Sub-Category.';
-          } else if (formData.occupation.businessDetails?.agriSubCategory === 'Other' && !formData.occupation.businessDetails?.agriSubCategoryOther?.trim()) {
-            rawErrors['agriSubCategoryOther'] = 'Please specify sub-category.';
-          }
-        }
-        if (!formData.occupation.businessDetails?.experience) {
-          rawErrors['businessExperience'] = 'Please select Business Experience.';
-        }
-        if (!formData.occupation.businessDetails?.status) {
-          rawErrors['businessStatus'] = 'Please select Business Status.';
         }
       }
 
@@ -524,53 +547,27 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
         rawErrors['selectedPrograms'] = 'Please select at least one Entrepreneur Program of interest.';
       }
 
-      if (formData.entrepreneurInterest.selectedPrograms.includes('Agri Drone Entrepreneur')) {
+      if (formData.entrepreneurInterest.selectedPrograms.includes('Agri Drone Entrepreneur') || formData.entrepreneurInterest.selectedPrograms.includes('Professional Drone Pilot')) {
         const edp = formData.entrepreneurInterest.moduleADrone?.edpWorkshop;
-        if (!edp?.canAttendWorkshop) {
-          rawErrors['canAttendWorkshop'] = 'Please select HQ Workshop Attendance.';
-        } else if (edp.canAttendWorkshop === 'No') {
-          if (!edp.cannotAttendReason) {
+        const canAttend = edp?.canAttendWorkshop || 'Yes';
+        const postPlan = edp?.postTrainingPlan || 'Start My Own Agri Drone Spraying Business';
+        const agree = edp?.agreeToCompleteEdpBeforeOnboarding || 'Yes';
+
+        if (canAttend === 'No') {
+          if (!edp?.cannotAttendReason) {
             rawErrors['cannotAttendReason'] = 'Please select reason for not attending.';
           } else if (edp.cannotAttendReason === 'Other' && !edp.cannotAttendReasonOther?.trim()) {
             rawErrors['cannotAttendReasonOther'] = 'Please specify your reason.';
           }
         }
 
-        if (!edp?.postTrainingPlan) {
+        if (!postPlan) {
           rawErrors['postTrainingPlan'] = 'Please select post-training business plan.';
-        } else if (edp.postTrainingPlan === 'Other' && !edp.postTrainingPlanOther?.trim()) {
+        } else if (postPlan === 'Other' && !edp?.postTrainingPlanOther?.trim()) {
           rawErrors['postTrainingPlanOther'] = 'Please specify your post-training plan.';
         }
 
-        if (!edp?.careerPathsInterest || edp.careerPathsInterest.length === 0) {
-          rawErrors['careerPathsInterest'] = 'Please select at least one career path interest.';
-        } else if (edp.careerPathsInterest.includes('Other') && !edp.careerPathsInterestOther?.trim()) {
-          rawErrors['careerPathsInterestOther'] = 'Please specify other career path.';
-        }
-
-        if (!edp?.preferredBusinessModel) {
-          rawErrors['preferredBusinessModel'] = 'Please select Preferred Business Model.';
-        }
-
-        if (!edp?.wantsMahaAgriAssistance) {
-          rawErrors['wantsMahaAgriAssistance'] = 'Please select MAHA-AGRI Partnership interest.';
-        } else if (edp.wantsMahaAgriAssistance === 'Yes') {
-          if (!edp.mahaAgriWorkingModel) {
-            rawErrors['mahaAgriWorkingModel'] = 'Please select Preferred Working Model.';
-          }
-        } else if (edp.wantsMahaAgriAssistance === 'No') {
-          if (!edp.wantsIndependentBusiness) {
-            rawErrors['wantsIndependentBusiness'] = 'Please select Independent Business intention.';
-          } else if (edp.wantsIndependentBusiness === 'Yes' && !edp.independentBusinessTimeline) {
-            rawErrors['independentBusinessTimeline'] = 'Please select launch timeline.';
-          }
-        }
-
-        if (!edp?.villagesTargetToServe) {
-          rawErrors['villagesTargetToServe'] = 'Please select target village coverage.';
-        }
-
-        if (!edp?.agreeToCompleteEdpBeforeOnboarding) {
+        if (!agree) {
           rawErrors['agreeToCompleteEdpBeforeOnboarding'] = 'EDP training agreement before onboarding is mandatory.';
         }
       }
@@ -595,10 +592,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
     }
 
     else if (step === 8) {
-      if (!formData.declaration.isInformationTrue ||
-          !formData.declaration.understandsNoGuarantee ||
-          !formData.declaration.agreesToAssessmentProcess ||
-          !isVerifiedByCandidate) {
+      if (!isVerifiedByCandidate) {
         rawErrors['declaration'] = 'You must verify and agree to all declaration statements before final submission.';
       }
     }
@@ -607,15 +601,10 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
     // V5.4 UNRENDERED FIELD GUARD & UNIVERSAL MESSAGE STANDARDIZATION
     // =========================================================================
     const activeErrors: Record<string, string> = {};
-    for (const [key] of Object.entries(rawErrors)) {
-      const fieldId = `field-${key}`;
-      const element = typeof document !== 'undefined' ? document.getElementById(fieldId) : null;
-      if (element) {
-        activeErrors[key] = 'This field is required.';
-      } else {
-        console.warn(
-          `🔴 [MAHA-AGRIDOOT Developer Warning] Validation mapped to non-rendered field: "${key}" (Step ${step}). Automatically skipped to prevent blocking navigation.`
-        );
+    for (const [key, msg] of Object.entries(rawErrors)) {
+      const domEl = typeof document !== 'undefined' ? document.getElementById(`field-${key}`) : null;
+      if (domEl || key === 'qualification' || key === 'occupation' || key === 'declaration' || key === 'agriActivities' || key === 'selectedPrograms') {
+        activeErrors[key] = msg || 'This field is required.';
       }
     }
 
@@ -679,212 +668,18 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
     }
   }, [currentStep, formData, validationErrors]);
 
-  // ============================================================================
-  // STEP 9: AI ENTREPRENEUR INSIGHTS CALCULATION ENGINE
-  // ============================================================================
-  const profileCompletion = useMemo(() => {
-    const missingFields: { section: string; fieldLabel: string }[] = [];
-    let totalApplicable = 0;
-    let completedCount = 0;
-
-    const checkField = (section: string, label: string, isPresent: boolean) => {
-      totalApplicable++;
-      if (isPresent) {
-        completedCount++;
-      } else {
-        missingFields.push({ section, fieldLabel: label });
-      }
-    };
-
-    // 1. Basic Info
-    checkField('Basic Info', 'Full Name', !!formData.fullName?.trim());
-    checkField('Basic Info', 'Mobile Number', !!formData.mobileNumber?.trim());
-    checkField('Basic Info', 'District', !!formData.district?.trim());
-    checkField('Basic Info', 'Taluka', !!formData.taluka?.trim());
-
-    // 2. Step 1: Education Profile
-    checkField('Step 1: Education', 'Highest Educational Qualification', !!formData.education?.qualification);
-    if (formData.education?.qualification === 'Other') {
-      checkField('Step 1: Education', 'Other Qualification Specification', !!formData.education?.qualificationOther?.trim());
-    }
-    if (formData.education?.isStudent) {
-      checkField('Step 1: Education', 'College / University Name', !!formData.education?.studentDetails?.collegeName?.trim());
-      const is10th = formData.education?.qualification === '10th Pass';
-      const is12th = formData.education?.qualification === '12th Pass';
-      const isAgriCourse = [
-        'Agri Polytechnic', 'Diploma in Agriculture', 'B.Sc Agriculture',
-        'M.Sc Agriculture', 'B.Tech Agriculture', 'B.Tech Agricultural Engineering'
-      ].includes(formData.education?.qualification || '');
-
-      if (!is10th && !isAgriCourse) {
-        checkField('Step 1: Education', 'Student Course Name', !!formData.education?.studentDetails?.courseName?.trim());
-      }
-      if (!is10th && !is12th) {
-        checkField('Step 1: Education', 'Student Current Year', !!formData.education?.studentDetails?.currentYear?.trim());
-      }
-    }
-
-    const AGRI_LIC_QUAL = [
-      'Agri Polytechnic', 'Diploma in Agriculture', 'B.Sc Agriculture',
-      'M.Sc Agriculture', 'B.Tech Agriculture', 'B.Tech Agricultural Engineering'
-    ];
-    if (AGRI_LIC_QUAL.includes(formData.education?.qualification || '')) {
-      checkField('Step 1: Education', 'Agri Licenses Selection', Array.isArray(formData.education?.agriLicenses) && formData.education.agriLicenses.length > 0);
-    }
-
-    // 3. Step 2: Occupation Profile
-    checkField('Step 2: Occupation', 'Current Occupation', !!formData.occupation?.occupation);
-    if (formData.occupation?.occupation === 'Other') {
-      checkField('Step 2: Occupation', 'Other Occupation Specification', !!formData.occupation?.occupationOther?.trim());
-    }
-    if (formData.occupation?.occupation === 'Agriculture Professional') {
-      checkField('Step 2: Occupation', 'Agri Professional Specialty', !!formData.occupation?.agriProfCategory);
-      if (formData.occupation?.agriProfCategory === 'Other') {
-        checkField('Step 2: Occupation', 'Other Agri Specialty Specification', !!formData.occupation?.agriProfCategoryOther?.trim());
-      }
-    }
-    if (formData.occupation?.occupation === 'Business Owner') {
-      checkField('Step 2: Occupation', 'Business Name', !!formData.occupation?.businessDetails?.businessName?.trim());
-      checkField('Step 2: Occupation', 'Business Category', !!formData.occupation?.businessDetails?.category);
-      if (formData.occupation?.businessDetails?.category === 'Agriculture') {
-        checkField('Step 2: Occupation', 'Agri Sub-Category', !!formData.occupation?.businessDetails?.agriSubCategory);
-      }
-      checkField('Step 2: Occupation', 'Business Experience', !!formData.occupation?.businessDetails?.experience);
-      checkField('Step 2: Occupation', 'Business Status', !!formData.occupation?.businessDetails?.status);
-    }
-
-    // 4. Step 3: Agriculture Profile
-    if (formData.agriculture?.isInvolvedInAgri) {
-      checkField('Step 3: Agriculture', 'Farming Activities', Array.isArray(formData.agriculture?.agriActivities) && formData.agriculture.agriActivities.length > 0);
-      checkField('Step 3: Agriculture', 'Farming Experience', !!formData.agriculture?.farmingExperience);
-    }
-    if (formData.agriculture?.ownsAgriLand) {
-      const area = parseFloat(formData.agriculture?.landDetails?.totalLandArea || '0');
-      checkField('Step 3: Agriculture', 'Total Agricultural Land Area', !isNaN(area) && area > 0);
-      checkField('Step 3: Agriculture', 'Land Measurement Unit', !!formData.agriculture?.landUnit);
-    }
-    if (formData.agriculture?.hasFarmerId && !formData.agriculture?.dontKnowFarmerId) {
-      checkField('Step 3: Agriculture', 'Farmer Registration Number', !!formData.agriculture?.farmerIdNumber?.trim());
-    }
-    if (formData.agriculture?.hasReceivedGovtBenefits) {
-      checkField('Step 3: Agriculture', 'Received Govt Schemes', Array.isArray(formData.agriculture?.govtSchemesReceived) && formData.agriculture.govtSchemesReceived.length > 0);
-    }
-    if (formData.agriculture?.isFpoMember) {
-      checkField('Step 3: Agriculture', 'FPO Name', !!formData.agriculture?.fpoName?.trim());
-    }
-
-    // 5. Step 4: Agri Drone Awareness & Ownership
-    checkField('Step 4: Drone', 'Agri Drone Awareness Level', !!formData.agriDrone?.knowsAgriDrones);
-    if (formData.agriDrone?.attendedTraining) {
-      checkField('Step 4: Drone', 'Training Institute Name', !!formData.agriDrone?.trainingDetails?.instituteName?.trim());
-      checkField('Step 4: Drone', 'Training Year', !!formData.agriDrone?.trainingDetails?.trainingYear);
-    }
-    if (formData.agriDrone?.currentlyOwnsDrone) {
-      checkField('Step 4: Drone', 'Owned Drone Capacity', !!formData.agriDrone?.ownedDroneDetails?.capacity);
-      checkField('Step 4: Drone', 'Owned Drone Category', !!formData.agriDrone?.ownedDroneDetails?.category);
-    } else if (formData.agriDrone?.wantsToPurchaseDrone) {
-      checkField('Step 4: Drone', 'Drone Purchase Method', !!formData.agriDrone?.purchaseMethod);
-      checkField('Step 4: Drone', 'Drone Purchase Timeline', !!formData.agriDrone?.purchaseTimeline);
-    }
-
-    // 6. Step 5: Entrepreneur Programs & Module A
-    checkField('Step 5: Programs', 'Selected Entrepreneur Programs', Array.isArray(formData.entrepreneurInterest?.selectedPrograms) && formData.entrepreneurInterest.selectedPrograms.length > 0);
-    if (formData.entrepreneurInterest?.selectedPrograms?.includes('Agri Drone Entrepreneur')) {
-      const edp = formData.entrepreneurInterest?.moduleADrone?.edpWorkshop;
-      checkField('Step 5: Programs (Module A)', 'Workshop Attendance', !!edp?.canAttendWorkshop);
-      checkField('Step 5: Programs (Module A)', 'Post-Training Business Plan', !!edp?.postTrainingPlan);
-      checkField('Step 5: Programs (Module A)', 'Career Paths Interest', Array.isArray(edp?.careerPathsInterest) && edp.careerPathsInterest.length > 0);
-      checkField('Step 5: Programs (Module A)', 'Preferred Business Model', !!edp?.preferredBusinessModel);
-      checkField('Step 5: Programs (Module A)', 'MAHA-AGRI Partnership Interest', !!edp?.wantsMahaAgriAssistance);
-      checkField('Step 5: Programs (Module A)', 'Target Village Coverage', !!edp?.villagesTargetToServe);
-      checkField('Step 5: Programs (Module A)', 'EDP Training Agreement', !!edp?.agreeToCompleteEdpBeforeOnboarding);
-    }
-
-    // 7. Step 6: Investment Capacity
-    checkField('Step 6: Investment', 'Initial Investment Capacity', !!formData.investment?.capacity);
-    checkField('Step 6: Investment', 'Primary Investment Source', !!formData.investment?.source);
-
-    // 8. Step 7: Loan & Financial Profile
-    if (formData.financial?.hasRunningLoan) {
-      checkField('Step 7: Financial', 'Running Loan Types', Array.isArray(formData.financial?.runningLoanTypes) && formData.financial.runningLoanTypes.length > 0);
-    }
-    checkField('Step 7: Financial', 'CIBIL Score', !!formData.financial?.cibilScore);
-
-    // 9. Step 8: Declarations
-    checkField('Step 8: Review', 'Information True Declaration', !!formData.declaration?.isInformationTrue);
-    checkField('Step 8: Review', 'No Guarantee Acknowledgement', !!formData.declaration?.understandsNoGuarantee);
-    checkField('Step 8: Review', 'Assessment Process Agreement', !!formData.declaration?.agreesToAssessmentProcess);
-    checkField('Step 8: Review', 'Candidate Verification Checkbox', !!isVerifiedByCandidate);
-
-    const completionPercentage = totalApplicable > 0 ? Math.round((completedCount / totalApplicable) * 100) : 100;
-    const isComplete = missingFields.length === 0;
-
-    return { completionPercentage, isComplete, missingFields };
-  }, [formData, isVerifiedByCandidate]);
-
-  const keyStrengths = useMemo(() => {
-    const list: string[] = [];
-    if (formData.investment?.capacity && formData.investment.capacity !== 'Up to ₹1 Lakh') {
-      list.push('Strong investment readiness');
-    }
-    if (formData.entrepreneurInterest?.selectedPrograms?.length > 0) {
-      list.push('Clear business intent');
-    }
-    if (formData.entrepreneurInterest?.moduleADrone?.edpWorkshop?.canAttendWorkshop === 'Yes' || formData.agriDrone?.attendedTraining) {
-      list.push('Willingness to complete required training');
-    }
-    if (formData.financial?.cibilScore === 'Above 750' || formData.financial?.cibilScore === '700–750') {
-      list.push('High creditworthiness & strong financial record');
-    }
-    if (formData.agriculture?.isInvolvedInAgri || formData.education?.qualification?.includes('Agri')) {
-      list.push('Active agricultural domain background');
-    }
-    return list.slice(0, 3);
-  }, [formData]);
-
-  const cmegpAssessment = useMemo(() => {
-    if (formData.financial?.hasCmegpBenefit === 'Yes') return 'Needs Verification';
-    if (formData.investment?.capacity && formData.investment.capacity !== 'Up to ₹1 Lakh') return 'Potentially Suitable';
-    return 'Not Indicated';
-  }, [formData]);
-
-  const mahaDbtAssessment = useMemo(() => {
-    if (formData.financial?.hasMahaDbtAgriMachineryBenefit === 'Yes') return 'Needs Verification';
-    if (formData.agriculture?.ownsAgriLand || formData.agriculture?.hasFarmerId) return 'Potentially Suitable';
-    return 'Not Indicated';
-  }, [formData]);
-
-  const bankLoanAssessment = useMemo(() => {
-    const score = formData.financial?.cibilScore;
-    if (score === 'Above 750' || score === '700–750' || score === '650–700') return 'Potentially Suitable';
-    if (score === '600–650' || score === 'Below 600') return 'Needs Verification';
-    return 'Not Indicated';
-  }, [formData]);
-
-  const priorityStatus = useMemo(() => {
-    const report = entrepreneurAssessmentService.generateV3IntelligenceReport(formData);
-    if (profileCompletion.isComplete && report.readinessScore >= 75) return 'High Priority';
-    if (profileCompletion.completionPercentage >= 80 && report.readinessScore >= 55) return 'Medium Priority';
-    return 'Low Priority';
-  }, [formData, profileCompletion]);
-
-  const recommendedAction = useMemo(() => {
-    if (!profileCompletion.isComplete) return 'Needs Additional Information';
-    const report = entrepreneurAssessmentService.generateV3IntelligenceReport(formData);
-    if (report.readinessScore >= 80) return 'Recommended for Document Verification';
-    if (formData.entrepreneurInterest?.selectedPrograms?.includes('Agri Drone Entrepreneur') && !formData.agriDrone?.hasRpc) {
-      return 'Recommended for Training Assessment';
-    }
-    return 'Hold for Further Verification';
-  }, [formData, profileCompletion]);
-
   const handleNextStep = () => {
     if (validateStep(currentStep)) {
-      if (currentStep < 9) {
+      if (isEditingFromReview && currentStep < 8) {
+        setIsEditingFromReview(false);
+        setSlideDirection('right');
+        setCurrentStep(8);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else if (currentStep < 8) {
         setSlideDirection('right');
         setCurrentStep((prev) => prev + 1);
         window.scrollTo({ top: 0, behavior: 'smooth' });
-      } else if (currentStep === 9) {
+      } else if (currentStep === 8) {
         handleFinalSubmit();
       }
     }
@@ -906,7 +701,19 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
   };
 
   const handleFinalSubmit = () => {
-    if (!validateStep(8)) {
+    if (isSubmitting) return;
+
+    if (isVerifiedByCandidate) {
+      updateFormSection('declaration', (prev) => ({
+        ...prev,
+        isInformationTrue: true,
+        understandsNoGuarantee: true,
+        agreesToAssessmentProcess: true,
+      }));
+    }
+
+    if (!isVerifiedByCandidate) {
+      triggerToast('⚠️ Please check the verification checkbox to submit.');
       setCurrentStep(8);
       return;
     }
@@ -915,9 +722,8 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
     setSubmitStageText('Submitting Application...');
 
     try {
-      const year = new Date().getFullYear();
-      const randomNum = Math.floor(100000 + Math.random() * 900000);
-      const candidateId = `MAG-${year}-${randomNum}`;
+      const randomNum = Math.floor(10000000 + Math.random() * 90000000);
+      const candidateId = `MAHA-AGRI-EDP-${randomNum}`;
       const scores = entrepreneurAssessmentService.calculateInternalAdminScores(formData);
 
       // 1. Persist submitted assessment to local storage / service engine
@@ -940,8 +746,8 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
         setIsSubmitting(false);
         setIsSubmitted(true);
         setSubmissionResult({ candidateId, scores });
+        setCurrentStep(9);
         window.scrollTo({ top: 0, behavior: 'smooth' });
-        if (onSubmitSuccess) onSubmitSuccess(candidateId, scores);
       }, 1400);
     } catch (err) {
       console.error('🔴 Submission Pipeline Failure:', err);
@@ -958,700 +764,94 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
       <div className="max-w-[420px] mx-auto min-h-screen bg-[#0B1220] flex flex-col relative shadow-2xl overflow-x-hidden border-x border-[#1F2937]/40">
         
         {/* ========================================================================= */}
-        {/* V6 — FINAL EDP WORKSHOP REGISTRATION & SUCCESS EXPERIENCE DASHBOARD */}
+        {/* MINIMAL ENTERPRISE WIZARD HEADER */}
         {/* ========================================================================= */}
-        {isSubmitted && submissionResult ? (
-          <div className="min-h-screen flex flex-col justify-between p-4 sm:p-6 bg-[#0B1220] text-slate-100 animate-in fade-in duration-300 relative space-y-5">
-            
-            {/* 1. SUCCESS HERO SECTION (EDP REGISTRATION TERMINOLOGY) */}
-            <div className="text-center pt-2 space-y-3">
-              <div className="relative inline-block">
-                <div className="absolute -inset-2 rounded-full bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500 opacity-70 blur-md animate-pulse" />
-                <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-[#059669] to-[#0D9488] border-4 border-white/20 p-2 mx-auto flex items-center justify-center shadow-2xl relative z-10 animate-bounce">
-                  <CheckCircle2 className="w-11 h-11 text-white stroke-[2.5]" />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <div className="inline-flex items-center space-x-1.5 px-3 py-0.5 bg-emerald-500/20 border border-emerald-500/50 rounded-full text-emerald-300 text-[11px] font-bold uppercase tracking-wider">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>EDP Registration Completed</span>
-                </div>
-                <h1 className="font-extrabold text-[24px] sm:text-[27px] text-white tracking-tight leading-tight">
-                  Registration & Assessment Completed Successfully
-                </h1>
-              </div>
-            </div>
-
-            {/* 2. SUCCESS MESSAGE CARD */}
-            <div className="p-4 bg-gradient-to-r from-[#059669]/20 via-[#0D9488]/15 to-[#111827] rounded-[18px] border border-[#059669]/40 space-y-2 text-left shadow-lg">
-              <div className="flex items-center space-x-2">
-                <Award className="w-4.5 h-4.5 text-emerald-400 shrink-0" />
-                <strong className="text-[12.5px] text-emerald-300 font-bold uppercase tracking-wide">MAHA-AGRI EDP – Agri Drone Program</strong>
-              </div>
-              <p className="text-[12.5px] text-slate-200 leading-relaxed font-normal">
-                Thank you for registering for the <strong className="text-white font-semibold">MAHA-AGRI Entrepreneur Development Program (EDP – Agri Drone)</strong>. Your Entrepreneur Assessment has been completed successfully and securely recorded in the MAHA-AGRI Enterprise Assessment System. Our team will contact you regarding workshop scheduling and the next steps.
-              </p>
-            </div>
-
-            {/* 3, 14, 15 & 17. OFFICIAL GOVERNMENT RECEIPT CARD WITH QR CODE & COPY ID */}
-            <div className="p-4 sm:p-5 bg-[#111827] rounded-[20px] border border-[#1F2937] text-left space-y-3.5 shadow-xl">
-              <div className="flex justify-between items-center border-b border-[#1F2937] pb-3">
-                <div>
-                  <span className="text-[10px] text-[#0D9488] font-extrabold uppercase tracking-widest block">Official Digital Acknowledgement</span>
-                  <h3 className="font-bold text-[16px] text-white tracking-tight">Application Receipt</h3>
-                </div>
-                <span className="px-2.5 py-1 bg-emerald-500/20 border border-emerald-500/60 rounded-full text-emerald-300 font-bold text-xs flex items-center space-x-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  <span>Submitted Successfully</span>
-                </span>
-              </div>
-
-              {/* PROMINENT APPLICATION ID + COPY BUTTON */}
-              <div className="p-3.5 bg-[#182234] rounded-xl border border-emerald-500/40 flex items-center justify-between">
-                <div>
-                  <span className="text-[#94A3B8] text-[10px] block font-bold uppercase tracking-wider">Application ID</span>
-                  <strong className="text-emerald-400 font-mono text-[18px] font-extrabold tracking-wide">{submissionResult.candidateId}</strong>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText(submissionResult.candidateId);
-                    triggerToast('✓ Application ID Copied to Clipboard');
-                  }}
-                  className="px-3 py-1.5 bg-[#059669]/20 hover:bg-[#059669]/40 border border-[#059669] rounded-lg text-emerald-300 text-[12px] font-semibold flex items-center space-x-1.5 transition-all cursor-pointer"
-                >
-                  <Copy className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Copy ID</span>
-                </button>
-              </div>
-
-              {/* RECEIPT DETAILS MATRIX */}
-              <div className="grid grid-cols-2 gap-2 text-[12px]">
-                <div className="p-2.5 bg-[#182234] rounded-xl border border-[#1F2937]">
-                  <span className="text-[#94A3B8] block text-[10px] uppercase font-medium">Registration Date & Time</span>
-                  <strong className="text-slate-300 font-mono text-[11px]">{new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</strong>
-                </div>
-                <div className="p-2.5 bg-[#182234] rounded-xl border border-[#1F2937]">
-                  <span className="text-[#94A3B8] block text-[10px] uppercase font-medium">Candidate Name</span>
-                  <strong className="text-white font-semibold text-[12.5px]">{formData.fullName}</strong>
-                </div>
-                <div className="p-2.5 bg-[#182234] rounded-xl border border-[#1F2937]">
-                  <span className="text-[#94A3B8] block text-[10px] uppercase font-medium">Mobile Number</span>
-                  <strong className="text-white font-mono font-semibold text-[12.5px]">+91 {formData.mobileNumber}</strong>
-                </div>
-                <div className="p-2.5 bg-[#182234] rounded-xl border border-[#1F2937]">
-                  <span className="text-[#94A3B8] block text-[10px] uppercase font-medium">District & Taluka</span>
-                  <strong className="text-white font-medium">{formData.district}, {formData.taluka}</strong>
-                </div>
-                <div className="p-2.5 bg-[#182234] rounded-xl border border-[#1F2937]">
-                  <span className="text-[#94A3B8] block text-[10px] uppercase font-medium">Village</span>
-                  <strong className="text-white font-medium">{formData.village}</strong>
-                </div>
-                <div className="p-2.5 bg-[#182234] rounded-xl border border-[#1F2937]">
-                  <span className="text-[#94A3B8] block text-[10px] uppercase font-medium">Registration Mode</span>
-                  <strong className="text-cyan-400 font-semibold text-[11px]">Staff Assisted Registration</strong>
-                </div>
-                <div className="p-2.5 bg-[#182234] rounded-xl border border-[#1F2937]">
-                  <span className="text-[#94A3B8] block text-[10px] uppercase font-medium">Application Status</span>
-                  <strong className="text-emerald-400 font-semibold text-[11px]">Submitted Successfully</strong>
-                </div>
-                <div className="p-2.5 bg-[#182234] rounded-xl border border-[#1F2937]">
-                  <span className="text-[#94A3B8] block text-[10px] uppercase font-medium">Current Stage</span>
-                  <strong className="text-amber-400 font-semibold text-[11px]">Awaiting Workshop Processing</strong>
-                </div>
-              </div>
-
-              {/* QR VERIFICATION BOX */}
-              <div className="p-3 bg-[#182234] rounded-xl border border-[#1F2937] flex items-center space-x-3">
-                <div className="w-13 h-13 bg-white p-1 rounded-lg shrink-0 flex items-center justify-center shadow-md">
-                  <QrCode className="w-10 h-10 text-slate-900" />
-                </div>
-                <div className="text-left space-y-0.5">
-                  <span className="text-[11px] text-emerald-400 font-bold uppercase tracking-wider block">Official QR Verification</span>
-                  <p className="text-[10.5px] text-slate-300 leading-snug">
-                    Scan to validate registration authenticity & track candidate EDP status in MAHA-AGRI System.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* 4. WORKSHOP REGISTRATION SUMMARY */}
-            <div className="p-4 bg-[#111827] rounded-[20px] border border-[#1F2937] space-y-3 text-left shadow-lg">
-              <h4 className="font-bold text-[14px] text-white flex items-center space-x-2 border-b border-[#1F2937] pb-2">
-                <Calendar className="w-4 h-4 text-emerald-400" />
-                <span>Workshop Registration Summary</span>
-              </h4>
-              <div className="grid grid-cols-2 gap-2 text-[12px]">
-                <div className="p-2.5 bg-[#182234] rounded-xl border border-[#1F2937]">
-                  <span className="text-[#94A3B8] block text-[10px] uppercase font-medium">Program</span>
-                  <strong className="text-white font-semibold">EDP – Agri Drone</strong>
-                </div>
-                <div className="p-2.5 bg-[#182234] rounded-xl border border-[#1F2937]">
-                  <span className="text-[#94A3B8] block text-[10px] uppercase font-medium">Workshop Duration</span>
-                  <strong className="text-emerald-400 font-bold">2 Days Practical EDP</strong>
-                </div>
-                <div className="p-2.5 bg-[#182234] rounded-xl border border-[#1F2937]">
-                  <span className="text-[#94A3B8] block text-[10px] uppercase font-medium">Preferred Training Location</span>
-                  <strong className="text-white font-medium">{formData.district} District HQ</strong>
-                </div>
-                <div className="p-2.5 bg-[#182234] rounded-xl border border-[#1F2937]">
-                  <span className="text-[#94A3B8] block text-[10px] uppercase font-medium">Business Goal</span>
-                  <strong className="text-white font-medium">{formData.entrepreneurInterest?.selectedPrograms?.[0] || 'Start Drone Spray Business'}</strong>
-                </div>
-                <div className="p-2.5 bg-[#182234] rounded-xl border border-[#1F2937]">
-                  <span className="text-[#94A3B8] block text-[10px] uppercase font-medium">Preferred Funding</span>
-                  <strong className="text-white font-medium">{formData.investment?.capacity || 'Up to ₹5 Lakh'} ({formData.investment?.source || 'Self / Loan'})</strong>
-                </div>
-                <div className="p-2.5 bg-[#182234] rounded-xl border border-[#1F2937]">
-                  <span className="text-[#94A3B8] block text-[10px] uppercase font-medium">Need Business Support</span>
-                  <strong className="text-emerald-400 font-bold">Yes (Govt Facilitation)</strong>
-                </div>
-              </div>
-            </div>
-
-            {/* 18. CANDIDATE PROFILE SNAPSHOT */}
-            <div className="p-4 bg-[#111827] rounded-[20px] border border-[#1F2937] space-y-3 text-left shadow-lg">
-              <h4 className="font-bold text-[14px] text-white flex items-center space-x-2 border-b border-[#1F2937] pb-2">
-                <User className="w-4 h-4 text-cyan-400" />
-                <span>Entrepreneur Profile Snapshot</span>
-              </h4>
-              <div className="grid grid-cols-2 gap-2 text-[12px]">
-                <div className="p-2 bg-[#182234] rounded-xl border border-[#1F2937]">
-                  <span className="text-slate-400 block text-[10px]">Education</span>
-                  <strong className="text-white">{formData.education?.qualification || 'Not Specified'}</strong>
-                </div>
-                <div className="p-2 bg-[#182234] rounded-xl border border-[#1F2937]">
-                  <span className="text-slate-400 block text-[10px]">Occupation</span>
-                  <strong className="text-white">{formData.occupation?.occupation || 'Not Specified'}</strong>
-                </div>
-                <div className="p-2 bg-[#182234] rounded-xl border border-[#1F2937]">
-                  <span className="text-slate-400 block text-[10px]">Agri Background</span>
-                  <strong className="text-emerald-400">{formData.agriculture?.isInvolvedInAgri ? 'Active Farming' : 'Non-Farming'}</strong>
-                </div>
-                <div className="p-2 bg-[#182234] rounded-xl border border-[#1F2937]">
-                  <span className="text-slate-400 block text-[10px]">Drone Awareness</span>
-                  <strong className="text-white">{formData.agriDrone?.knowsAgriDrones === 'Yes' ? 'Aware & Trained' : 'Basic'}</strong>
-                </div>
-                <div className="p-2 bg-[#182234] rounded-xl border border-[#1F2937]">
-                  <span className="text-slate-400 block text-[10px]">Preferred Enterprise</span>
-                  <strong className="text-white">{formData.entrepreneurInterest?.selectedPrograms?.[0] || 'Agri Drone Entrepreneur'}</strong>
-                </div>
-                <div className="p-2 bg-[#182234] rounded-xl border border-[#1F2937]">
-                  <span className="text-slate-400 block text-[10px]">Working Area</span>
-                  <strong className="text-white">{formData.taluka}, {formData.district}</strong>
-                </div>
-              </div>
-            </div>
-
-            {/* 5. ENTREPRENEUR PROFILE SUMMARY (CLEAN SUMMARY WITHOUT INTERNAL AI SCORES) */}
-            <div className="p-4 bg-[#111827] rounded-[20px] border border-[#1F2937] space-y-3 text-left">
-              <div className="flex justify-between items-center border-b border-[#1F2937] pb-2">
-                <div>
-                  <span className="text-[10px] text-[#0D9488] font-bold uppercase tracking-widest block">Enterprise Verification</span>
-                  <h4 className="font-bold text-[14px] text-white">Entrepreneur Profile Summary</h4>
-                </div>
-                <span className="px-2.5 py-0.5 bg-[#059669]/20 border border-[#059669] rounded-full text-emerald-300 font-semibold text-[11px]">
-                  Verified Status
-                </span>
-              </div>
-
-              <div className="space-y-2 text-[12px]">
-                <div className="p-2.5 bg-[#182234] rounded-xl border border-[#1F2937] flex items-center justify-between">
-                  <span className="text-slate-300 font-medium">Government Scheme Mapping</span>
-                  <span className="text-emerald-400 font-bold flex items-center space-x-1">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Completed</span>
-                  </span>
-                </div>
-                <div className="p-2.5 bg-[#182234] rounded-xl border border-[#1F2937] flex items-center justify-between">
-                  <span className="text-slate-300 font-medium">Training Assessment</span>
-                  <span className="text-emerald-400 font-bold flex items-center space-x-1">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Completed</span>
-                  </span>
-                </div>
-                <div className="p-2.5 bg-[#182234] rounded-xl border border-[#1F2937] flex items-center justify-between">
-                  <span className="text-slate-300 font-medium">Business Profiling</span>
-                  <span className="text-emerald-400 font-bold flex items-center space-x-1">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Completed</span>
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* 6. BUSINESS RECOMMENDATION (WITHOUT EXPOSING MATCH PERCENTAGES) */}
-            <div className="p-4 bg-[#111827] rounded-[20px] border border-[#1F2937] space-y-2.5 text-left">
-              <h4 className="font-bold text-[14px] text-white flex items-center space-x-2 border-b border-[#1F2937] pb-2">
-                <Briefcase className="w-4 h-4 text-emerald-400" />
-                <span>Business Recommendation Portfolio</span>
-              </h4>
-              <div className="space-y-2 text-[12.5px]">
-                <div className="p-2.5 bg-[#182234] rounded-xl border border-emerald-500/40">
-                  <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider block">Primary Recommended Enterprise</span>
-                  <strong className="text-white text-[13.5px] block">{formData.entrepreneurInterest?.selectedPrograms?.[0] || 'Agri Drone Entrepreneurship'}</strong>
-                </div>
-                <div className="p-2.5 bg-[#182234] rounded-xl border border-[#1F2937]">
-                  <span className="text-[10px] text-teal-400 font-bold uppercase tracking-wider block">Secondary Suitable Enterprise</span>
-                  <strong className="text-white text-[13px] block">MAHA-AGRI Krushi Seva Kendra</strong>
-                </div>
-                <div className="p-2.5 bg-[#182234] rounded-xl border border-[#1F2937]">
-                  <span className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider block">Additional Business Opportunity</span>
-                  <strong className="text-white text-[13px] block">Soil Testing & Diagnostics Unit</strong>
-                </div>
-              </div>
-            </div>
-
-            {/* 7. POTENTIAL GOVERNMENT SCHEMES */}
-            <div className="p-4 bg-[#111827] rounded-[20px] border border-[#1F2937] space-y-2.5 text-left">
-              <h4 className="font-bold text-[14px] text-white flex items-center space-x-2 border-b border-[#1F2937] pb-2">
-                <Coins className="w-4 h-4 text-amber-400" />
-                <span>Potential Government Schemes</span>
-              </h4>
-              <div className="grid grid-cols-2 gap-2 text-[12px]">
-                {['MAHA-DBT Scheme', 'CMEGP Scheme', 'PMEGP Scheme', 'Mudra Loan', 'SMAM Scheme', 'PMFME Scheme'].map((sch) => (
-                  <div key={sch} className="p-2 bg-[#182234] rounded-xl border border-[#1F2937] flex items-center space-x-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                    <span className="text-slate-200 font-medium">{sch}</span>
-                  </div>
-                ))}
-              </div>
-              <p className="text-[10.5px] text-[#94A3B8] italic pt-1 border-t border-[#1F2937]">
-                * Final eligibility depends upon Government guidelines, departmental verification, and document validation.
-              </p>
-            </div>
-
-            {/* 8. RECOMMENDED TRAINING (PRIORITY BADGES) */}
-            <div className="p-4 bg-[#111827] rounded-[20px] border border-[#1F2937] space-y-2.5 text-left">
-              <h4 className="font-bold text-[14px] text-white flex items-center space-x-2 border-b border-[#1F2937] pb-2">
-                <GraduationCap className="w-4 h-4 text-emerald-400" />
-                <span>Recommended Capacity Building Training</span>
-              </h4>
-              <div className="space-y-2 text-[12px]">
-                {[
-                  { name: '2-Day Practical EDP Workshop', priority: 'Mandatory', badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500' },
-                  { name: 'DGCA Approved Remote Pilot Training (RPC)', priority: 'High Priority', badgeColor: 'bg-cyan-500/20 text-cyan-300 border-cyan-500' },
-                  { name: 'Agri Business Management & Licensing', priority: 'Recommended', badgeColor: 'bg-teal-500/20 text-teal-300 border-teal-500' },
-                  { name: 'Financial Management & Subsidy Filings', priority: 'Recommended', badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500' },
-                ].map((tr) => (
-                  <div key={tr.name} className="p-2.5 bg-[#182234] rounded-xl border border-[#1F2937] flex items-center justify-between">
-                    <strong className="text-white text-[12.5px] block">{tr.name}</strong>
-                    <span className={`px-2.5 py-0.5 font-bold text-[10px] rounded-md border ${tr.badgeColor}`}>
-                      {tr.priority}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* 12. WORKSHOP BATCH ALLOCATION CARD */}
-            <div className="p-4 bg-[#111827] rounded-[20px] border border-[#1F2937] space-y-2.5 text-left">
-              <div className="flex justify-between items-center border-b border-[#1F2937] pb-2">
-                <h4 className="font-bold text-[14px] text-white flex items-center space-x-2">
-                  <Building className="w-4 h-4 text-amber-400" />
-                  <span>Workshop Batch Allocation</span>
-                </h4>
-                <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500 rounded text-[10px] font-bold">
-                  Pending Assignment
-                </span>
-              </div>
-              <div className="p-3 bg-[#182234] rounded-xl border border-[#1F2937] space-y-1.5 text-[12px]">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Assigned Batch:</span>
-                  <strong className="text-white">{formData.district} District EDP Batch 01 (Upcoming)</strong>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Venue:</span>
-                  <strong className="text-white">District Agriculture Office / KVK</strong>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Reporting Time:</span>
-                  <strong className="text-slate-300">09:30 AM</strong>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Coordinator Contact:</span>
-                  <strong className="text-emerald-400">District EDP Desk</strong>
-                </div>
-              </div>
-            </div>
-
-            {/* 9. WORKSHOP JOURNEY TIMELINE */}
-            <div className="p-4 bg-[#111827] rounded-[20px] border border-[#1F2937] space-y-2.5 text-left">
-              <div className="flex justify-between items-center border-b border-[#1F2937] pb-2">
-                <h4 className="font-bold text-[14px] text-white">🛣️ Workshop Journey</h4>
-                <span className="text-[11px] text-cyan-400 font-semibold">Active Workflow</span>
-              </div>
-              <div className="space-y-2 text-[12px]">
-                {[
-                  { step: '1. Registration Completed', status: 'Completed ✓', done: true },
-                  { step: '2. Assessment Completed', status: 'Completed ✓', done: true },
-                  { step: '3. Workshop Batch Allocation', status: 'In Progress ⏳', active: true },
-                  { step: '4. Workshop Confirmation', status: 'Upcoming' },
-                  { step: '5. Workshop Attendance', status: 'Upcoming' },
-                  { step: '6. Business Guidance', status: 'Upcoming' },
-                  { step: '7. Government Scheme Assistance', status: 'Upcoming' },
-                  { step: '8. Enterprise Launch Support', status: 'Final Goal 🎯' },
-                ].map((item, idx) => (
-                  <div
-                    key={idx}
-                    className={`p-2.5 rounded-xl border flex items-center justify-between transition-all ${
-                      item.done
-                        ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300'
-                        : item.active
-                        ? 'bg-[#182234] border-[#06B6D4] text-white shadow-lg ring-1 ring-[#06B6D4] animate-pulse'
-                        : 'bg-[#182234]/50 border-[#1F2937] text-slate-400'
-                    }`}
-                  >
-                    <span className="font-semibold">{item.step}</span>
-                    <span className="font-bold text-[11px]">{item.status}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* 10. PROCESSING TIMELINE CARD (CONFIGURABLE) */}
-            <div className="p-3 bg-[#182234] rounded-[16px] border border-[#1F2937] flex items-center justify-between text-[12.5px]">
-              <div className="flex items-center space-x-2">
-                <Clock className="w-4 h-4 text-cyan-400" />
-                <span className="text-slate-300">Expected Processing Time:</span>
-              </div>
-              <strong className="text-cyan-400 font-bold">{CONFIGURABLE_ELIGIBILITY_RULES.expectedProcessingTime || '3–7 Working Days'}</strong>
-            </div>
-
-            {/* 11. HELP & SUPPORT CARD */}
-            <div className="p-4 bg-[#111827] rounded-[20px] border border-[#1F2937] space-y-2.5 text-left">
-              <h4 className="font-bold text-[14px] text-white flex items-center space-x-2 border-b border-[#1F2937] pb-2">
-                <Phone className="w-4 h-4 text-emerald-400" />
-                <span>Need Help & Assistance?</span>
-              </h4>
-              <div className="grid grid-cols-3 gap-2">
-                <a
-                  href="tel:1800123456"
-                  className="p-2.5 bg-[#182234] hover:bg-[#1F2937] rounded-xl border border-[#1F2937] text-center space-y-1 transition-all cursor-pointer block"
-                >
-                  <Phone className="w-4 h-4 text-emerald-400 mx-auto" />
-                  <span className="text-[11px] text-white font-medium block">Call Officer</span>
-                </a>
-                <a
-                  href={`https://wa.me/919822998877?text=MAHA-AGRI%20Registration%20Help%20${submissionResult.candidateId}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="p-2.5 bg-[#182234] hover:bg-[#1F2937] rounded-xl border border-[#1F2937] text-center space-y-1 transition-all cursor-pointer block"
-                >
-                  <MessageSquare className="w-4 h-4 text-teal-400 mx-auto" />
-                  <span className="text-[11px] text-white font-medium block">WhatsApp</span>
-                </a>
-                <a
-                  href="mailto:support@mahaagri.gov.in"
-                  className="p-2.5 bg-[#182234] hover:bg-[#1F2937] rounded-xl border border-[#1F2937] text-center space-y-1 transition-all cursor-pointer block"
-                >
-                  <Mail className="w-4 h-4 text-cyan-400 mx-auto" />
-                  <span className="text-[11px] text-white font-medium block">Email Support</span>
-                </a>
-              </div>
-            </div>
-
-            {/* 13. DOWNLOAD & SHARE BUTTONS */}
-            <div className="space-y-2.5">
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const receiptText = `MAHA-AGRI OFFICIAL REGISTRATION RECEIPT\nApplication ID: ${submissionResult.candidateId}\nCandidate: ${formData.fullName}\nDistrict: ${formData.district}, Taluka: ${formData.taluka}\nProgram: EDP - Agri Drone\nDate: ${new Date().toLocaleString()}`;
-                    const blob = new Blob([receiptText], { type: 'text/plain' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `MAHA_AGRI_REGISTRATION_RECEIPT_${submissionResult.candidateId}.txt`;
-                    a.click();
-                    if (triggerToast) triggerToast('✓ Downloaded Registration Receipt');
-                  }}
-                  className="h-[48px] px-3 bg-[#111827] hover:bg-[#182234] text-white font-medium text-[13px] rounded-xl border border-[#1F2937] flex items-center justify-center space-x-2 transition-all cursor-pointer"
-                >
-                  <Download className="w-4 h-4 text-emerald-400" />
-                  <span>Download Receipt</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const json = entrepreneurAssessmentService.exportStructuredJson(submissionResult.candidateId, formData);
-                    const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `MAHA_AGRI_ASSESSMENT_SUMMARY_${submissionResult.candidateId}.json`;
-                    a.click();
-                    if (triggerToast) triggerToast('✓ Downloaded Assessment Summary');
-                  }}
-                  className="h-[48px] px-3 bg-[#111827] hover:bg-[#182234] text-white font-medium text-[13px] rounded-xl border border-[#1F2937] flex items-center justify-center space-x-2 transition-all cursor-pointer"
-                >
-                  <FileText className="w-4 h-4 text-teal-400" />
-                  <span>Download Summary</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (navigator.share) {
-                      navigator.share({ title: 'MAHA-AGRI Registration Receipt', text: `MAHA-AGRI Application ID: ${submissionResult.candidateId}` });
-                    } else {
-                      navigator.clipboard.writeText(submissionResult.candidateId);
-                      if (triggerToast) triggerToast('✓ Application ID Copied to Clipboard');
-                    }
-                  }}
-                  className="h-[48px] px-3 bg-[#111827] hover:bg-[#182234] text-white font-medium text-[13px] rounded-xl border border-[#1F2937] flex items-center justify-center space-x-2 transition-all cursor-pointer"
-                >
-                  <Share2 className="w-4 h-4 text-cyan-400" />
-                  <span>Share Registration</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIsTrackModalOpen(true)}
-                  className="h-[48px] px-3 bg-[#111827] hover:bg-[#182234] text-white font-medium text-[13px] rounded-xl border border-[#1F2937] flex items-center justify-center space-x-2 transition-all cursor-pointer"
-                >
-                  <Search className="w-4 h-4 text-emerald-400" />
-                  <span>Track Status</span>
-                </button>
-              </div>
-            </div>
-
-            {/* PRIMARY & SECONDARY ACTION CTAs (56px) */}
-            <div className="space-y-2.5 pt-1">
-              <button
-                type="button"
-                onClick={() => setIsTrackModalOpen(true)}
-                className="w-full h-[56px] min-h-[56px] bg-[#059669] hover:bg-[#047857] text-white font-bold text-[16px] rounded-[16px] shadow-xl transition-all cursor-pointer flex items-center justify-center space-x-2"
-              >
-                <Search className="w-5 h-5 text-white" />
-                <span>Track Registration Status</span>
-              </button>
-
-              <div className="grid grid-cols-2 gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsSubmitted(false);
-                    setFormData(INITIAL_ASSESSMENT_FORM_DATA);
-                    setCurrentStep(1);
-                  }}
-                  className="h-[48px] bg-[#182234] hover:bg-[#1F2937] text-slate-200 font-semibold text-[13.5px] rounded-[14px] border border-[#1F2937] transition-all cursor-pointer flex items-center justify-center space-x-1.5"
-                >
-                  <User className="w-4 h-4 text-emerald-400" />
-                  <span>Register Another</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (onBack) onBack();
-                    else {
-                      setIsSubmitted(false);
-                      setCurrentStep(1);
-                    }
-                  }}
-                  className="h-[48px] bg-[#182234] hover:bg-[#1F2937] text-slate-200 font-semibold text-[14px] rounded-[14px] border border-[#1F2937] transition-all cursor-pointer flex items-center justify-center space-x-1.5"
-                >
-                  <ArrowLeft className="w-4 h-4 text-slate-400" />
-                  <span>Back to Dashboard</span>
-                </button>
-              </div>
-            </div>
-
-            {/* 16. SECURITY & GOVERNANCE FOOTER */}
-            <div className="p-3 bg-[#0B1220] border-t border-[#1F2937] text-center text-[11px] text-[#94A3B8] space-y-1">
-              <div className="flex items-center justify-center space-x-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="font-semibold text-slate-300">MAHA-AGRI Enterprise Assessment System</span>
-              </div>
-              <p className="leading-relaxed">
-                This is a digitally generated acknowledgement issued by the MAHA-AGRI Enterprise Assessment System. Please preserve your Application ID for future communication.
-              </p>
-              <p className="text-slate-400 leading-relaxed text-[10.5px]">
-                Status updates will be shared through SMS, WhatsApp, Email, and the MAHA-AGRI Candidate Portal.
-              </p>
-            </div>
-
-            {/* APPLICATION TRACKING MODAL */}
-            {isTrackModalOpen && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-                <div className="w-full max-w-sm bg-[#111827] rounded-[24px] border border-[#1F2937] p-5 space-y-4 text-left shadow-2xl relative">
-                  <div className="flex justify-between items-center border-b border-[#1F2937] pb-3">
-                    <div>
-                      <span className="text-[10px] text-[#0D9488] font-extrabold uppercase tracking-widest block">Live Application Tracker</span>
-                      <h3 className="font-bold text-[16px] text-white">Tracking Details</h3>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setIsTrackModalOpen(false)}
-                      className="p-1.5 bg-[#182234] hover:bg-[#1F2937] rounded-full text-slate-400 hover:text-white transition-all"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-
-                  <div className="p-3 bg-[#182234] rounded-xl border border-[#1F2937] space-y-1">
-                    <span className="text-[11px] text-[#94A3B8]">Application ID</span>
-                    <strong className="text-emerald-400 font-mono text-[15px] font-bold block">{submissionResult.candidateId}</strong>
-                    <span className="text-[11px] text-slate-300 block">Candidate: <strong className="text-white">{formData.fullName}</strong></span>
-                  </div>
-
-                  <div className="space-y-2 text-[12px]">
-                    <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider block">Workflow Stages</span>
-                    {[
-                      { title: '1. Registration Completed', date: 'Just now', status: 'Completed ✓', done: true },
-                      { title: '2. Assessment Completed', date: 'Completed', status: 'Completed ✓', done: true },
-                      { title: '3. Workshop Batch Allocation', date: 'Estimated: 24-48 hrs', status: 'In Progress ⏳', active: true },
-                      { title: '4. EDP Training Confirmation', date: 'Upcoming', status: 'Pending' },
-                      { title: '5. Enterprise Launch Support', date: 'Upcoming', status: 'Pending' },
-                    ].map((st, i) => (
-                      <div
-                        key={i}
-                        className={`p-2.5 rounded-xl border flex items-center justify-between ${
-                          st.done
-                            ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300'
-                            : st.active
-                            ? 'bg-[#182234] border-[#06B6D4] text-white ring-1 ring-[#06B6D4]'
-                            : 'bg-[#182234]/40 border-[#1F2937] text-slate-400'
-                        }`}
-                      >
-                        <div>
-                          <strong className="block text-[12px]">{st.title}</strong>
-                          <span className="text-[10px] text-slate-400">{st.date}</span>
-                        </div>
-                        <span className="font-semibold text-[11px]">{st.status}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsTrackModalOpen(false)}
-                    className="w-full h-[48px] bg-[#059669] text-white font-bold text-[14px] rounded-xl hover:bg-[#047857] transition-all"
-                  >
-                    Close Tracker
-                  </button>
-                </div>
-              </div>
+        <div className="px-4 py-3.5 bg-[#0B1220] border-b border-[#1F2937]/40 space-y-2.5">
+          <div className="flex items-center justify-between text-[12px] font-semibold text-[#94A3B8]">
+            <span>Step {currentStep} of {SECTIONS.length}</span>
+            {saveStatus === 'saving' ? (
+              <span className="text-cyan-400 flex items-center space-x-1.5 animate-pulse">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Saving...</span>
+              </span>
+            ) : (
+              <span className="text-emerald-400 flex items-center space-x-1.5 transition-all duration-300">
+                <Check className="w-3.5 h-3.5 stroke-[3]" />
+                <span>✓ Auto Saved</span>
+              </span>
             )}
           </div>
-        ) : (
-          <>
-            {/* ========================================================================= */}
-            {/* MINIMAL ENTERPRISE WIZARD HEADER (UX REQ 1, 3, 5) */}
-            {/* ========================================================================= */}
-            <div className="px-4 py-3.5 bg-[#0B1220] border-b border-[#1F2937]/40 space-y-2.5">
-              <div className="flex items-center justify-between text-[12px] font-semibold text-[#94A3B8]">
-                <span>Step {currentStep} of 8</span>
-                {saveStatus === 'saving' ? (
-                  <span className="text-cyan-400 flex items-center space-x-1.5 animate-pulse">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Saving...</span>
-                  </span>
-                ) : (
-                  <span className="text-emerald-400 flex items-center space-x-1.5 transition-all duration-300">
-                    <Check className="w-3.5 h-3.5 stroke-[3]" />
-                    <span>✓ Auto Saved</span>
-                  </span>
-                )}
-              </div>
 
-              <div className="flex items-center space-x-3">
-                <button
-                  type="button"
-                  onClick={handlePrevStep}
-                  className="w-10 h-10 rounded-xl bg-[#182234] border border-[#1F2937] flex items-center justify-center text-[#94A3B8] hover:text-white hover:border-slate-600 transition-all cursor-pointer shrink-0"
-                  aria-label="Back"
-                >
-                  <ArrowLeft className="w-5 h-5 text-white" />
-                </button>
+          <div className="flex items-center space-x-3">
+            <button
+              type="button"
+              onClick={() => {
+                if (currentStep === 9) {
+                  if (onBack) onBack();
+                  else {
+                    setIsSubmitted(false);
+                    setCurrentStep(1);
+                  }
+                } else {
+                  handlePrevStep();
+                }
+              }}
+              className="w-10 h-10 rounded-xl bg-[#182234] border border-[#1F2937] flex items-center justify-center text-[#94A3B8] hover:text-white hover:border-slate-600 transition-all cursor-pointer shrink-0"
+              aria-label="Back"
+            >
+              <ArrowLeft className="w-5 h-5 text-white" />
+            </button>
 
-                <div>
-                  <h2 className="font-extrabold text-[19px] text-white tracking-tight leading-tight flex items-center space-x-2">
-                    <span>{SECTIONS[currentStep - 1].title}</span>
-                  </h2>
-                  <p className="text-[12px] text-[#94A3B8] font-normal leading-snug mt-0.5">
-                    {SECTIONS[currentStep - 1].description}
-                  </p>
-                </div>
-              </div>
+            <div>
+              <h2 className="font-extrabold text-[19px] text-white tracking-tight leading-tight flex items-center space-x-2">
+                <span>{SECTIONS[currentStep - 1].title}</span>
+              </h2>
+              <p className="text-[12px] text-[#94A3B8] font-normal leading-snug mt-0.5">
+                {SECTIONS[currentStep - 1].description}
+              </p>
+            </div>
+          </div>
+        </div>
 
-              {/* DYNAMIC AMBER VALIDATION WARNING CHIP WITH REVIEW ACTION (ENTERPRISE UX REQ) */}
-              {Object.keys(validationErrors).length > 0 && (
-                <div className="mt-2.5 px-3.5 h-[40px] min-h-[40px] bg-amber-500/15 border border-amber-500/40 rounded-[12px] flex items-center justify-between text-[#FDE68A] text-[13px] font-semibold animate-in fade-in slide-in-from-top-1 duration-200 shadow-sm">
-                  <div className="flex items-center space-x-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>
-                      {Object.keys(validationErrors).length === 1
-                        ? '⚠ 1 Required Field Missing'
-                        : `⚠ ${Object.keys(validationErrors).length} Required Fields Missing`}
-                    </span>
-                  </div>
+        {/* ========================================================================= */}
+        {/* NUMBERED STEP PROGRESS INDICATOR (1-9) */}
+        {/* ========================================================================= */}
+        <div className="px-4 py-3 bg-[#0B1220] border-b border-[#1F2937]/40">
+          <div className="flex items-center justify-between max-w-md mx-auto">
+            {SECTIONS.map((st, idx) => {
+              const isCurrent = currentStep === st.id;
+              const isCompleted = currentStep > st.id;
+
+              return (
+                <React.Fragment key={st.id}>
                   <button
                     type="button"
                     onClick={() => {
-                      const firstErrorKey = Object.keys(validationErrors)[0];
-                      if (firstErrorKey) {
-                        const el = document.getElementById(`field-${firstErrorKey}`);
-                        if (el) {
-                          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                          el.classList.add('animate-gentle-pulse-error');
-                          setTimeout(() => el.classList.remove('animate-gentle-pulse-error'), 800);
-                          const focusable = el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA'
-                            ? el
-                            : el.querySelector('input, select, textarea, button');
-                          if (focusable && typeof (focusable as HTMLElement).focus === 'function') {
-                            (focusable as HTMLElement).focus();
-                          }
-                        }
+                      if (st.id === 9 && !isSubmitted) {
+                        triggerToast('⚠️ Please complete Step 8 and submit your application first.');
+                        return;
                       }
+                      setCurrentStep(st.id);
                     }}
-                    className="text-amber-400 hover:text-white font-bold text-[12px] flex items-center space-x-1 cursor-pointer transition-colors"
+                    className={`w-6 h-6 rounded-full flex items-center justify-center font-semibold text-[11px] transition-all cursor-pointer relative ${
+                      isCurrent
+                        ? 'bg-gradient-to-tr from-[#059669] to-[#06B6D4] text-white ring-2 ring-[#06B6D4]/60 shadow-md animate-pulse scale-105'
+                        : isCompleted
+                        ? 'bg-[#059669] text-white font-bold shadow-sm'
+                        : 'bg-[#182234] text-[#94A3B8] border border-[#1F2937]'
+                    }`}
+                    aria-label={`Step ${st.id}`}
                   >
-                    <span>Review</span>
-                    <ChevronRight className="w-3.5 h-3.5 text-amber-400" />
+                    {isCompleted ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : st.id}
                   </button>
-                </div>
-              )}
-            </div>
-
-            {/* ========================================================================= */}
-            {/* NUMBERED STEP PROGRESS INDICATOR (1-8 ONLY - UX REQ 1) */}
-            {/* ========================================================================= */}
-            <div className="px-4 py-3 bg-[#0B1220] border-b border-[#1F2937]/40">
-              <div className="flex items-center justify-between max-w-md mx-auto">
-                {SECTIONS.map((st, idx) => {
-                  const isCurrent = currentStep === st.id;
-                  const isCompleted = currentStep > st.id;
-
-                  return (
-                    <React.Fragment key={st.id}>
-                      <button
-                        type="button"
-                        onClick={() => setCurrentStep(st.id)}
-                        className={`w-7 h-7 rounded-full flex items-center justify-center font-semibold text-[13px] transition-all cursor-pointer relative ${
-                          isCurrent
-                            ? 'bg-gradient-to-tr from-[#059669] to-[#06B6D4] text-white ring-2 ring-[#06B6D4]/60 shadow-md animate-pulse scale-105'
-                            : isCompleted
-                            ? 'bg-[#059669] text-white font-bold shadow-sm'
-                            : 'bg-[#182234] text-[#94A3B8] border border-[#1F2937]'
-                        }`}
-                        aria-label={`Step ${st.id}`}
-                      >
-                        {isCompleted ? <Check className="w-4 h-4 stroke-[3]" /> : st.id}
-                      </button>
-                      {idx < 7 && (
-                        <div className={`flex-1 h-[2px] mx-1 transition-all duration-300 ${isCompleted || isCurrent ? 'bg-[#059669]' : 'bg-[#1F2937]'}`}></div>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </div>
-            </div>
+                  {idx < 8 && (
+                    <div className={`flex-1 h-[2px] mx-0.5 transition-all duration-300 ${isCompleted || isCurrent ? 'bg-[#059669]' : 'bg-[#1F2937]'}`}></div>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </div>
+        </div>
 
             {/* ========================================================================= */}
             {/* MAIN QUESTION BANK FORM PANEL WITH DIRECTIONAL STEP SLIDE (MOTION REQ 8) */}
@@ -2235,8 +1435,10 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
 
                   {formData.agriculture.isInvolvedInAgri && (
                     <div className="space-y-4 p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] animate-in fade-in duration-200">
-                      <div className="space-y-2">
-                        <label className="font-medium text-[13px] text-slate-300 block">Farming Activities Involved In</label>
+                      <div id="field-agriActivities" className="space-y-2">
+                        <label className={`font-medium text-[13px] block ${validationErrors['agriActivities'] ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
+                          Farming Activities Involved In <span className="text-rose-500">*</span>
+                        </label>
                         <div className="grid grid-cols-2 gap-2">
                           {[
                             'Own Farming',
@@ -2264,7 +1466,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                                       ...prev,
                                       agriActivities: isSelected ? list.filter((a) => a !== act) : [...list, act as AgriActivity],
                                     };
-                                  });
+                                  }, 'agriActivities');
                                 }}
                                 className={`p-3 rounded-[12px] border flex items-center space-x-2.5 cursor-pointer transition-all ${
                                   isSelected ? 'bg-[#182234] border-[#059669] text-white' : 'bg-[#182234]/60 border-[#1F2937] text-[#94A3B8]'
@@ -2278,17 +1480,33 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                             );
                           })}
                         </div>
+                        {validationErrors['agriActivities'] && (
+                          <p className="text-[12px] text-rose-400 font-medium mt-1 animate-in fade-in">⚠️ {validationErrors['agriActivities']}</p>
+                        )}
                       </div>
 
                       <div className="space-y-1.5">
-                        <label className="font-medium text-[13px] text-slate-300 block">Farming Experience</label>
+                        <label className={`font-medium text-[13px] block ${validationErrors['farmingExperience'] ? 'text-rose-400 font-semibold' : 'text-slate-300'}`}>
+                          Farming Experience <span className="text-rose-500">*</span>
+                        </label>
                         <WizardSelect
-    
-    value={formData.agriculture.farmingExperience || '3–5 Years'}
-    
-    options={[{"value":"Less than 1 Year","label":"Less than 1 Year"},{"value":"1–3 Years","label":"1–3 Years"},{"value":"3–5 Years","label":"3–5 Years"},{"value":"5–10 Years","label":"5–10 Years"},{"value":"More than 10 Years","label":"More than 10 Years"}]}
-    small
-  />
+                          fieldId="field-farmingExperience"
+                          value={formData.agriculture.farmingExperience || ''}
+                          onChange={(v) => updateFormSection('agriculture', (prev) => ({ ...prev, farmingExperience: v as any }), 'farmingExperience')}
+                          error={validationErrors['farmingExperience']}
+                          options={[
+                            { value: 'Less than 1 Year', label: 'Less than 1 Year', icon: '🌱' },
+                            { value: '1–3 Years', label: '1–3 Years', icon: '🌾' },
+                            { value: '3–5 Years', label: '3–5 Years', icon: '🌿' },
+                            { value: '5–10 Years', label: '5–10 Years', icon: '🌳' },
+                            { value: 'More than 10 Years', label: 'More than 10 Years', icon: '🚜' },
+                          ]}
+                          placeholder="Select Farming Experience..."
+                          small
+                        />
+                        {validationErrors['farmingExperience'] && (
+                          <p className="text-[12px] text-rose-400 font-medium mt-1 animate-in fade-in">⚠️ {validationErrors['farmingExperience']}</p>
+                        )}
                       </div>
                     </div>
                   )}
@@ -3404,7 +2622,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       </div>
 
                       {/* OUTSIDE QUESTION C: MANDATORY EDP AGREEMENT */}
-                      <div className="space-y-1.5 p-3 bg-[#182234]/80 rounded-[14px] border border-emerald-500/30">
+                      <div id="field-agreeToCompleteEdpBeforeOnboarding" className="space-y-1.5 p-3 bg-[#182234]/80 rounded-[14px] border border-emerald-500/30">
                         <label className="font-medium text-[13px] text-emerald-300 block">
                           Do you agree to complete the mandatory EDP training before project onboarding? <span className="text-rose-500">*</span>
                         </label>
@@ -3444,7 +2662,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         </div>
 
                         {/* Q1: EDP WORKSHOP ATTENDANCE */}
-                        <div className="space-y-1.5">
+                        <div id="field-canAttendWorkshop" className="space-y-1.5">
                           <label className="font-medium text-[13px] text-slate-200 block">Q1. Will you be able to attend the 2-Day EDP Workshop?</label>
                           <div className="p-1 bg-[#182234] rounded-[12px] border border-[#1F2937] grid grid-cols-3 gap-1">
                             {['Yes', 'No', 'Maybe'].map((opt) => (
@@ -3463,9 +2681,10 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         </div>
 
                         {formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.canAttendWorkshop === 'No' && (
-                          <div className="space-y-1.5 animate-in fade-in duration-200">
+                          <div id="field-cannotAttendReason" className="space-y-1.5 animate-in fade-in duration-200">
                             <label className="font-medium text-[13px] text-slate-300 block">Reason for Not Attending</label>
                             <WizardSelect
+                              fieldId="field-cannotAttendReason"
                               value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.cannotAttendReason || 'Distance / Venue Location'}
                               onChange={(v) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, cannotAttendReason: v as any } } as any }))}
                               options={[
@@ -3508,11 +2727,12 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         </div>
 
                         {/* Q3: POST-EDP PLAN */}
-                        <div className="space-y-1.5">
+                        <div id="field-postTrainingPlan" className="space-y-1.5">
                           <label className="font-medium text-[13px] text-slate-200 block">
                             Q3. After completing the EDP Workshop, what do you plan to do? <span className="text-rose-500">*</span>
                           </label>
                           <WizardSelect
+                            fieldId="field-postTrainingPlan"
                             value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.postTrainingPlan || 'Start My Own Agri Drone Spraying Business'}
                             onChange={(v) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, postTrainingPlan: v } } as any }))}
                             options={[
@@ -3529,9 +2749,10 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         </div>
 
                         {/* Q4: INITIAL SERVICE COVERAGE */}
-                        <div className="space-y-1.5">
+                        <div id="field-villagesTargetToServe" className="space-y-1.5">
                           <label className="font-medium text-[13px] text-slate-200 block">Q4. How many villages do you plan to serve initially?</label>
                           <WizardSelect
+                            fieldId="field-villagesTargetToServe"
                             value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.villagesTargetToServe || '1–5 Villages'}
                             onChange={(v) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, villagesTargetToServe: v as any } } as any }))}
                             options={[
@@ -3546,9 +2767,10 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         </div>
 
                         {/* Q5: WORKING WITH MAHA-AGRI */}
-                        <div className="space-y-1.5">
+                        <div id="field-mahaAgriWorkingModel" className="space-y-1.5">
                           <label className="font-medium text-[13px] text-slate-200 block">Q5. How would you like to work with MAHA-AGRI?</label>
                           <WizardSelect
+                            fieldId="field-mahaAgriWorkingModel"
                             value={formData.entrepreneurInterest.moduleADrone?.edpWorkshop?.mahaAgriWorkingModel || 'MAHA-AGRI Business Partner'}
                             onChange={(v) => updateFormSection('entrepreneurInterest', (prev) => ({ ...prev, moduleADrone: { ...prev.moduleADrone, edpWorkshop: { ...prev.moduleADrone?.edpWorkshop, mahaAgriWorkingModel: v as any } } as any }))}
                             options={[
@@ -3933,7 +3155,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       </div>
                       <button
                         type="button"
-                        onClick={() => setCurrentStep(1)}
+                        onClick={() => handleEditStep(1)}
                         className="px-2.5 py-1 bg-[#182234] hover:bg-[#1F2937] text-emerald-400 hover:text-white text-[12px] font-medium rounded-lg border border-[#1F2937] transition-all cursor-pointer"
                       >
                         Edit
@@ -3955,7 +3177,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       </div>
                       <button
                         type="button"
-                        onClick={() => setCurrentStep(2)}
+                        onClick={() => handleEditStep(2)}
                         className="px-2.5 py-1 bg-[#182234] hover:bg-[#1F2937] text-teal-400 hover:text-white text-[12px] font-medium rounded-lg border border-[#1F2937] transition-all cursor-pointer"
                       >
                         Edit
@@ -3988,7 +3210,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       </div>
                       <button
                         type="button"
-                        onClick={() => setCurrentStep(3)}
+                        onClick={() => handleEditStep(3)}
                         className="px-2.5 py-1 bg-[#182234] hover:bg-[#1F2937] text-emerald-400 hover:text-white text-[12px] font-medium rounded-lg border border-[#1F2937] transition-all cursor-pointer"
                       >
                         Edit
@@ -4027,7 +3249,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       </div>
                       <button
                         type="button"
-                        onClick={() => setCurrentStep(4)}
+                        onClick={() => handleEditStep(4)}
                         className="px-2.5 py-1 bg-[#182234] hover:bg-[#1F2937] text-cyan-400 hover:text-white text-[12px] font-medium rounded-lg border border-[#1F2937] transition-all cursor-pointer"
                       >
                         Edit
@@ -4066,7 +3288,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       </div>
                       <button
                         type="button"
-                        onClick={() => setCurrentStep(5)}
+                        onClick={() => handleEditStep(5)}
                         className="px-2.5 py-1 bg-[#182234] hover:bg-[#1F2937] text-[#0D9488] hover:text-white text-[12px] font-medium rounded-lg border border-[#1F2937] transition-all cursor-pointer"
                       >
                         Edit
@@ -4109,7 +3331,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       </div>
                       <button
                         type="button"
-                        onClick={() => setCurrentStep(6)}
+                        onClick={() => handleEditStep(6)}
                         className="px-2.5 py-1 bg-[#182234] hover:bg-[#1F2937] text-emerald-400 hover:text-white text-[12px] font-medium rounded-lg border border-[#1F2937] transition-all cursor-pointer"
                       >
                         Edit
@@ -4131,7 +3353,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                       </div>
                       <button
                         type="button"
-                        onClick={() => setCurrentStep(7)}
+                        onClick={() => handleEditStep(7)}
                         className="px-2.5 py-1 bg-[#182234] hover:bg-[#1F2937] text-teal-400 hover:text-white text-[12px] font-medium rounded-lg border border-[#1F2937] transition-all cursor-pointer"
                       >
                         Edit
@@ -4149,60 +3371,6 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                     </div>
                   </div>
 
-                  {/* ========================================================================= */}
-                  {/* V3 ENTERPRISE DECISION SUPPORT SYSTEM (EDSS) SMART INSIGHTS DASHBOARD */}
-                  {/* ========================================================================= */}
-                  {(() => {
-                    const report = entrepreneurAssessmentService.generateV3IntelligenceReport(formData);
-                    return (
-                      <div className="p-4 bg-gradient-to-b from-[#111827] to-[#0B1220] rounded-[20px] border border-[#059669]/50 space-y-4 shadow-2xl animate-in fade-in duration-300">
-                        <div className="flex items-center justify-between border-b border-[#1F2937] pb-3">
-                          <div>
-                            <span className="text-[11px] text-[#0D9488] font-bold uppercase tracking-wider block">Decision Support System</span>
-                            <h3 className="font-extrabold text-[16px] text-white tracking-tight">AI Entrepreneur Insights</h3>
-                          </div>
-                          <div className="px-3 py-1 bg-[#059669]/20 border border-[#059669] rounded-full text-emerald-400 font-bold text-xs">
-                            Score: {report.readinessScore}/100 ({report.readinessLevel})
-                          </div>
-                        </div>
-
-                        {/* INTERVIEW RECOMMENDATION BANNER */}
-                        <div className="p-3.5 bg-[#182234] border border-[#1F2937] rounded-[14px] space-y-1">
-                          <div className="flex justify-between items-center text-[13px]">
-                            <span className="text-slate-400">Action Recommendation:</span>
-                            <strong className="text-emerald-400 font-bold">{report.interviewRecommendation.action}</strong>
-                          </div>
-                          <p className="text-[12px] text-slate-300 leading-relaxed">{report.interviewRecommendation.reasoning}</p>
-                        </div>
-
-                        {/* RECOMMENDED SCHEME */}
-                        {report.recommendedSchemes[0] && (
-                          <div className="p-3.5 bg-[#111827] border border-[#1F2937] rounded-[14px] space-y-1 text-[13px]">
-                            <span className="text-xs text-teal-400 font-semibold uppercase tracking-wider block">Recommended Govt Scheme</span>
-                            <strong className="text-white block font-semibold">{report.recommendedSchemes[0].schemeName}</strong>
-                            <p className="text-slate-300 text-[12px]">{report.recommendedSchemes[0].reason}</p>
-                          </div>
-                        )}
-
-                        {/* 5-STEP ROADMAP PREVIEW */}
-                        <div className="space-y-2 pt-1">
-                          <span className="text-xs text-[#94A3B8] font-semibold uppercase tracking-wider block">Personalized 5-Step Roadmap</span>
-                          <div className="space-y-1.5">
-                            {report.personalizedRoadmap.slice(0, 3).map((st) => (
-                              <div key={st.stepNumber} className="p-2.5 bg-[#182234] rounded-lg border border-[#1F2937] flex items-center justify-between text-[12px]">
-                                <div className="flex items-center space-x-2">
-                                  <span className="w-5 h-5 rounded-full bg-[#059669] text-white font-bold flex items-center justify-center text-[10px]">{st.stepNumber}</span>
-                                  <span className="text-white font-medium">{st.title}</span>
-                                </div>
-                                <span className="text-[#94A3B8] text-[11px]">{st.duration}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
                   {/* DECLARATION CHECKBOXES */}
                   <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-3">
                     <label className="flex items-start space-x-3 cursor-pointer">
@@ -4213,7 +3381,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         className="rounded border-slate-700 bg-[#0B1220] text-[#059669] w-5 h-5 mt-0.5 cursor-pointer"
                       />
                       <span className="text-[#94A3B8] text-[13px] leading-relaxed">
-                        I declare that the information provided is true and correct.
+                        I declare that the information provided in this application is true and correct.
                       </span>
                     </label>
 
@@ -4225,7 +3393,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         className="rounded border-slate-700 bg-[#0B1220] text-[#059669] w-5 h-5 mt-0.5 cursor-pointer"
                       />
                       <span className="text-[#94A3B8] text-[13px] leading-relaxed">
-                        Submission of this form does not guarantee selection.
+                        I understand that submission of this application does not guarantee selection, EDP training admission, drone subsidy, loan approval, or financial assistance.
                       </span>
                     </label>
 
@@ -4237,7 +3405,7 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         className="rounded border-slate-700 bg-[#0B1220] text-[#059669] w-5 h-5 mt-0.5 cursor-pointer"
                       />
                       <span className="text-[#94A3B8] text-[13px] leading-relaxed">
-                        I agree to participate in assessment, interview, training and verification if shortlisted.
+                        If shortlisted, I agree to participate in the required assessment, interview, EDP training, document verification and other project-related processes.
                       </span>
                     </label>
 
@@ -4247,11 +3415,20 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                         <input
                           type="checkbox"
                           checked={isVerifiedByCandidate}
-                          onChange={(e) => setIsVerifiedByCandidate(e.target.checked)}
+                          onChange={(e) => {
+                            const val = e.target.checked;
+                            setIsVerifiedByCandidate(val);
+                            updateFormSection('declaration', (prev) => ({
+                              ...prev,
+                              isInformationTrue: val,
+                              understandsNoGuarantee: val,
+                              agreesToAssessmentProcess: val,
+                            }));
+                          }}
                           className="rounded border-slate-700 bg-[#0B1220] text-[#059669] w-5 h-5 mt-0.5 cursor-pointer"
                         />
                         <span className="text-emerald-300 font-semibold text-[13px] leading-relaxed">
-                          I have verified all information provided in this assessment to be true and accurate.
+                          I have reviewed and verified all the information provided above and confirm that it is true and accurate.
                         </span>
                       </label>
                     </div>
@@ -4259,178 +3436,70 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                 </div>
               )}
 
-              {/* SECTION 9: AI ENTREPRENEUR INSIGHTS */}
+              {/* SECTION 9: FINAL SUBMISSION CONFIRMATION */}
               {currentStep === 9 && (
-                <div className="space-y-4 animate-in fade-in duration-200">
-                  {/* STEP HEADER */}
-                  <div className="p-3.5 bg-[#111827] rounded-[16px] border border-[#1F2937] flex items-center justify-between">
-                    <div className="flex items-center space-x-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
-                        <Sparkles className="w-5 h-5 text-emerald-400" />
-                      </div>
-                      <div>
-                        <h3 className="font-extrabold text-[15px] text-white tracking-tight">🤖 Step 9 — AI Entrepreneur Insights</h3>
-                        <p className="text-[11.5px] text-[#94A3B8]">Admin & Applicant Evaluation Insights</p>
+                <div className="py-6 px-4 bg-[#0B1220] text-slate-100 space-y-6 text-center animate-in fade-in duration-300 max-w-sm mx-auto flex flex-col justify-center items-center min-h-[60vh]">
+                  
+                  {/* 1. PREMIUM SUCCESS ICON */}
+                  <div className="space-y-4 w-full">
+                    <div className="relative flex items-center justify-center mx-auto w-20 h-20">
+                      <div className="absolute -inset-1 rounded-full bg-emerald-500/20 blur-md animate-pulse" />
+                      <div className="relative w-20 h-20 rounded-full bg-emerald-950/80 border-2 border-emerald-500/80 flex items-center justify-center shadow-2xl shadow-emerald-900/50">
+                        <CheckCircle2 className="w-10 h-10 text-emerald-400 stroke-[2.5]" />
                       </div>
                     </div>
+
+                    {/* 2. MAIN HEADING */}
+                    <div className="space-y-1.5">
+                      <h1 className="font-black text-[22px] sm:text-[25px] text-white tracking-tight leading-tight">
+                        ✓ Submission Confirmed
+                      </h1>
+                      <p className="text-[13.5px] text-slate-300 font-medium leading-relaxed">
+                        Your application has been successfully submitted.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 3. APPLICATION ID CARD */}
+                  <div className="w-full bg-[#111827] rounded-2xl border border-emerald-500/40 p-5 text-center space-y-2.5 shadow-xl shadow-emerald-950/20 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-500 to-transparent opacity-80" />
+                    <span className="text-slate-400 text-[11px] font-bold uppercase tracking-wider block">
+                      APPLICATION ID
+                    </span>
+                    <strong className="text-emerald-400 font-mono text-[20px] sm:text-[22px] font-extrabold tracking-wider block select-all">
+                      {submissionResult?.candidateId || 'MAHA-AGRI-EDP-84729103'}
+                    </strong>
+                    <p className="text-[12px] text-slate-400 font-normal pt-2 border-t border-[#1F2937]">
+                      Please keep this Application ID for future reference.
+                    </p>
+                  </div>
+
+                  {/* 4. STATUS */}
+                  <div className="w-full bg-[#111827] rounded-xl border border-[#1F2937] px-4 py-3 flex items-center justify-between shadow-md">
+                    <span className="text-slate-400 text-[13px] font-medium">Status</span>
+                    <span className="text-emerald-400 text-[13.5px] font-semibold flex items-center space-x-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span>Application Received</span>
+                    </span>
+                  </div>
+
+                  {/* 5. REDIRECT COUNTDOWN & BACK TO HOME */}
+                  <div className="w-full pt-1 space-y-2.5">
+                    <p className="text-[12.5px] font-medium text-slate-400 flex items-center justify-center space-x-1.5">
+                      <Clock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>Returning to Home in <strong className="text-emerald-400 font-mono font-bold">{redirectCountdown}</strong> seconds...</span>
+                    </p>
+
                     <button
                       type="button"
-                      onClick={() => setCurrentStep(8)}
-                      className="px-2.5 py-1 bg-[#182234] hover:bg-[#1F2937] text-emerald-400 hover:text-white text-[12px] font-medium rounded-lg border border-[#1F2937] transition-all cursor-pointer"
+                      onClick={handleNavigateHome}
+                      className="w-full h-[56px] min-h-[56px] bg-[#059669] hover:bg-[#047857] text-white font-bold text-[16px] rounded-[16px] shadow-lg shadow-emerald-950/40 transition-all cursor-pointer flex items-center justify-center space-x-2.5 active:scale-[0.99]"
                     >
-                      Review Data
+                      <Home className="w-5 h-5 text-white shrink-0" />
+                      <span>Back to Home</span>
                     </button>
                   </div>
 
-                  {/* SECTION 1 — ENTREPRENEUR READINESS & SECTION 6 — PRIORITY */}
-                  {(() => {
-                    const v3Report = entrepreneurAssessmentService.generateV3IntelligenceReport(formData);
-                    return (
-                      <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-3">
-                        <div className="flex items-center justify-between border-b border-[#1F2937] pb-2">
-                          <span className="text-[11px] text-[#0D9488] font-bold uppercase tracking-wider block">SECTION 1 & 6 — READINESS & PRIORITY</span>
-                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                            priorityStatus === 'High Priority'
-                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                              : priorityStatus === 'Medium Priority'
-                              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
-                              : 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
-                          }`}>
-                            {priorityStatus === 'High Priority' ? '🟢 High Priority' : priorityStatus === 'Medium Priority' ? '🟡 Medium Priority' : '🔴 Low Priority'}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3 text-[13px]">
-                          <div className="p-3 bg-[#182234] rounded-xl border border-[#1F2937]">
-                            <span className="text-[#94A3B8] text-[11px] block">Readiness Score</span>
-                            <strong className="text-[20px] font-extrabold text-emerald-400">{v3Report.readinessScore}/100</strong>
-                          </div>
-                          <div className="p-3 bg-[#182234] rounded-xl border border-[#1F2937]">
-                            <span className="text-[#94A3B8] text-[11px] block">Readiness Label</span>
-                            <strong className="text-[15px] font-bold text-white mt-1 block">{v3Report.readinessLevel}</strong>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* SECTION 2 — ENTREPRENEUR PROFILE */}
-                  <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-2">
-                    <span className="text-[11px] text-[#0D9488] font-bold uppercase tracking-wider block border-b border-[#1F2937] pb-1.5">SECTION 2 — ENTREPRENEUR PROFILE</span>
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {formData.entrepreneurInterest?.selectedPrograms?.length > 0 ? (
-                        formData.entrepreneurInterest.selectedPrograms.map((p) => (
-                          <span key={p} className="px-3 py-1 bg-[#182234] border border-[#1F2937] rounded-lg text-xs font-semibold text-emerald-300 flex items-center space-x-1">
-                            <span>{p === 'Agri Drone Entrepreneur' ? '🚁' : p === 'Professional Drone Pilot' ? '👨‍✈️' : p === 'MAHA-AGRI Krushi Seva Kendra' ? '🏬' : '🌾'}</span>
-                            <span>{p}</span>
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-xs text-slate-400">Not Specified</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* SECTION 3 — KEY STRENGTHS */}
-                  <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-2">
-                    <span className="text-[11px] text-[#0D9488] font-bold uppercase tracking-wider block border-b border-[#1F2937] pb-1.5">SECTION 3 — KEY STRENGTHS</span>
-                    <ul className="space-y-1.5 text-[12.5px] text-slate-200">
-                      {keyStrengths.map((str, idx) => (
-                        <li key={idx} className="flex items-start space-x-2">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                          <span>{str}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* SECTION 4 — PROFILE COMPLETION & MISSING INFORMATION */}
-                  <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-3">
-                    <span className="text-[11px] text-[#0D9488] font-bold uppercase tracking-wider block border-b border-[#1F2937] pb-2">SECTION 4 — PROFILE COMPLETION & MISSING INFORMATION</span>
-
-                    <div className="p-3 bg-[#182234] rounded-xl border border-[#1F2937]">
-                      <div className="flex justify-between items-center text-[14px] font-bold">
-                        <span className={profileCompletion.isComplete ? 'text-emerald-400' : 'text-amber-400'}>
-                          {profileCompletion.isComplete ? '🟢 Profile Complete — 100%' : `🟡 Profile Incomplete — ${profileCompletion.completionPercentage}%`}
-                        </span>
-                      </div>
-
-                      {!profileCompletion.isComplete && (
-                        <div className="mt-3 pt-2.5 border-t border-[#1F2937] space-y-1.5">
-                          <span className="text-xs font-semibold text-rose-400 block uppercase tracking-wide">Missing Information ({profileCompletion.missingFields.length}):</span>
-                          <ul className="space-y-1 text-[12px] text-slate-300">
-                            {profileCompletion.missingFields.map((item, idx) => (
-                              <li key={idx} className="flex items-center space-x-1.5 text-rose-300">
-                                <span className="text-rose-400 font-bold">•</span>
-                                <span>[{item.section}] {item.fieldLabel}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* SECTION 5 — FUNDING & SCHEME ASSESSMENT */}
-                  <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-3">
-                    <span className="text-[11px] text-[#0D9488] font-bold uppercase tracking-wider block border-b border-[#1F2937] pb-2">SECTION 5 — FUNDING & SCHEME ASSESSMENT</span>
-                    <div className="space-y-2 text-[12.5px]">
-                      <div className="flex items-center justify-between p-2.5 bg-[#182234] rounded-lg border border-[#1F2937]">
-                        <span className="text-slate-300 font-medium">CMEGP Scheme:</span>
-                        <span className={`font-semibold px-2 py-0.5 rounded text-[11px] ${
-                          cmegpAssessment === 'Potentially Suitable' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                          cmegpAssessment === 'Needs Verification' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                          'bg-slate-700 text-slate-300'
-                        }`}>{cmegpAssessment}</span>
-                      </div>
-
-                      <div className="flex items-center justify-between p-2.5 bg-[#182234] rounded-lg border border-[#1F2937]">
-                        <span className="text-slate-300 font-medium">MAHA-DBT Scheme:</span>
-                        <span className={`font-semibold px-2 py-0.5 rounded text-[11px] ${
-                          mahaDbtAssessment === 'Potentially Suitable' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                          mahaDbtAssessment === 'Needs Verification' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                          'bg-slate-700 text-slate-300'
-                        }`}>{mahaDbtAssessment}</span>
-                      </div>
-
-                      <div className="flex items-center justify-between p-2.5 bg-[#182234] rounded-lg border border-[#1F2937]">
-                        <span className="text-slate-300 font-medium">Bank Loan:</span>
-                        <span className={`font-semibold px-2 py-0.5 rounded text-[11px] ${
-                          bankLoanAssessment === 'Potentially Suitable' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                          bankLoanAssessment === 'Needs Verification' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                          'bg-slate-700 text-slate-300'
-                        }`}>{bankLoanAssessment}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* SECTION 7 — RECOMMENDED ACTION */}
-                  <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-2">
-                    <span className="text-[11px] text-[#0D9488] font-bold uppercase tracking-wider block border-b border-[#1F2937] pb-1.5">SECTION 7 — RECOMMENDED ACTION</span>
-                    <div className="p-3 bg-[#182234] rounded-xl border border-[#059669]/40 flex items-center space-x-2.5">
-                      <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />
-                      <strong className="text-white text-[13.5px] font-bold">{recommendedAction}</strong>
-                    </div>
-                  </div>
-
-                  {/* SECTION 8 — NEXT STEPS */}
-                  <div className="p-4 bg-[#111827] rounded-[16px] border border-[#1F2937] space-y-2.5">
-                    <span className="text-[11px] text-[#0D9488] font-bold uppercase tracking-wider block border-b border-[#1F2937] pb-1.5">SECTION 8 — NEXT STEPS</span>
-                    <div className="space-y-1.5 text-[12.5px]">
-                      <div className="p-2 bg-[#182234] rounded-lg border border-[#1F2937] flex items-center space-x-2">
-                        <span className="w-5 h-5 rounded-full bg-[#059669] text-white text-[11px] font-bold flex items-center justify-center">1</span>
-                        <span className="text-white font-medium">Document Verification</span>
-                      </div>
-                      <div className="p-2 bg-[#182234] rounded-lg border border-[#1F2937] flex items-center space-x-2">
-                        <span className="w-5 h-5 rounded-full bg-[#059669] text-white text-[11px] font-bold flex items-center justify-center">2</span>
-                        <span className="text-white font-medium">EDP / Required Training</span>
-                      </div>
-                      <div className="p-2 bg-[#182234] rounded-lg border border-[#1F2937] flex items-center space-x-2">
-                        <span className="w-5 h-5 rounded-full bg-[#059669] text-white text-[11px] font-bold flex items-center justify-center">3</span>
-                        <span className="text-white font-medium">Funding & Business Setup</span>
-                      </div>
-                    </div>
-                  </div>
                 </div>
               )}
 
@@ -4439,43 +3508,43 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
             {/* ========================================================================= */}
             {/* STICKY BOTTOM ACTION FOOTER (56px TOUCH TARGETS, FILLED EMERALD PRIMARY) */}
             {/* ========================================================================= */}
-            <footer className="p-4 bg-[#0B1220] border-t border-[#1F2937]/50 flex items-center justify-between space-x-3 sticky bottom-0 z-40 backdrop-blur-md">
-              {currentStep > 1 && (
+            {currentStep < 9 && (
+              <footer className="p-4 bg-[#0B1220] border-t border-[#1F2937]/50 flex items-center justify-between space-x-3 sticky bottom-0 z-40 backdrop-blur-md">
+                {currentStep > 1 && (
+                  <button
+                    type="button"
+                    onClick={handlePrevStep}
+                    className="flex-1 h-[56px] min-h-[56px] bg-[#111827] hover:bg-[#182234] text-white font-medium text-[15px] rounded-[16px] border border-[#1F2937] hover:border-slate-600 transition-all duration-150 cursor-pointer flex items-center justify-center space-x-1.5"
+                  >
+                    <ArrowLeft className="w-4 h-4 text-[#94A3B8]" />
+                    <span>Previous</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
-                  onClick={handlePrevStep}
-                  className="flex-1 h-[56px] min-h-[56px] bg-[#111827] hover:bg-[#182234] text-white font-medium text-[15px] rounded-[16px] border border-[#1F2937] hover:border-slate-600 transition-all duration-150 cursor-pointer flex items-center justify-center space-x-1.5"
+                  onClick={handleNextStep}
+                  disabled={isSubmitting || (currentStep === 8 && !isVerifiedByCandidate)}
+                  className={`group flex-1 h-[56px] min-h-[56px] font-semibold text-[16px] rounded-[16px] shadow-lg btn-micro-hover shimmer-sweep transition-all duration-150 cursor-pointer flex items-center justify-center space-x-2 ${
+                    currentStep === 8 && !isVerifiedByCandidate
+                      ? 'bg-slate-700 text-slate-400 opacity-60 cursor-not-allowed'
+                      : 'bg-[#059669] hover:bg-[#047857] text-white'
+                  }`}
                 >
-                  <ArrowLeft className="w-4 h-4 text-[#94A3B8]" />
-                  <span>Previous</span>
+                  {isSubmitting ? (
+                    <div className="flex items-center space-x-2">
+                      <Loader2 className="w-5 h-5 animate-spin text-white" />
+                      <span>{submitStageText}</span>
+                    </div>
+                  ) : (
+                    <>
+                      <span>{currentStep === 8 ? 'Submit Assessment' : 'Next'}</span>
+                      <span className="group-hover:translate-x-1.5 transition-transform duration-150 text-[18px]">→</span>
+                    </>
+                  )}
                 </button>
-              )}
-
-              <button
-                type="button"
-                onClick={handleNextStep}
-                disabled={isSubmitting || (currentStep === 8 && !isVerifiedByCandidate)}
-                className={`group flex-1 h-[56px] min-h-[56px] font-semibold text-[16px] rounded-[16px] shadow-lg btn-micro-hover shimmer-sweep transition-all duration-150 cursor-pointer flex items-center justify-center space-x-2 ${
-                  currentStep === 8 && !isVerifiedByCandidate
-                    ? 'bg-slate-700 text-slate-400 opacity-60 cursor-not-allowed'
-                    : 'bg-[#059669] hover:bg-[#047857] text-white'
-                }`}
-              >
-                {isSubmitting ? (
-                  <div className="flex items-center space-x-2">
-                    <Loader2 className="w-5 h-5 animate-spin text-white" />
-                    <span>{submitStageText}</span>
-                  </div>
-                ) : (
-                  <>
-                    <span>{currentStep === 9 ? 'Submit Assessment' : 'Next'}</span>
-                    <span className="group-hover:translate-x-1.5 transition-transform duration-150 text-[18px]">→</span>
-                  </>
-                )}
-              </button>
-            </footer>
-          </>
-        )}
+              </footer>
+            )}
 
       </div>
     </div>

@@ -119,6 +119,15 @@ export const INITIAL_ASSESSMENT_FORM_DATA: EntrepreneurAssessmentFormData = {
       flyingExperience: '25 Hours',
       ownershipInterest: 'Own',
       purchasePreference: 'Subsidized Scheme',
+      edpWorkshop: {
+        canAttendWorkshop: 'Yes',
+        preferredTrainingLocation: 'Taluka HQ',
+        postTrainingPlan: 'Start My Own Agri Drone Spraying Business',
+        villagesTargetToServe: '1–5 Villages',
+        mahaAgriWorkingModel: 'MAHA-AGRI Business Partner',
+        droneBusinessOperation: 'I will operate the drone myself as an individual entrepreneur',
+        agreeToCompleteEdpBeforeOnboarding: 'Yes',
+      },
     },
     moduleBKrushiSeva: {
       agriDegreeVerified: true,
