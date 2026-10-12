@@ -44,10 +44,10 @@ export class RazorpayPaymentAdapter implements IPaymentProviderAdapter {
     // HMAC-SHA256 Verification: hash(order_id + "|" + payment_id, secret)
     const expectedSignature = crypto
       .createHmac('sha256', keySecret)
-      .update(`${params.orderId}|${params.paymentId}`)
+      .update(`${params.orderId || ''}|${params.paymentId || ''}`)
       .digest('hex');
 
-    const isValid = expectedSignature === params.signature || params.signature.startsWith('sig_test');
+    const isValid = expectedSignature === params.signature || (params.signature?.startsWith('sig_test') ?? false);
 
     this.logger.log(`[${this.providerName}] Signature Verification for Order ${params.orderId}: ${isValid ? 'PASSED' : 'FAILED'}`);
     return isValid;

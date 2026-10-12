@@ -3,23 +3,72 @@
 // Integration 2: Payment Integration Controller (/api/v1/integration/payment)
 // ============================================================================
 
-import { Controller, Post, Get, Body, Param, Headers, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Headers, Req, HttpCode, HttpStatus } from '@nestjs/common';
+import { IsNumber, IsString, IsNotEmpty, IsOptional } from 'class-validator';
 import { PaymentGatewayService } from '../services/payment-gateway.service';
 
 export class CreatePaymentOrderDto {
-  amount!: number;
+  @IsNumber()
+  @IsOptional()
+  amount?: number;
+
+  @IsString()
+  @IsNotEmpty()
   receipt!: string;
+
+  @IsString()
+  @IsOptional()
+  candidateId?: string;
+
+  @IsString()
+  @IsOptional()
+  customerName?: string;
+
+  @IsString()
+  @IsOptional()
+  customerPhone?: string;
+
+  @IsString()
+  @IsOptional()
+  customerEmail?: string;
+
+  @IsString()
+  @IsOptional()
+  returnUrl?: string;
+
+  @IsString()
+  @IsOptional()
+  notifyUrl?: string;
 }
 
 export class VerifyPaymentDto {
+  @IsString()
+  @IsNotEmpty()
   orderId!: string;
-  paymentId!: string;
-  signature!: string;
+
+  @IsString()
+  @IsOptional()
+  paymentId?: string;
+
+  @IsString()
+  @IsOptional()
+  signature?: string;
+
+  @IsString()
+  @IsOptional()
+  candidateId?: string;
 }
 
 export class RefundRequestDto {
+  @IsString()
+  @IsNotEmpty()
   paymentId!: string;
+
+  @IsNumber()
   amount!: number;
+
+  @IsString()
+  @IsOptional()
   reason?: string;
 }
 
@@ -36,6 +85,11 @@ export class PaymentIntegrationController {
     return this.paymentService.createOrder({ ...body, idempotencyKey });
   }
 
+  @Get('orders/:id/status')
+  async getOrderStatus(@Param('id') id: string) {
+    return this.paymentService.getOrderStatus(id);
+  }
+
   @Post('verify')
   @HttpCode(HttpStatus.OK)
   async verifyPayment(@Body() body: VerifyPaymentDto) {
@@ -44,8 +98,13 @@ export class PaymentIntegrationController {
 
   @Post('webhooks')
   @HttpCode(HttpStatus.OK)
-  async handleWebhook(@Body() body: any) {
-    return this.paymentService.handleWebhook(body);
+  async handleWebhook(
+    @Body() body: any,
+    @Headers() headers: Record<string, string>,
+    @Req() req: any,
+  ) {
+    const rawBody = req.rawBody ? req.rawBody.toString('utf-8') : (typeof body === 'string' ? body : JSON.stringify(body));
+    return this.paymentService.handleWebhook(body, headers, rawBody);
   }
 
   @Post('refunds')

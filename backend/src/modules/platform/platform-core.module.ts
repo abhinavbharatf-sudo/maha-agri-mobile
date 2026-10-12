@@ -13,11 +13,13 @@ import { EnterpriseOrganizationService } from './services/enterprise-organizatio
 import { DynamicEnginesService } from './services/dynamic-engines.service';
 import { EnterpriseGovernanceService } from './services/enterprise-governance.service';
 import { ProductionReadinessService } from './services/production-readiness.service';
+import { PrismaService } from './services/prisma.service';
 import { PlatformCoreController } from './controllers/platform-core.controller';
 
 @Module({
   controllers: [PlatformCoreController],
   providers: [
+    PrismaService,
     PlatformAuthService,
     PlatformNotificationService,
     PlatformAuditService,
@@ -28,6 +30,7 @@ import { PlatformCoreController } from './controllers/platform-core.controller';
     ProductionReadinessService,
   ],
   exports: [
+    PrismaService,
     PlatformAuthService,
     PlatformNotificationService,
     PlatformAuditService,

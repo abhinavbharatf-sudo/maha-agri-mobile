@@ -34,7 +34,7 @@ import {
   CheckCircle2,
   Sparkles,
   Award,
-  Clock,
+  CreditCard,
   Phone,
   MessageSquare,
   Mail,
@@ -72,8 +72,12 @@ import type {
 import {
   entrepreneurAssessmentService,
   INITIAL_ASSESSMENT_FORM_DATA,
-  CONFIGURABLE_ELIGIBILITY_RULES,
 } from '../services/entrepreneurAssessmentService';
+import {
+  edpPaymentService,
+  EDP_STANDARD_TRAINING_FEE_INR,
+  PENDING_PAYMENT_ORDER_KEY,
+} from '../services/edpPaymentService';
 
 interface EntrepreneurAssessmentWizardProps {
   initialCandidateName?: string;
@@ -124,7 +128,12 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
   const [validationHeaderChip, setValidationHeaderChip] = useState<string | null>(null);
   const [isVerifiedByCandidate, setIsVerifiedByCandidate] = useState<boolean>(false);
   const [submissionResult, setSubmissionResult] = useState<{ candidateId: string; scores: InternalAdminAssessmentScores } | null>(null);
-  const [redirectCountdown, setRedirectCountdown] = useState<number>(15);
+  
+  // EDP TRAINING FEE PAYMENT STATE (STEP 9)
+  const [isPaymentProcessing, setIsPaymentProcessing] = useState<boolean>(false);
+  const [paymentStatus, setPaymentStatus] = useState<'IDLE' | 'PROCESSING' | 'PAID' | 'FAILED'>('IDLE');
+  const [paymentTransactionId, setPaymentTransactionId] = useState<string | null>(null);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   const handleNavigateHome = () => {
     setIsSubmitted(false);
@@ -135,6 +144,97 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
     } else if (onBack) {
       onBack();
     }
+  };
+
+  // Check for Cashfree Return URL / pending order status on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const orderIdFromUrl = urlParams.get('order_id') || urlParams.get('orderId');
+    const candidateIdFromUrl = urlParams.get('candidate_id') || urlParams.get('candidateId');
+
+    let pendingOrder: any = null;
+    try {
+      const rawPending = sessionStorage.getItem(PENDING_PAYMENT_ORDER_KEY);
+      if (rawPending) {
+        pendingOrder = JSON.parse(rawPending);
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    const targetOrderId = orderIdFromUrl || pendingOrder?.orderId;
+    const targetCandidateId = candidateIdFromUrl || pendingOrder?.candidateId || submissionResult?.candidateId;
+
+    if (targetOrderId && paymentStatus !== 'PAID') {
+      setCurrentStep(9);
+      setIsSubmitted(true);
+      if (targetCandidateId && !submissionResult) {
+        setSubmissionResult({
+          candidateId: targetCandidateId,
+          scores: { totalScore: 85, recommendation: 'APPROVED' } as any,
+        });
+      }
+
+      setIsPaymentProcessing(true);
+      setPaymentError(null);
+
+      edpPaymentService.verifyOrderStatus(targetOrderId, targetCandidateId).then((result) => {
+        setIsPaymentProcessing(false);
+        if (result.isPaid) {
+          setPaymentStatus('PAID');
+          setPaymentTransactionId(result.paymentId || `CF_${targetOrderId}`);
+          try {
+            sessionStorage.removeItem(PENDING_PAYMENT_ORDER_KEY);
+          } catch (e) {}
+          if (triggerToast) {
+            triggerToast('🎉 Payment Verified! ₹2,068 received successfully.');
+          }
+        } else {
+          setPaymentStatus('FAILED');
+          setPaymentError(result.message || 'Payment was not completed or was cancelled. You may retry below.');
+        }
+
+        // Clean query params from URL without reload
+        try {
+          const cleanUrl = window.location.pathname;
+          window.history.replaceState({}, document.title, cleanUrl);
+        } catch (e) {}
+      });
+    }
+  }, []);
+
+  const handlePayEdpFee = async () => {
+    const candidateId = submissionResult?.candidateId || 'MAHA-AGRI-EDP-84729103';
+    setIsPaymentProcessing(true);
+    setPaymentError(null);
+
+    await edpPaymentService.initiatePaymentWorkflow({
+      candidateId,
+      candidateName: formData.fullName || initialCandidateName || 'EDP Candidate',
+      mobileNumber: formData.mobileNumber || initialMobile || '9999999999',
+      email: formData.email,
+      district: formData.district || initialDistrict,
+      taluka: formData.taluka || initialTaluka,
+      amount: EDP_STANDARD_TRAINING_FEE_INR,
+      onSuccess: (paymentId) => {
+        setIsPaymentProcessing(false);
+        setPaymentStatus('PAID');
+        setPaymentTransactionId(paymentId);
+        if (triggerToast) {
+          triggerToast(`🎉 Payment Verified! Transaction ID: ${paymentId}`);
+        }
+      },
+      onError: (errMsg) => {
+        setIsPaymentProcessing(false);
+        setPaymentStatus('FAILED');
+        setPaymentError(errMsg);
+      },
+      onDismiss: () => {
+        setIsPaymentProcessing(false);
+      },
+    });
   };
 
   const handleEditStep = (stepNumber: number) => {
@@ -267,31 +367,6 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
       };
     }
   }, [formData, isSubmitted]);
-
-  // 15-SECOND AUTOMATIC REDIRECT TIMER FOR STEP 9
-  useEffect(() => {
-    if (currentStep !== 9) {
-      setRedirectCountdown(15);
-      return;
-    }
-
-    setRedirectCountdown(15);
-
-    const timer = setInterval(() => {
-      setRedirectCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          handleNavigateHome();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => {
-      clearInterval(timer);
-    };
-  }, [currentStep]);
 
   // CALCULATE PROGRESS PERCENTAGE
   const progressPercentage = useMemo(() => {
@@ -728,6 +803,15 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
 
       // 1. Persist submitted assessment to local storage / service engine
       entrepreneurAssessmentService.saveSubmittedAssessment(candidateId, formData, scores);
+
+      // 1B. Authoritative candidate synchronization with government backend for payment linkage
+      edpPaymentService.syncAssessmentCandidate({
+        candidateId,
+        fullName: formData.fullName || initialCandidateName || 'Entrepreneur Candidate',
+        mobileNumber: formData.mobileNumber || initialMobile || '9999999999',
+        districtId: formData.district || initialDistrict || 'Wardha',
+        talukaId: formData.taluka || initialTaluka || 'Wardha',
+      }).catch((err) => console.warn('Candidate sync deferred:', err));
 
       // 2. Multi-stage realistic progress pipeline (REQ 19: Submitting -> Processing -> Verifying -> Success)
       setTimeout(() => {
@@ -3474,28 +3558,102 @@ export const EntrepreneurAssessmentWizard: React.FC<EntrepreneurAssessmentWizard
                     </p>
                   </div>
 
+                  {/* 3B. EDP TRAINING FEE BADGE / SUMMARY */}
+                  <div className="w-full bg-[#111827] rounded-xl border border-[#1F2937] px-4 py-3 flex items-center justify-between shadow-md">
+                    <div className="text-left">
+                      <span className="text-slate-300 text-[13px] font-semibold block">EDP Training Fee</span>
+                      <span className="text-[11px] text-slate-400">Fixed Government Enrolment Rate</span>
+                    </div>
+                    <span className="text-emerald-400 text-[16px] font-bold font-mono">₹2,068</span>
+                  </div>
+
                   {/* 4. STATUS */}
                   <div className="w-full bg-[#111827] rounded-xl border border-[#1F2937] px-4 py-3 flex items-center justify-between shadow-md">
                     <span className="text-slate-400 text-[13px] font-medium">Status</span>
-                    <span className="text-emerald-400 text-[13.5px] font-semibold flex items-center space-x-2">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                      <span>Application Received</span>
-                    </span>
+                    {paymentStatus === 'PAID' ? (
+                      <span className="text-emerald-400 text-[13.5px] font-semibold flex items-center space-x-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                        <span>Fee Paid & Enrolled</span>
+                      </span>
+                    ) : (
+                      <span className="text-emerald-400 text-[13.5px] font-semibold flex items-center space-x-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>Application Received</span>
+                      </span>
+                    )}
                   </div>
 
-                  {/* 5. REDIRECT COUNTDOWN & BACK TO HOME */}
-                  <div className="w-full pt-1 space-y-2.5">
-                    <p className="text-[12.5px] font-medium text-slate-400 flex items-center justify-center space-x-1.5">
-                      <Clock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <span>Returning to Home in <strong className="text-emerald-400 font-mono font-bold">{redirectCountdown}</strong> seconds...</span>
-                    </p>
+                  {/* 4B. VERIFIED PAYMENT REFERENCE (If paid) */}
+                  {paymentStatus === 'PAID' && paymentTransactionId && (
+                    <div className="w-full bg-[#064E3B]/40 rounded-xl border border-emerald-500/40 px-4 py-3 text-left space-y-1 animate-in fade-in">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] uppercase tracking-wider font-bold text-emerald-300">
+                          Payment Reference
+                        </span>
+                        <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-mono font-bold">
+                          VERIFIED
+                        </span>
+                      </div>
+                      <span className="font-mono text-[13px] text-emerald-200 font-bold block select-all">
+                        {paymentTransactionId}
+                      </span>
+                      <p className="text-[11px] text-emerald-300/80">
+                        EDP Training Seat Reserved & Portal Access Activated.
+                      </p>
+                    </div>
+                  )}
 
+                  {/* 4C. PAYMENT GATEWAY NOTICE (If error) */}
+                  {paymentError && (
+                    <div className="w-full bg-rose-500/10 border border-rose-500/40 rounded-xl p-3 text-left space-y-1 text-rose-300 text-xs animate-in fade-in">
+                      <div className="flex items-center space-x-1.5 font-bold text-rose-400">
+                        <AlertTriangle className="w-4 h-4 shrink-0" />
+                        <span>Payment Notice</span>
+                      </div>
+                      <p className="leading-snug">{paymentError}</p>
+                    </div>
+                  )}
+
+                  {/* 5. ACTIONS: PAY EDP TRAINING FEE (PRIMARY) & BACK TO HOME (SECONDARY) */}
+                  <div className="w-full pt-1 space-y-3">
+                    {/* Primary Button: Pay EDP Training Fee — ₹2,068 */}
+                    <button
+                      type="button"
+                      disabled={isPaymentProcessing || paymentStatus === 'PAID'}
+                      onClick={handlePayEdpFee}
+                      className={`w-full h-[56px] min-h-[56px] font-bold text-[16px] rounded-[16px] transition-all cursor-pointer flex items-center justify-center space-x-2.5 active:scale-[0.99] ${
+                        paymentStatus === 'PAID'
+                          ? 'bg-[#064E3B] text-emerald-200 border border-emerald-500/50 cursor-default opacity-90'
+                          : isPaymentProcessing
+                          ? 'bg-[#047857] text-white opacity-90 cursor-wait shadow-lg shadow-emerald-950/40'
+                          : 'bg-[#059669] hover:bg-[#047857] text-white shadow-lg shadow-emerald-950/40'
+                      }`}
+                    >
+                      {isPaymentProcessing ? (
+                        <>
+                          <Loader2 className="w-5 h-5 text-white animate-spin shrink-0" />
+                          <span>Connecting Cashfree Gateway...</span>
+                        </>
+                      ) : paymentStatus === 'PAID' ? (
+                        <>
+                          <CheckCircle2 className="w-5 h-5 text-emerald-300 shrink-0" />
+                          <span>✓ EDP Training Fee Paid</span>
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard className="w-5 h-5 text-white shrink-0" />
+                          <span>Pay EDP Training Fee — ₹2,068</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* Secondary Button: Back to Home */}
                     <button
                       type="button"
                       onClick={handleNavigateHome}
-                      className="w-full h-[56px] min-h-[56px] bg-[#059669] hover:bg-[#047857] text-white font-bold text-[16px] rounded-[16px] shadow-lg shadow-emerald-950/40 transition-all cursor-pointer flex items-center justify-center space-x-2.5 active:scale-[0.99]"
+                      className="w-full h-[56px] min-h-[56px] bg-[#111827] hover:bg-[#182234] text-slate-200 hover:text-white font-semibold text-[15px] rounded-[16px] border border-[#1F2937] hover:border-slate-600 shadow-md transition-all cursor-pointer flex items-center justify-center space-x-2.5 active:scale-[0.99]"
                     >
-                      <Home className="w-5 h-5 text-white shrink-0" />
+                      <Home className="w-5 h-5 text-slate-400 shrink-0" />
                       <span>Back to Home</span>
                     </button>
                   </div>

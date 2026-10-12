@@ -5,7 +5,30 @@
 // ============================================================================
 
 import { Controller, Post, Get, Body, Param, HttpCode, HttpStatus } from '@nestjs/common';
+import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
 import { EdpLifecycleService } from '../services/edp-lifecycle.service';
+
+export class SyncAssessmentCandidateDto {
+  @IsString()
+  @IsNotEmpty()
+  candidateId!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  fullName!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  mobileNumber!: string;
+
+  @IsString()
+  @IsOptional()
+  districtId?: string;
+
+  @IsString()
+  @IsOptional()
+  talukaId?: string;
+}
 
 export class CreateEdpLeadDto {
   fullName!: string;
@@ -62,6 +85,12 @@ export class EdpLifecycleController {
     return this.edpLifecycleService.createLead(body);
   }
 
+  @Post('candidates/sync-assessment')
+  @HttpCode(HttpStatus.OK)
+  async syncAssessmentCandidate(@Body() body: SyncAssessmentCandidateDto) {
+    return this.edpLifecycleService.syncAssessmentCandidate(body);
+  }
+
   @Post('candidates/register')
   @HttpCode(HttpStatus.CREATED)
   async registerCandidate(@Body() body: RegisterEdpCandidateDto) {
@@ -71,7 +100,10 @@ export class EdpLifecycleController {
   @Post('candidates/:id/activate-portal')
   @HttpCode(HttpStatus.OK)
   async activatePortal(@Param('id') candidateId: string, @Body() body: ActivatePortalDto) {
-    return this.edpLifecycleService.confirmPaymentAndActivatePortal(candidateId, body.transactionRef, body.actorUserId);
+    const actor = (body.actorUserId === 'CASHFREE_GATEWAY' || body.actorUserId === 'CASHFREE_WEBHOOK')
+      ? 'EXTERNAL_API_CLIENT'
+      : (body.actorUserId || 'EXTERNAL_API_CLIENT');
+    return this.edpLifecycleService.confirmPaymentAndActivatePortal(candidateId, body.transactionRef, actor);
   }
 
   @Post('candidates/:id/select-career')

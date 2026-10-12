@@ -14,13 +14,15 @@
 // ============================================================================
 
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native"]
+  provider        = "prisma-client-js"
+  binaryTargets   = ["native"]
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["platform", "edp", "soil", "workforce", "farmer", "ops", "scale", "security", "integration"]
 }
 
 // ----------------------------------------------------------------------------
@@ -38,6 +40,8 @@ enum UserRoleType {
   DRONE_PILOT
   FINANCE_OFFICER
   FARMER
+
+  @@schema("platform")
 }
 
 enum NotificationChannel {
@@ -45,6 +49,8 @@ enum NotificationChannel {
   SMS
   EMAIL
   PUSH
+
+  @@schema("platform")
 }
 
 enum AuditActionType {
@@ -55,6 +61,8 @@ enum AuditActionType {
   RECORD_DELETED
   STATE_TRANSITION
   SECURITY_VIOLATION
+
+  @@schema("platform")
 }
 
 enum WorkforceStatus {
@@ -69,6 +77,8 @@ enum WorkforceStatus {
   PROMOTED
   SUSPENDED
   EXITED
+
+  @@schema("workforce")
 }
 
 enum SharedFarmerStatus {
@@ -77,6 +87,8 @@ enum SharedFarmerStatus {
   ACTIVE
   MERGED
   ARCHIVED
+
+  @@schema("farmer")
 }
 
 enum IncidentSeverity {
@@ -84,6 +96,8 @@ enum IncidentSeverity {
   P2_MAJOR
   P3_MINOR
   P4_COSMETIC
+
+  @@schema("ops")
 }
 
 enum IncidentStatus {
@@ -91,6 +105,8 @@ enum IncidentStatus {
   INVESTIGATING
   RESOLVED
   CLOSED
+
+  @@schema("ops")
 }
 
 enum DistrictRolloutStage {
@@ -100,6 +116,8 @@ enum DistrictRolloutStage {
   WORKFORCE_DEPLOYED
   PILOT_ACTIVE
   PRODUCTION_LIVE
+
+  @@schema("ops")
 }
 
 // ============================================================================
@@ -150,14 +168,48 @@ model IntegGisLayer {
   @@schema("integration")
 }
 
-model IntegPaymentTxn {
-  id               String   @id @default(uuid()) @db.Uuid
-  txnCode          String   @unique @db.VarChar(50)
-  gatewayName      String   @db.VarChar(50)
-  amount           Decimal  @db.Decimal(12, 2)
-  status           String   @default("SUCCESS") @db.VarChar(30)
-  settledAt        DateTime? @db.Timestamptz
+model IntegPaymentOrder {
+  id               String            @id @default(uuid()) @db.Uuid
+  orderCode        String            @unique @db.VarChar(50) // Cashfree order_id
+  candidateId      String?           @db.Uuid                // Strict FK to EdpCandidate.id
+  candidateCode    String            @db.VarChar(50)         // Business candidateCode
+  gatewayName      String            @default("CASHFREE") @db.VarChar(50)
+  amount           Decimal           @db.Decimal(12, 2)
+  currency         String            @default("INR") @db.VarChar(10)
+  status           String            @default("ACTIVE") @db.VarChar(30) // ACTIVE, PAID, EXPIRED
+  paymentSessionId String?           @db.Text
+  paymentLink      String?           @db.Text
+  createdAt        DateTime          @default(now()) @db.Timestamptz
+  updatedAt        DateTime          @default(now()) @updatedAt @db.Timestamptz
 
+  transactions     IntegPaymentTxn[]
+
+  @@index([candidateId])
+  @@index([candidateCode])
+  @@map("integ_payment_orders")
+  @@schema("integration")
+}
+
+model IntegPaymentTxn {
+  id               String            @id @default(uuid()) @db.Uuid
+  txnCode          String            @unique @db.VarChar(50) // cf_payment_id
+  orderId          String?           @db.Uuid
+  orderCode        String?           @db.VarChar(50)
+  candidateId      String?           @db.Uuid
+  candidateCode    String?           @db.VarChar(50)
+  gatewayName      String            @db.VarChar(50)
+  amount           Decimal           @db.Decimal(12, 2)
+  currency         String            @default("INR") @db.VarChar(10)
+  status           String            @db.VarChar(30) // Actual verified status: SUCCESS, FAILED, PENDING, etc.
+  settledAt        DateTime?         @db.Timestamptz
+  createdAt        DateTime          @default(now()) @db.Timestamptz
+  updatedAt        DateTime          @default(now()) @updatedAt @db.Timestamptz
+
+  order            IntegPaymentOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([orderCode])
+  @@index([candidateId])
+  @@index([candidateCode])
   @@map("integ_payment_txns")
   @@schema("integration")
 }
@@ -817,6 +869,8 @@ enum EdpCandidateStatus {
   DRONE_DELIVERED
   GROUND_TRAINED
   PARTNER_ACTIVATED
+
+  @@schema("edp")
 }
 
 enum CareerTrack {
@@ -825,6 +879,8 @@ enum CareerTrack {
   DRONE_PILOT_JOB
   DRONE_REPAIR_TECHNICIAN
   DRONE_SURVEY_MAPPING
+
+  @@schema("edp")
 }
 
 enum DocumentType {
@@ -835,12 +891,16 @@ enum DocumentType {
   DGCA_MEDICAL_FITNESS
   BANK_PASSBOOK
   BUSINESS_REGISTRATION_GST
+
+  @@schema("edp")
 }
 
 enum DocumentVerificationStatus {
   PENDING
   VERIFIED
   REJECTED
+
+  @@schema("edp")
 }
 
 model EdpLead {
@@ -886,6 +946,8 @@ model EdpCandidate {
   status             EdpCandidateStatus @default(NEW)
   isPortalActive     Boolean            @default(false)
   isPaid             Boolean            @default(false)
+  paymentTxnCode     String?            @unique @db.VarChar(50)
+  paidAt             DateTime?          @db.Timestamptz
   
   createdAt          DateTime           @default(now()) @db.Timestamptz
   createdBy          String             @db.Uuid
@@ -1323,6 +1385,8 @@ enum SoilSampleStatus {
   SAMPLE_REJECTED
   RETEST_REQUESTED
   RETEST_IN_PROGRESS
+
+  @@schema("soil")
 }
 
 enum SoilParameterRating {
@@ -1331,6 +1395,8 @@ enum SoilParameterRating {
   OPTIMAL
   HIGH
   VERY_HIGH
+
+  @@schema("soil")
 }
 
 enum SoilSamplePriority {
@@ -1338,6 +1404,8 @@ enum SoilSamplePriority {
   URGENT
   GOVT_CAMPAIGN
   RESEARCH
+
+  @@schema("soil")
 }
 
 enum LabType {
@@ -1345,6 +1413,8 @@ enum LabType {
   PRIVATE_ACCREDITED_LAB
   AGRICULTURAL_UNIVERSITY_LAB
   MOBILE_TESTING_VAN
+
+  @@schema("soil")
 }
 
 model SoilFarmer {
