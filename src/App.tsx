@@ -127,9 +127,6 @@ function App() {
         <Route path="/agridoot"          element={<MahaAgridootFieldApp />} />
         <Route path="/field"             element={<MahaAgridootFieldApp />} />
 
-        {/* Catch-all fallback directly to MAHA-AGRI Admin Portal */}
-        <Route path="*" element={<MahaAgriEnterpriseAdminPortal />} />
-
         {/* 1. SUPER ADMIN PANEL ROUTE ALIASES */}
         <Route path="/super-admin"     element={<SuperAdminDashboard />} />
         <Route path="/superadmin"      element={<SuperAdminDashboard />} />

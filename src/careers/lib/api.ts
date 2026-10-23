@@ -457,6 +457,29 @@ export async function createApplication(payload: {
   preferred_district?: string;
   application_data?: Record<string, unknown>;
 }) {
+  // 1. Verify job is actively accepting applications at API boundary
+  const { data: job, error: jobErr } = await supabase
+    .from('rms_job_postings' as never)
+    .select('id, status, is_trashed')
+    .eq('id', payload.job_posting_id)
+    .single();
+
+  if (jobErr || !job) {
+    return { data: null, error: { message: 'Position not found', code: 'JOB_NOT_FOUND' } as never };
+  }
+
+  const jobRecord = job as { status: string; is_trashed?: boolean };
+  if (jobRecord.is_trashed || jobRecord.status !== 'published') {
+    return {
+      data: null,
+      error: {
+        message: `Applications are closed for this position (status: ${jobRecord.status}).`,
+        code: 'APPLICATIONS_CLOSED',
+      } as never,
+    };
+  }
+
+  // 2. Perform insert
   const { data, error } = await supabase
     .from('rms_applications' as never)
     .insert({ ...payload, application_number: '', status: 'draft' })

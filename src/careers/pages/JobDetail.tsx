@@ -346,6 +346,7 @@ export default function JobDetail() {
                     />
                   )}
                   <SummaryItem icon={Info} label="Recruitment Mode" value={job.recruitment_mode ?? 'Online'} />
+                  {job.project_duration && <SummaryItem icon={Clock} label="Project Duration" value={job.project_duration} />}
                   {job.total_vacancies != null && <SummaryItem icon={Users} label="Total Vacancies" value={job.total_vacancies.toLocaleString('en-IN') + ' Vacancies'} />}
                   {job.vacancies_per_district != null && <SummaryItem icon={MapPin} label="Per District" value={job.vacancies_per_district.toLocaleString('en-IN') + ' Vacancies'} />}
                   {job.vacancies_per_taluka != null && <SummaryItem icon={MapPin} label="Per Taluka" value={job.vacancies_per_taluka.toLocaleString('en-IN') + ' Vacanc' + (job.vacancies_per_taluka === 1 ? 'y' : 'ies')} />}

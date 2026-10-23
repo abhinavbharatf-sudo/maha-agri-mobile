@@ -6,12 +6,19 @@ import {
   Trash2, MoreVertical, Copy, EyeOff, Clock, Star, Flame, ChevronUp, ChevronDown,
   Pin, Search, Filter, Users, FileText, Calendar, TrendingUp, MousePointerClick,
   UserCheck, Award, ArrowLeftCircle, Ban, Send, RotateCcw,
-  CalendarClock, Radio, CheckSquare, ShieldAlert, Zap, Activity,
+  CalendarClock, Radio, CheckSquare, ShieldAlert, Zap, Activity, Info,
+  GraduationCap, HelpCircle, GitBranch, MapPin, IndianRupee, ExternalLink,
+  Save, CheckCircle2, ClipboardList, Mail, Settings,
 } from 'lucide-react';
+import HRBadgeManager from './HRBadgeManager';
+import HRFlowManager from './HRFlowManager';
+import HRFaqManager from './HRFaqManager';
+import { supabase } from '../../lib/supabase/client';
 import {
   listAllJobs, upsertJob, listWorkflowTemplates, archiveJob, duplicateJob,
   setJobStatus, toggleJobFeatured, toggleJobUrgent, reorderJobs,
   bulkJobStatus, bulkArchiveJobs, getJobStats, getJobAnalytics,
+  getJobHealth, type JobHealthData,
 } from '../lib/api';
 import type { RmsJobPosting, RmsWorkflowTemplate, RmsWorkflowStage, RmsJobStats, RmsJobAnalytics } from '../lib/types';
 import { EMPLOYMENT_TYPE_LABELS, JOB_STATUS_OPTIONS, JOB_STATUS_CONFIG } from '../lib/constants';
@@ -19,6 +26,7 @@ import { EMPLOYMENT_TYPE_LABELS, JOB_STATUS_OPTIONS, JOB_STATUS_CONFIG } from '.
 const EMPTY_JOB: Partial<RmsJobPosting> = {
   title: '', slug: '', department: '', location: '', employment_type: 'full_time',
   experience_required: '', status: 'draft',
+  description: '', project_duration: '',
   eligibility_criteria: [], required_documents: [], skills_required: [],
   application_fee_amount: 0, onboarding_fee_amount: 0,
   fee_label_application: 'Application Fee', fee_label_onboarding: 'Onboarding Fee',
@@ -42,6 +50,17 @@ const EMPTY_JOB: Partial<RmsJobPosting> = {
   display_deadline_public: true,
   acknowledgement_text: '',
 };
+
+// ─── Unified Form Tabs ────────────────────────────────────────────────────────
+const FORM_TABS = [
+  { id: 'position',       label: '1. Position Setup',           icon: Briefcase     },
+  { id: 'qualifications', label: '2. Qualifications & Media',    icon: FileText      },
+  { id: 'workflow',       label: '3. Workflow & Badges',        icon: GitBranch     },
+  { id: 'faqs',           label: '4. FAQs & Declaration',       icon: HelpCircle    },
+  { id: 'scheduling',     label: '5. Scheduling & Publish',      icon: CalendarClock },
+] as const;
+
+type FormTabId = typeof FORM_TABS[number]['id'];
 
 // ─── Quick Action Menu Items ──────────────────────────────────────────────
 type ActionKey =
@@ -145,10 +164,12 @@ export default function HRJobPostingEditor() {
   const [loading, setLoading] = useState(true);
   const [searchParams] = useSearchParams();
   const [showForm, setShowForm] = useState(searchParams.get('new') === '1');
+  const [activeTab, setActiveTab] = useState<FormTabId>('position');
   const [formData, setFormData] = useState<Partial<RmsJobPosting>>(EMPTY_JOB);
   const [saving, setSaving] = useState(false);
   const [eligInput, setEligInput] = useState('');
   const [docInput, setDocInput] = useState('');
+  const [skillInput, setSkillInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<RmsJobPosting | null>(null);
@@ -202,27 +223,42 @@ export default function HRJobPostingEditor() {
 
   const showSuccess = (msg: string) => {
     setSuccessMsg(msg);
-    setTimeout(() => setSuccessMsg(null), 4000);
+    setTimeout(() => setSuccessMsg(null), 4500);
   };
 
   // ── Save ──────────────────────────────────────────────────────────────────
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = async (e?: React.FormEvent, closeAfter = false) => {
+    if (e) e.preventDefault();
+    if (!formData.title?.trim()) {
+      setActiveTab('position');
+      return setError('Job Title is required in Position Setup.');
+    }
     setSaving(true);
     setError(null);
     const payload = { ...formData };
     if (!payload.slug && payload.title) payload.slug = generateSlug(payload.title);
-    const { error: err } = await upsertJob(payload);
+    if (!payload.id && !payload.created_by) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id) payload.created_by = user.id;
+    }
+    const { data: savedJob, error: err } = await upsertJob(payload);
     setSaving(false);
     if (err) return setError(err.message);
-    setShowForm(false);
-    setFormData(EMPTY_JOB);
-    showSuccess('Job posting saved successfully.');
+
+    showSuccess(payload.id ? 'Position updated successfully.' : 'Position created and saved successfully.');
+    if (savedJob) {
+      setFormData(savedJob);
+    }
     load();
+    if (closeAfter) {
+      setShowForm(false);
+      setFormData(EMPTY_JOB);
+    }
   };
 
   // ── Preview ────────────────────────────────────────────────────────────────
-  const handlePreview = (job: RmsJobPosting) => {
+  const handlePreview = (job: Partial<RmsJobPosting>) => {
+    if (!job.slug) return;
     window.open(`/careers/jobs/${job.slug}`, '_blank', 'noopener,noreferrer');
   };
 
@@ -243,9 +279,13 @@ export default function HRJobPostingEditor() {
     setOpenMenuId(null);
     switch (action) {
       case 'edit':
-        setFormData({ ...job }); setShowForm(true); break;
+        setFormData({ ...job });
+        setActiveTab('position');
+        setShowForm(true);
+        break;
       case 'preview':
-        handlePreview(job); break;
+        handlePreview(job);
+        break;
       case 'publish':
         await setJobStatus(job.id, 'published'); showSuccess(`"${job.title}" published.`); load(); break;
       case 'hide':
@@ -327,7 +367,6 @@ export default function HRJobPostingEditor() {
     if (filterFeatured === 'no') result = result.filter(j => !j.is_featured);
     if (filterUrgent === 'yes') result = result.filter(j => j.is_urgent);
     if (filterUrgent === 'no') result = result.filter(j => !j.is_urgent);
-    // Sort: featured first, then urgent, then sort_order, then created_at
     result.sort((a, b) => {
       if ((b.is_featured ? 1 : 0) - (a.is_featured ? 1 : 0) !== 0)
         return (b.is_featured ? 1 : 0) - (a.is_featured ? 1 : 0);
@@ -351,7 +390,7 @@ export default function HRJobPostingEditor() {
     else setSelectedIds(new Set(filteredJobs.map(j => j.id)));
   };
 
-  // ── Eligibility / Document helpers ─────────────────────────────────────────
+  // ── Eligibility / Document / Skill helpers ─────────────────────────────────
   const addEligibility = () => {
     if (!eligInput.trim()) return;
     set('eligibility_criteria', [...(formData.eligibility_criteria as { label: string; required: boolean }[]), { label: eligInput.trim(), required: true }]);
@@ -361,6 +400,20 @@ export default function HRJobPostingEditor() {
     const list = [...(formData.eligibility_criteria as { label: string; required: boolean }[])];
     list.splice(i, 1); set('eligibility_criteria', list);
   };
+
+  const addSkill = () => {
+    if (!skillInput.trim()) return;
+    const current = (formData.skills_required as string[] ?? []);
+    if (!current.includes(skillInput.trim())) {
+      set('skills_required', [...current, skillInput.trim()]);
+    }
+    setSkillInput('');
+  };
+  const removeSkill = (i: number) => {
+    const list = [...(formData.skills_required as string[] ?? [])];
+    list.splice(i, 1); set('skills_required', list);
+  };
+
   const addDocument = () => {
     if (!docInput.trim()) return;
     const key = docInput.trim().toLowerCase().replace(/\s+/g, '_');
@@ -437,7 +490,7 @@ export default function HRJobPostingEditor() {
         {successMsg && (
           <motion.div
             initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-            className="flex items-center gap-2.5 p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-800 font-medium"
+            className="flex items-center gap-2.5 p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-800 font-medium shadow-sm"
           >
             <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
             {successMsg}
@@ -448,13 +501,18 @@ export default function HRJobPostingEditor() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-bold text-primary-900">Job Postings</h2>
-          <p className="text-sm text-primary-500">{jobs.length} total</p>
+          <h2 className="text-lg font-bold text-primary-900">Position &amp; Job Postings</h2>
+          <p className="text-sm text-primary-500">{jobs.length} total positions</p>
         </div>
-        <button onClick={() => { setFormData(EMPTY_JOB); setShowForm(true); }}
-          className="flex items-center gap-2 px-4 py-2.5 bg-primary-900 text-white text-sm font-bold rounded-xl hover:bg-primary-800 transition-colors">
-          <Plus className="w-4 h-4" /> New Job Posting
-        </button>
+        <div className="flex items-center gap-2">
+          <Link to="/admin/rms/trash" className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-primary-600 hover:text-primary-800 bg-white border border-primary-200 rounded-xl hover:bg-primary-50 transition-colors">
+            <Trash2 className="w-3.5 h-3.5" /> Job Trash
+          </Link>
+          <button onClick={() => { setFormData(EMPTY_JOB); setActiveTab('position'); setShowForm(true); }}
+            className="flex items-center gap-2 px-4 py-2 bg-primary-900 text-white text-sm font-bold rounded-xl hover:bg-primary-800 transition-colors">
+            <Plus className="w-4 h-4" /> New Position
+          </button>
+        </div>
       </div>
 
       {/* Search & Filters */}
@@ -502,341 +560,563 @@ export default function HRJobPostingEditor() {
         )}
       </div>
 
-      {/* Job Form */}
+      {/* ════════════════════════════════════════════════════════════════════════
+          5-TAB UNIFIED POSITION CREATION & EDITING WIZARD
+      ════════════════════════════════════════════════════════════════════════ */}
       {showForm && (
         <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-2xl border-2 border-primary-200 p-6">
-          <h3 className="text-base font-bold text-primary-900 mb-5">{formData.id ? 'Edit Job Posting' : 'New Job Posting'}</h3>
-          <form onSubmit={handleSave} className="space-y-5">
-            <div className="grid sm:grid-cols-2 gap-4">
-              {[
-                { label: 'Job Title *', key: 'title', placeholder: 'e.g. District Coordinator' },
-                { label: 'URL Slug *', key: 'slug', placeholder: 'auto-generated from title' },
-                { label: 'Department', key: 'department', placeholder: 'e.g. Operations' },
-                { label: 'Location', key: 'location', placeholder: 'e.g. Pune / Multiple Locations' },
-                { label: 'Experience Required', key: 'experience_required', placeholder: 'e.g. 2+ years' },
-              ].map(f => (
-                <div key={f.key}>
-                  <label className="block text-xs font-semibold text-primary-700 mb-1.5">{f.label}</label>
-                  <input value={(formData[f.key as keyof RmsJobPosting] as string) ?? ''} placeholder={f.placeholder}
-                    onChange={e => {
-                      set(f.key as keyof RmsJobPosting, e.target.value);
-                      if (f.key === 'title' && !formData.id) set('slug', generateSlug(e.target.value));
-                    }}
-                    className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white" />
-                </div>
-              ))}
-              <div>
-                <label className="block text-xs font-semibold text-primary-700 mb-1.5">Employment Type</label>
-                <select value={formData.employment_type} onChange={e => set('employment_type', e.target.value)}
-                  className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white">
-                  {Object.entries(EMPLOYMENT_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-primary-700 mb-1.5">Workflow Template</label>
-                <select value={formData.workflow_template_id ?? ''} onChange={e => set('workflow_template_id', e.target.value || null)}
-                  className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white">
-                  <option value="">No template selected</option>
-                  {templates.map(t => <option key={t.id} value={t.id}>{t.name} ({t.stages.length} stages)</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-primary-700 mb-1.5">Status</label>
-                <select value={formData.status} onChange={e => set('status', e.target.value)}
-                  className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white">
-                  {JOB_STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                </select>
-              </div>
-            </div>
-
+          className="bg-white rounded-2xl border-2 border-primary-200 shadow-xl overflow-hidden">
+          
+          {/* Top Form Header */}
+          <div className="p-5 border-b border-primary-100 flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-primary-50/50 to-white">
             <div>
-              <label className="block text-xs font-semibold text-primary-700 mb-1.5">Experience Required</label>
-              <input value={formData.experience_required ?? ''} placeholder="e.g. 2+ years"
-                onChange={e => set('experience_required', e.target.value)}
-                className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white" />
-            </div>
-
-            {/* Fees */}
-            <div className="grid sm:grid-cols-2 gap-4 p-4 bg-amber-50 rounded-xl border border-amber-200">
-              <div>
-                <label className="block text-xs font-semibold text-amber-700 mb-1.5">Application Fee (₹) — 0 for free</label>
-                <input type="number" min="0" step="1" value={formData.application_fee_amount ?? 0}
-                  onChange={e => set('application_fee_amount', parseFloat(e.target.value) || 0)}
-                  className="w-full border border-amber-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-amber-400 bg-white" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-amber-700 mb-1.5">Onboarding Fee (₹) — 0 for none</label>
-                <input type="number" min="0" step="1" value={formData.onboarding_fee_amount ?? 0}
-                  onChange={e => set('onboarding_fee_amount', parseFloat(e.target.value) || 0)}
-                  className="w-full border border-amber-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-amber-400 bg-white" />
-              </div>
-            </div>
-
-            {/* Eligibility */}
-            <div>
-              <label className="block text-xs font-semibold text-primary-700 mb-2">Eligibility Criteria</label>
-              <div className="flex gap-2 mb-2">
-                <input value={eligInput} onChange={e => setEligInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addEligibility())}
-                  placeholder="Type criterion and press enter..."
-                  className="flex-1 border border-primary-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500" />
-                <button type="button" onClick={addEligibility}
-                  className="px-4 py-2 bg-primary-100 text-primary-700 font-semibold rounded-lg text-sm hover:bg-primary-200 transition-colors">Add</button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {(formData.eligibility_criteria as { label: string }[] ?? []).map((c, i) => (
-                  <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary-50 border border-primary-200 rounded-full text-xs font-medium text-primary-700">
-                    <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
-                    {c.label}
-                    <button type="button" onClick={() => removeEligibility(i)} className="ml-1 text-primary-400 hover:text-red-500 transition-colors">×</button>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-primary-900">
+                  {formData.id ? `Edit Position: ${formData.title || 'Untitled'}` : 'Create New Position'}
+                </h3>
+                {formData.id && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold border border-emerald-200">
+                    ID: {formData.id.slice(0, 8)}…
                   </span>
-                ))}
+                )}
               </div>
+              <p className="text-xs text-primary-500 mt-0.5">
+                Unified Position Configuration • Database-backed &amp; synchronized with public Careers Portal
+              </p>
             </div>
-
-            {/* Required Documents */}
-            <div>
-              <label className="block text-xs font-semibold text-primary-700 mb-2">Required Documents</label>
-              <div className="flex gap-2 mb-2">
-                <input value={docInput} onChange={e => setDocInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addDocument())}
-                  placeholder="e.g. Aadhaar Card, Degree Certificate..."
-                  className="flex-1 border border-primary-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500" />
-                <button type="button" onClick={addDocument}
-                  className="px-4 py-2 bg-primary-100 text-primary-700 font-semibold rounded-lg text-sm hover:bg-primary-200 transition-colors">Add</button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {(formData.required_documents as { label: string }[] ?? []).map((d, i) => (
-                  <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-full text-xs font-medium text-blue-700">
-                    {d.label}
-                    <button type="button" onClick={() => removeDocument(i)} className="ml-1 text-blue-400 hover:text-red-500 transition-colors">×</button>
-                  </span>
-                ))}
-              </div>
+            <div className="flex items-center gap-2">
+              {formData.slug && (
+                <button type="button" onClick={() => handlePreview(formData)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary-700 bg-primary-100 hover:bg-primary-200 rounded-lg transition-colors">
+                  <Eye className="w-3.5 h-3.5" /> Preview Public View
+                </button>
+              )}
+              <button type="button" onClick={() => { setShowForm(false); setError(null); }}
+                className="p-1.5 text-primary-400 hover:text-primary-600 rounded-lg hover:bg-primary-100 transition-colors" title="Close Form">
+                <X className="w-5 h-5" />
+              </button>
             </div>
+          </div>
 
-            {/* Vacancy & Criteria */}
-            <div className="grid sm:grid-cols-2 gap-4 p-4 bg-primary-50 rounded-xl border border-primary-100">
-              <div className="sm:col-span-2">
-                <p className="text-xs font-bold text-primary-600 uppercase tracking-wide mb-3">Vacancy & Criteria</p>
-              </div>
-              {[
-                { label: 'Total Vacancies', key: 'total_vacancies', type: 'number', placeholder: 'e.g. 72' },
-                { label: 'Vacancies Per District', key: 'vacancies_per_district', type: 'number', placeholder: 'e.g. 2' },
-                { label: 'Vacancies Per Taluka', key: 'vacancies_per_taluka', type: 'number', placeholder: 'e.g. 1' },
-                { label: 'Minimum Age', key: 'min_age', type: 'number', placeholder: 'e.g. 21' },
-                { label: 'Maximum Age', key: 'max_age', type: 'number', placeholder: 'e.g. 40' },
-              ].map(f => (
-                <div key={f.key}>
-                  <label className="block text-xs font-semibold text-primary-700 mb-1.5">{f.label}</label>
-                  <input type="number" min="0"
-                    value={(formData[f.key as keyof RmsJobPosting] as number | null) ?? ''}
-                    placeholder={f.placeholder}
-                    onChange={e => set(f.key as keyof RmsJobPosting, e.target.value === '' ? null : parseInt(e.target.value) || null)}
-                    className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white" />
+          {/* 5-Tab Bar */}
+          <div className="flex overflow-x-auto border-b border-primary-100 bg-slate-50/60 scrollbar-hide">
+            {FORM_TABS.map(tab => {
+              const active = activeTab === tab.id;
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 px-4 py-3 text-xs font-bold whitespace-nowrap border-b-2 transition-all shrink-0 ${
+                    active
+                      ? 'border-primary-900 text-primary-900 bg-white shadow-sm'
+                      : 'border-transparent text-primary-500 hover:text-primary-800 hover:bg-slate-100/60'
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 ${active ? 'text-primary-900' : 'text-primary-400'}`} />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Form Content */}
+          <form onSubmit={e => handleSave(e, false)} className="p-6 space-y-6">
+
+            {/* ═════ TAB 1: POSITION SETUP ═════ */}
+            {activeTab === 'position' && (
+              <div className="space-y-6">
+                <div className="border-b border-primary-100 pb-3">
+                  <h4 className="text-sm font-bold text-primary-900 flex items-center gap-2">
+                    <Briefcase className="w-4 h-4 text-primary-600" /> Basic Role &amp; Location Details
+                  </h4>
+                  <p className="text-xs text-primary-500 mt-0.5">Define core identifiers, department, location and employment classification.</p>
                 </div>
-              ))}
-              {/* ── Salary / Honorarium — Enterprise HRMS Configuration ── */}
-              <div className="sm:col-span-2 border border-primary-200 rounded-xl p-4 bg-primary-50/30 space-y-3">
-                <label className="block text-xs font-bold text-primary-800 uppercase tracking-wide">Salary / Honorarium</label>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Amount */}
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {[
+                    { label: 'Job Title *', key: 'title', placeholder: 'e.g. District Coordinator' },
+                    { label: 'URL Slug *', key: 'slug', placeholder: 'auto-generated from title' },
+                    { label: 'Department / Project', key: 'department', placeholder: 'e.g. MAHA-AGRI PROJECT / Operations' },
+                    { label: 'Location', key: 'location', placeholder: 'e.g. Maharashtra / Multiple Locations' },
+                    { label: 'Experience Required', key: 'experience_required', placeholder: 'e.g. 2+ years' },
+                  ].map(f => (
+                    <div key={f.key}>
+                      <label className="block text-xs font-semibold text-primary-700 mb-1.5">{f.label}</label>
+                      <input value={(formData[f.key as keyof RmsJobPosting] as string) ?? ''} placeholder={f.placeholder}
+                        onChange={e => {
+                          set(f.key as keyof RmsJobPosting, e.target.value);
+                          if (f.key === 'title' && !formData.id) set('slug', generateSlug(e.target.value));
+                        }}
+                        className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white" />
+                    </div>
+                  ))}
                   <div>
-                    <label className="block text-xs font-semibold text-primary-700 mb-1.5">Amount</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={formData.salary_amount ?? ''}
-                      placeholder="e.g. 35000"
-                      onChange={e => set('salary_amount', e.target.value === '' ? null : parseFloat(e.target.value) || null)}
+                    <label className="block text-xs font-semibold text-primary-700 mb-1.5">Employment Type</label>
+                    <select value={formData.employment_type} onChange={e => set('employment_type', e.target.value)}
+                      className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white">
+                      {Object.entries(EMPLOYMENT_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-primary-700 mb-1.5">Project Duration</label>
+                    <input value={formData.project_duration ?? ''} placeholder="e.g. 1 Year / 6 Months / Regular"
+                      onChange={e => set('project_duration', e.target.value)}
                       className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white" />
                   </div>
-
-                  {/* Salary Type */}
                   <div>
-                    <label className="block text-xs font-semibold text-primary-700 mb-1.5">Salary Type</label>
-                    <select
-                      value={formData.salary_type ?? ''}
-                      onChange={e => set('salary_type', e.target.value || null)}
+                    <label className="block text-xs font-semibold text-primary-700 mb-1.5">Recruitment Mode</label>
+                    <select value={formData.recruitment_mode ?? 'Online'} onChange={e => set('recruitment_mode', e.target.value)}
                       className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white">
-                      <option value="">— Select —</option>
-                      <option>Per Month</option>
-                      <option>Per Week</option>
-                      <option>Per Day</option>
-                      <option>Per Year</option>
-                      <option>Per Project</option>
-                      <option>Per Assignment</option>
-                      <option>Per Visit</option>
-                      <option>Per Camp</option>
-                      <option>Per Sample</option>
-                      <option>Per Farmer</option>
-                      <option>Per Registration</option>
-                      <option>Per Training</option>
-                      <option>Per Survey</option>
-                      <option>Fixed Amount</option>
-                      <option>Negotiable</option>
-                      <option>As Per Organization Norms</option>
-                      <option>As Per Government Rules</option>
-                      <option>Performance Based</option>
-                      <option>Commission Based</option>
-                      <option>Incentive Based</option>
-                      <option>Stipend</option>
-                      <option>Volunteer (No Honorarium)</option>
-                      <option>Other</option>
+                      <option value="Online">Online</option>
+                      <option value="Offline">Offline</option>
+                      <option value="Hybrid">Hybrid</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-primary-700 mb-1.5">Recruitment Status</label>
+                    <select value={formData.recruitment_status ?? 'open'} onChange={e => set('recruitment_status', e.target.value)}
+                      className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white">
+                      <option value="open">Open</option>
+                      <option value="filling_fast">Filling Fast</option>
+                      <option value="closed">Closed</option>
                     </select>
                   </div>
                 </div>
 
-                {/* Custom Salary Type — shown only when "Other" is selected */}
-                {formData.salary_type === 'Other' && (
+                {/* Fees Grid */}
+                <div className="grid sm:grid-cols-2 gap-4 p-4 bg-amber-50/70 rounded-xl border border-amber-200">
                   <div>
-                    <label className="block text-xs font-semibold text-primary-700 mb-1.5">Custom Salary Type</label>
-                    <input
-                      value={formData.salary_honorarium ?? ''}
-                      placeholder="Enter custom salary type"
-                      onChange={e => set('salary_honorarium', e.target.value)}
-                      className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white" />
+                    <label className="block text-xs font-semibold text-amber-900 mb-1.5">Application Fee (₹) — 0 for Free</label>
+                    <input type="number" min="0" step="1" value={formData.application_fee_amount ?? 0}
+                      onChange={e => set('application_fee_amount', parseFloat(e.target.value) || 0)}
+                      className="w-full border border-amber-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-amber-400 bg-white" />
                   </div>
-                )}
+                  <div>
+                    <label className="block text-xs font-semibold text-amber-900 mb-1.5">Onboarding Fee (₹) — 0 for None</label>
+                    <input type="number" min="0" step="1" value={formData.onboarding_fee_amount ?? 0}
+                      onChange={e => set('onboarding_fee_amount', parseFloat(e.target.value) || 0)}
+                      className="w-full border border-amber-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-amber-400 bg-white" />
+                  </div>
+                </div>
 
-                {/* Salary Package Includes */}
+                {/* Vacancies & Age Criteria */}
+                <div className="p-4 bg-primary-50/50 rounded-xl border border-primary-100 space-y-3">
+                  <p className="text-xs font-bold text-primary-700 uppercase tracking-wide">Vacancy Allocation &amp; Age Eligibility</p>
+                  <div className="grid sm:grid-cols-3 md:grid-cols-5 gap-3">
+                    {[
+                      { label: 'Total Vacancies', key: 'total_vacancies', placeholder: 'e.g. 72' },
+                      { label: 'Per District', key: 'vacancies_per_district', placeholder: 'e.g. 2' },
+                      { label: 'Per Taluka', key: 'vacancies_per_taluka', placeholder: 'e.g. 1' },
+                      { label: 'Min Age', key: 'min_age', placeholder: 'e.g. 21' },
+                      { label: 'Max Age', key: 'max_age', placeholder: 'e.g. 40' },
+                    ].map(f => (
+                      <div key={f.key}>
+                        <label className="block text-xs font-semibold text-primary-700 mb-1">{f.label}</label>
+                        <input type="number" min="0"
+                          value={(formData[f.key as keyof RmsJobPosting] as number | null) ?? ''}
+                          placeholder={f.placeholder}
+                          onChange={e => set(f.key as keyof RmsJobPosting, e.target.value === '' ? null : parseInt(e.target.value) || null)}
+                          className="w-full border border-primary-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:border-primary-500 bg-white" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Salary / Honorarium Configuration */}
+                <div className="border border-primary-200 rounded-xl p-4 bg-primary-50/30 space-y-3">
+                  <label className="block text-xs font-bold text-primary-800 uppercase tracking-wide">
+                    Salary / Honorarium Configuration (Enterprise HRMS)
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-primary-700 mb-1.5">Amount (₹)</label>
+                      <input type="number" min="0" step="any"
+                        value={formData.salary_amount ?? ''} placeholder="e.g. 35000"
+                        onChange={e => set('salary_amount', e.target.value === '' ? null : parseFloat(e.target.value) || null)}
+                        className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-primary-700 mb-1.5">Salary Type / Frequency</label>
+                      <select value={formData.salary_type ?? ''} onChange={e => set('salary_type', e.target.value || null)}
+                        className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white">
+                        <option value="">— Select Frequency —</option>
+                        <option>Per Month</option><option>Per Week</option><option>Per Day</option><option>Per Year</option>
+                        <option>Per Project</option><option>Per Assignment</option><option>Per Visit</option><option>Per Camp</option>
+                        <option>Per Sample</option><option>Per Farmer</option><option>Per Registration</option><option>Per Training</option>
+                        <option>Per Survey</option><option>Fixed Amount</option><option>Negotiable</option>
+                        <option>As Per Organization Norms</option><option>As Per Government Rules</option>
+                        <option>Performance Based</option><option>Commission Based</option><option>Incentive Based</option>
+                        <option>Stipend</option><option>Volunteer (No Honorarium)</option><option>Other</option>
+                      </select>
+                    </div>
+                  </div>
+                  {formData.salary_type === 'Other' && (
+                    <div>
+                      <label className="block text-xs font-semibold text-primary-700 mb-1.5">Custom Salary Type Description</label>
+                      <input value={formData.salary_honorarium ?? ''} placeholder="Enter custom salary type"
+                        onChange={e => set('salary_honorarium', e.target.value)}
+                        className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white" />
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-xs font-semibold text-primary-700 mb-1.5">Salary Package Inclusions</label>
+                    <select value={formData.salary_package_type ?? ''} onChange={e => set('salary_package_type', e.target.value || null)}
+                      className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white">
+                      <option value="">— Select Inclusions —</option>
+                      <option>Salary Includes Incentive, T.A. &amp; D.A.</option>
+                      <option>Salary Excludes Incentive, T.A. &amp; D.A.</option>
+                      <option>Salary Includes Incentive Only</option>
+                      <option>Salary Excludes Incentive Only</option>
+                      <option>Salary Includes T.A. &amp; D.A. Only</option>
+                      <option>Salary Excludes T.A. &amp; D.A. Only</option>
+                      <option>Fixed Salary (No Additional Benefits)</option>
+                      <option>Variable Pay / Performance Incentive</option>
+                      <option>Commission Based Earnings</option>
+                      <option>As Per Organization Policy</option>
+                      <option>Benefits Will Be Discussed During Interview</option>
+                      <option>Other</option>
+                    </select>
+                  </div>
+                  {formData.salary_package_type === 'Other' && (
+                    <div>
+                      <label className="block text-xs font-semibold text-primary-700 mb-1.5">Custom Package Description</label>
+                      <input value={formData.salary_package_custom ?? ''} placeholder="Enter custom package description"
+                        onChange={e => set('salary_package_custom', e.target.value)}
+                        className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white" />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ═════ TAB 2: QUALIFICATIONS & MEDIA ═════ */}
+            {activeTab === 'qualifications' && (
+              <div className="space-y-6">
+                <div className="border-b border-primary-100 pb-3">
+                  <h4 className="text-sm font-bold text-primary-900 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-primary-600" /> Role Description, Skills &amp; Media Resources
+                  </h4>
+                  <p className="text-xs text-primary-500 mt-0.5">Provide detailed role duties, required competencies, eligibility criteria and supporting PDFs/videos.</p>
+                </div>
+
+                {/* Job Description Textarea */}
                 <div>
-                  <label className="block text-xs font-semibold text-primary-700 mb-1.5">Salary Package Includes</label>
-                  <select
-                    value={formData.salary_package_type ?? ''}
-                    onChange={e => set('salary_package_type', e.target.value || null)}
+                  <label className="block text-xs font-semibold text-primary-700 mb-1.5">
+                    Job Description (Role &amp; Responsibilities)
+                  </label>
+                  <textarea value={formData.description ?? ''} onChange={e => set('description', e.target.value)}
+                    rows={6} placeholder="Detailed job description, core responsibilities, key deliverables and expectations..."
+                    className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white resize-y" />
+                </div>
+
+                {/* Project Overview Textarea */}
+                <div>
+                  <label className="block text-xs font-semibold text-primary-700 mb-1.5">
+                    Project Overview <span className="font-normal text-primary-400">(shown on public portal if filled)</span>
+                  </label>
+                  <textarea value={formData.project_overview ?? ''} onChange={e => set('project_overview', e.target.value)}
+                    rows={3} placeholder="Brief description of the initiative/project for candidate awareness..."
+                    className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white resize-y" />
+                </div>
+
+                {/* Required Skills Tag Builder */}
+                <div>
+                  <label className="block text-xs font-semibold text-primary-700 mb-2">Required Skills &amp; Competencies</label>
+                  <div className="flex gap-2 mb-2">
+                    <input value={skillInput} onChange={e => setSkillInput(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addSkill())}
+                      placeholder="e.g. Agronomy, Field Survey, Soil Chemistry..."
+                      className="flex-1 border border-primary-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500" />
+                    <button type="button" onClick={addSkill}
+                      className="px-4 py-2 bg-primary-100 text-primary-700 font-semibold rounded-lg text-sm hover:bg-primary-200 transition-colors">Add Skill</button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {((formData.skills_required as string[]) ?? []).map((s, i) => (
+                      <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-full text-xs font-medium text-emerald-800">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                        {s}
+                        <button type="button" onClick={() => removeSkill(i)} className="ml-1 text-emerald-500 hover:text-red-500 transition-colors">×</button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Eligibility Criteria */}
+                <div>
+                  <label className="block text-xs font-semibold text-primary-700 mb-2">Eligibility Criteria</label>
+                  <div className="flex gap-2 mb-2">
+                    <input value={eligInput} onChange={e => setEligInput(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addEligibility())}
+                      placeholder="Type criterion (e.g. Graduate in Agriculture/Allied Science) and press enter..."
+                      className="flex-1 border border-primary-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500" />
+                    <button type="button" onClick={addEligibility}
+                      className="px-4 py-2 bg-primary-100 text-primary-700 font-semibold rounded-lg text-sm hover:bg-primary-200 transition-colors">Add</button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(formData.eligibility_criteria as { label: string }[] ?? []).map((c, i) => (
+                      <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary-50 border border-primary-200 rounded-full text-xs font-medium text-primary-700">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                        {c.label}
+                        <button type="button" onClick={() => removeEligibility(i)} className="ml-1 text-primary-400 hover:text-red-500 transition-colors">×</button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Required Documents */}
+                <div>
+                  <label className="block text-xs font-semibold text-primary-700 mb-2">Required Documents</label>
+                  <div className="flex gap-2 mb-2">
+                    <input value={docInput} onChange={e => setDocInput(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addDocument())}
+                      placeholder="e.g. Aadhaar Card, Degree Certificate, Driving License..."
+                      className="flex-1 border border-primary-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500" />
+                    <button type="button" onClick={addDocument}
+                      className="px-4 py-2 bg-primary-100 text-primary-700 font-semibold rounded-lg text-sm hover:bg-primary-200 transition-colors">Add</button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(formData.required_documents as { label: string }[] ?? []).map((d, i) => (
+                      <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-full text-xs font-medium text-blue-700">
+                        {d.label}
+                        <button type="button" onClick={() => removeDocument(i)} className="ml-1 text-blue-400 hover:text-red-500 transition-colors">×</button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Project Resources */}
+                <div className="p-4 bg-blue-50/70 rounded-xl border border-blue-100 space-y-3">
+                  <p className="text-xs font-bold text-blue-800 uppercase tracking-wide">Project Resources &amp; Downloads</p>
+                  {([
+                    { label: 'Project Information PDF URL', key: 'project_pdf_url',   toggle: 'project_pdf_enabled' },
+                    { label: 'Project Introduction Video URL', key: 'project_video_url', toggle: 'project_video_enabled' },
+                    { label: 'Job Description PDF URL', key: 'jd_pdf_url',          toggle: null },
+                  ] as { label: string; key: keyof RmsJobPosting; toggle: keyof RmsJobPosting | null }[]).map(f => (
+                    <div key={f.key}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-semibold text-blue-900">{f.label}</label>
+                        {f.toggle && (
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input type="checkbox" checked={(formData[f.toggle] as boolean) ?? true}
+                              onChange={e => set(f.toggle!, e.target.checked)} className="rounded border-blue-300" />
+                            <span className="text-[11px] text-blue-700 font-medium">Enabled</span>
+                          </label>
+                        )}
+                      </div>
+                      <input value={(formData[f.key] as string) ?? ''} placeholder="https://..."
+                        onChange={e => set(f.key, e.target.value)}
+                        className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 bg-white" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ═════ TAB 3: WORKFLOW & BADGES ═════ */}
+            {activeTab === 'workflow' && (
+              <div className="space-y-6">
+                <div className="border-b border-primary-100 pb-3">
+                  <h4 className="text-sm font-bold text-primary-900 flex items-center gap-2">
+                    <GitBranch className="w-4 h-4 text-primary-600" /> Recruitment Lifecycle Workflow &amp; Badges
+                  </h4>
+                  <p className="text-xs text-primary-500 mt-0.5">Select system recruitment templates and configure dynamic badges and custom recruitment steps.</p>
+                </div>
+
+                {/* Workflow Template selector */}
+                <div>
+                  <label className="block text-xs font-semibold text-primary-700 mb-1.5">Assigned Workflow Template</label>
+                  <select value={formData.workflow_template_id ?? ''} onChange={e => set('workflow_template_id', e.target.value || null)}
                     className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white">
-                    <option value="">— Select —</option>
-                    <option>Salary Includes Incentive, T.A. &amp; D.A.</option>
-                    <option>Salary Excludes Incentive, T.A. &amp; D.A.</option>
-                    <option>Salary Includes Incentive Only</option>
-                    <option>Salary Excludes Incentive Only</option>
-                    <option>Salary Includes T.A. &amp; D.A. Only</option>
-                    <option>Salary Excludes T.A. &amp; D.A. Only</option>
-                    <option>Fixed Salary (No Additional Benefits)</option>
-                    <option>Variable Pay / Performance Incentive</option>
-                    <option>Commission Based Earnings</option>
-                    <option>As Per Organization Policy</option>
-                    <option>Benefits Will Be Discussed During Interview</option>
-                    <option>Other</option>
+                    <option value="">No template selected (Standard flow)</option>
+                    {templates.map(t => <option key={t.id} value={t.id}>{t.name} ({t.stages.length} stages)</option>)}
                   </select>
                 </div>
 
-                {/* Custom Package Description — shown only when "Other" is selected */}
-                {formData.salary_package_type === 'Other' && (
+                {/* Sub-managers: Badges and Steps */}
+                {formData.id ? (
+                  <div className="space-y-4 pt-2">
+                    <div className="bg-white p-4 rounded-xl border border-primary-200 shadow-sm">
+                      <HRBadgeManager jobId={formData.id} />
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border border-primary-200 shadow-sm">
+                      <HRFlowManager jobId={formData.id} />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-3">
+                    <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-bold text-blue-900">Unlock Dynamic Badges &amp; Custom Recruitment Steps</p>
+                      <p className="text-xs text-blue-700 mt-0.5">
+                        Please save this position once to generate its persistent ID. After saving, you can configure job badges and customized recruitment steps right here.
+                      </p>
+                      <button type="button" onClick={() => handleSave(undefined, false)} disabled={saving || !formData.title}
+                        className="mt-2.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                        {saving ? 'Saving...' : 'Save Position Now'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Custom Application Questions Notice */}
+                <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-xl space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <ClipboardList className="w-4 h-4 text-amber-700" />
+                    <h5 className="text-xs font-bold text-amber-900">Custom Application Questions (Status: Future Phase)</h5>
+                  </div>
+                  <p className="text-xs text-amber-800 leading-relaxed">
+                    Custom candidate application questions are currently not implemented in the candidate application portal. The active candidate portal uses a standardized 7-step verification wizard (Personal, Address, Education, Experience, Preference, Declaration, Preview). Questionnaire database schema persistence is reserved for an upcoming release.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* ═════ TAB 4: FAQS & DECLARATION ═════ */}
+            {activeTab === 'faqs' && (
+              <div className="space-y-6">
+                <div className="border-b border-primary-100 pb-3">
+                  <h4 className="text-sm font-bold text-primary-900 flex items-center gap-2">
+                    <HelpCircle className="w-4 h-4 text-primary-600" /> FAQs &amp; Candidate Acknowledgement
+                  </h4>
+                  <p className="text-xs text-primary-500 mt-0.5">Manage job-specific frequently asked questions and the legal declaration candidates must sign before applying.</p>
+                </div>
+
+                {/* Sub-manager: FAQs */}
+                {formData.id ? (
+                  <div className="bg-white p-4 rounded-xl border border-primary-200 shadow-sm">
+                    <HRFaqManager jobId={formData.id} />
+                  </div>
+                ) : (
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-3">
+                    <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-bold text-blue-900">Job-Specific FAQs</p>
+                      <p className="text-xs text-blue-700 mt-0.5">
+                        Save this position first to enable adding custom FAQ entries specific to this role.
+                      </p>
+                      <button type="button" onClick={() => handleSave(undefined, false)} disabled={saving || !formData.title}
+                        className="mt-2 px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                        {saving ? 'Saving...' : 'Save Position Now'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Candidate Acknowledgement Declaration */}
+                <div>
+                  <label className="block text-xs font-semibold text-primary-700 mb-1.5">
+                    Candidate Acknowledgement Declaration
+                    <span className="font-normal text-primary-400 ml-1">(checkbox requirement before submission on portal)</span>
+                  </label>
+                  <textarea value={formData.acknowledgement_text ?? ''} onChange={e => set('acknowledgement_text', e.target.value)}
+                    rows={4}
+                    placeholder="I confirm that I have reviewed all project documents, eligibility criteria, recruitment process, responsibilities and terms before submitting my application."
+                    className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white resize-y" />
+                  <p className="text-[11px] text-primary-400 mt-1">Leave blank to use the standard platform acknowledgement declaration.</p>
+                </div>
+
+                {/* Notification Template Reference */}
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Mail className="w-4 h-4 text-primary-600" />
+                    <h5 className="text-xs font-bold text-primary-900">Recruitment Notification Templates (System-Wide)</h5>
+                  </div>
+                  <p className="text-xs text-primary-600 leading-relaxed">
+                    Event-driven WhatsApp, Email, and SMS notification templates (Application confirmation, interview slot bookings, document verification updates, provisional letters) are governed globally across the platform.
+                  </p>
+                  <Link to="/admin/rms/notifications" className="inline-flex items-center gap-1.5 text-xs font-bold text-primary-700 hover:text-primary-900 underline">
+                    Open Notification Template Manager <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            {/* ═════ TAB 5: SCHEDULING & PUBLISH ═════ */}
+            {activeTab === 'scheduling' && (
+              <div className="space-y-6">
+                <div className="border-b border-primary-100 pb-3">
+                  <h4 className="text-sm font-bold text-primary-900 flex items-center gap-2">
+                    <CalendarClock className="w-4 h-4 text-primary-600" /> Publishing Mode, Status &amp; Visibility
+                  </h4>
+                  <p className="text-xs text-primary-500 mt-0.5">Control live portal visibility, automatic application open/close timers and promotional flags.</p>
+                </div>
+
+                {/* Status Selector */}
+                <div className="grid sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-primary-700 mb-1.5">Custom Salary Package Description</label>
-                    <input
-                      value={formData.salary_package_custom ?? ''}
-                      placeholder="Enter custom package description"
-                      onChange={e => set('salary_package_custom', e.target.value)}
-                      className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white" />
+                    <label className="block text-xs font-semibold text-primary-700 mb-1.5">Position Status</label>
+                    <select value={formData.status} onChange={e => set('status', e.target.value)}
+                      className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white font-medium">
+                      {JOB_STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-4 pt-6">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={formData.is_featured ?? false}
+                        onChange={e => set('is_featured', e.target.checked)} className="rounded border-amber-300" />
+                      <Star className="w-4 h-4 text-amber-500" />
+                      <span className="text-xs font-bold text-amber-900">Featured Job</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={formData.is_urgent ?? false}
+                        onChange={e => set('is_urgent', e.target.checked)} className="rounded border-red-300" />
+                      <Flame className="w-4 h-4 text-red-500" />
+                      <span className="text-xs font-bold text-red-900">Urgent Hiring</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Job Scheduling Component */}
+                <SchedulingSection formData={formData as FormDataType} set={set} />
+
+                {/* Job Health Card (if editing) */}
+                {formData.id && (
+                  <div className="mt-4">
+                    <JobHealth jobId={formData.id} />
                   </div>
                 )}
               </div>
+            )}
 
-              <div>
-                <label className="block text-xs font-semibold text-primary-700 mb-1.5">Recruitment Mode</label>
-                <select value={formData.recruitment_mode ?? 'Online'} onChange={e => set('recruitment_mode', e.target.value)}
-                  className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white">
-                  <option value="Online">Online</option>
-                  <option value="Offline">Offline</option>
-                  <option value="Hybrid">Hybrid</option>
-                </select>
+            {/* Error banner */}
+            {error && (
+              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+                <AlertCircle className="w-4 h-4 shrink-0" /> {error}
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-primary-700 mb-1.5">Recruitment Status</label>
-                <select value={formData.recruitment_status ?? 'open'} onChange={e => set('recruitment_status', e.target.value)}
-                  className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white">
-                  <option value="open">Open</option>
-                  <option value="filling_fast">Filling Fast</option>
-                  <option value="closed">Closed</option>
-                </select>
+            )}
+
+            {/* Bottom Unified Action Bar */}
+            <div className="pt-4 border-t border-primary-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50 -mx-6 -mb-6 p-4 rounded-b-2xl">
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => { setShowForm(false); setError(null); }}
+                  className="px-4 py-2 border border-primary-200 text-primary-700 font-semibold rounded-xl hover:bg-primary-100 text-xs transition-colors">
+                  Cancel
+                </button>
+                {formData.slug && (
+                  <button type="button" onClick={() => handlePreview(formData)}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-primary-700 bg-white border border-primary-200 rounded-xl hover:bg-primary-50 transition-colors">
+                    <Eye className="w-3.5 h-3.5" /> Preview Public View
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => handleSave(undefined, false)} disabled={saving || !formData.title}
+                  className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-primary-900 text-primary-900 font-bold rounded-xl hover:bg-primary-50 disabled:opacity-50 text-xs transition-all">
+                  <Save className="w-3.5 h-3.5" />
+                  {saving ? 'Saving...' : 'Save &amp; Continue Editing'}
+                </button>
+
+                <button type="submit" disabled={saving || !formData.title}
+                  className="flex items-center gap-2 px-5 py-2 bg-primary-900 text-white font-bold rounded-xl hover:bg-primary-800 disabled:opacity-50 text-xs shadow-md transition-all">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  {saving ? 'Saving...' : 'Save &amp; Close'}
+                </button>
               </div>
             </div>
 
-            {/* ── JOB SCHEDULING ─────────────────────────────────────── */}
-            <SchedulingSection formData={formData} set={set} />
-
-            {/* Job Health — only when editing an existing job */}
-            {formData.id && <div className="mt-4"><JobHealth jobId={formData.id} /></div>}
-
-            {/* Featured & Urgent Toggles */}
-            <div className="grid sm:grid-cols-2 gap-4">
-              <label className="flex items-center gap-3 p-3 rounded-xl border border-amber-200 bg-amber-50/50 cursor-pointer">
-                <input type="checkbox" checked={formData.is_featured ?? false}
-                  onChange={e => set('is_featured', e.target.checked)} className="rounded border-amber-300" />
-                <Star className="w-4 h-4 text-amber-500" />
-                <span className="text-sm font-semibold text-amber-800">Featured Job (appears at top)</span>
-              </label>
-              <label className="flex items-center gap-3 p-3 rounded-xl border border-red-200 bg-red-50/50 cursor-pointer">
-                <input type="checkbox" checked={formData.is_urgent ?? false}
-                  onChange={e => set('is_urgent', e.target.checked)} className="rounded border-red-300" />
-                <Flame className="w-4 h-4 text-red-500" />
-                <span className="text-sm font-semibold text-red-800">Urgent Hiring</span>
-              </label>
-            </div>
-
-            {/* Project Resources */}
-            <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 space-y-3">
-              <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">Project Resources</p>
-              {([
-                { label: 'Project Information PDF URL', key: 'project_pdf_url',   toggle: 'project_pdf_enabled' },
-                { label: 'Project Introduction Video URL', key: 'project_video_url', toggle: 'project_video_enabled' },
-                { label: 'Job Description PDF URL', key: 'jd_pdf_url',          toggle: null },
-              ] as { label: string; key: keyof RmsJobPosting; toggle: keyof RmsJobPosting | null }[]).map(f => (
-                <div key={f.key}>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-semibold text-blue-700">{f.label}</label>
-                    {f.toggle && (
-                      <label className="flex items-center gap-1.5 cursor-pointer">
-                        <input type="checkbox" checked={(formData[f.toggle] as boolean) ?? true}
-                          onChange={e => set(f.toggle!, e.target.checked)} className="rounded border-blue-300" />
-                        <span className="text-[11px] text-blue-600">Enabled</span>
-                      </label>
-                    )}
-                  </div>
-                  <input value={(formData[f.key] as string) ?? ''} placeholder="https://..."
-                    onChange={e => set(f.key, e.target.value)}
-                    className="w-full border border-blue-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400 bg-white" />
-                </div>
-              ))}
-            </div>
-
-            {/* Project Overview */}
-            <div>
-              <label className="block text-xs font-semibold text-primary-700 mb-1.5">Project Overview <span className="font-normal text-primary-400">(shown on public page only if filled)</span></label>
-              <textarea value={formData.project_overview ?? ''} onChange={e => set('project_overview', e.target.value)}
-                rows={3} placeholder="Brief description of the project for candidates..."
-                className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 resize-y" />
-            </div>
-
-            {/* Candidate Acknowledgement */}
-            <div>
-              <label className="block text-xs font-semibold text-primary-700 mb-1.5">
-                Candidate Acknowledgement Declaration
-                <span className="font-normal text-primary-400 ml-1">(shown as checkbox on portal)</span>
-              </label>
-              <textarea value={formData.acknowledgement_text ?? ''} onChange={e => set('acknowledgement_text', e.target.value)}
-                rows={3}
-                placeholder="I confirm that I have reviewed all project documents, eligibility criteria, recruitment process, responsibilities and terms before submitting my application."
-                className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 resize-y" />
-              <p className="text-[11px] text-primary-400 mt-1">Leave blank to use the default declaration text.</p>
-            </div>
-
-            {error && <div className="flex items-center gap-2 p-3 bg-red-50 rounded-lg text-sm text-red-700"><AlertCircle className="w-4 h-4" />{error}</div>}
-
-            <div className="flex gap-3">
-              <button type="button" onClick={() => { setShowForm(false); setError(null); }}
-                className="px-5 py-2.5 border-2 border-primary-200 text-primary-700 font-semibold rounded-xl hover:bg-primary-50 text-sm">Cancel</button>
-              <button type="submit" disabled={!formData.title || saving}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary-900 text-white font-bold rounded-xl hover:bg-primary-800 disabled:opacity-50 text-sm">
-                {saving ? 'Saving...' : 'Save Job Posting'}
-              </button>
-            </div>
           </form>
         </motion.div>
       )}
@@ -911,7 +1191,7 @@ export default function HRJobPostingEditor() {
                       <Eye className="w-4 h-4" />
                     </button>
                     {/* Edit button */}
-                    <button onClick={() => { setFormData({ ...job }); setShowForm(true); }} title="Edit"
+                    <button onClick={() => { setFormData({ ...job }); setActiveTab('position'); setShowForm(true); }} title="Edit"
                       className="p-2 rounded-lg border border-primary-200 text-primary-500 hover:bg-primary-50 transition-all">
                       <Edit2 className="w-4 h-4" />
                     </button>
@@ -1014,14 +1294,12 @@ function RecruitmentProgressBadge({ job }: { job: RmsJobPosting }) {
 
   return (
     <div className="mt-1.5">
-      {/* Compact progress pill */}
       <div className="flex items-center gap-1.5 flex-wrap">
         <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full border ${badge.cls}`}>
           <span className={`w-2 h-2 rounded-full ${STAGES.find(s => s.key === stageKey)?.dot ?? 'bg-neutral-400'} ${stageKey === 'closing_soon' ? 'animate-pulse' : ''}`} />
           {badge.label}
         </span>
 
-        {/* Minimal timeline dots */}
         <div className="flex items-center gap-0.5 overflow-x-auto">
           {STAGES.slice(0, 6).map((s, i) => (
             <div key={s.key} className="flex items-center gap-0.5">
@@ -1065,7 +1343,6 @@ function SchedulingSection({ formData, set }: {
   const msToClose = closingDate ? closingDate.getTime() - now.getTime() : null;
   const isClosingSoon = msToClose != null && msToClose > 0 && msToClose <= 3 * 24 * 60 * 60 * 1000;
 
-  // Computed preview status
   const previewStatus = (): { label: string; cls: string; detail: string } => {
     if (!isScheduled) return { label: 'Live Immediately', cls: 'text-emerald-700', detail: 'Visible to candidates as soon as you publish.' };
     if (!publishDate) return { label: 'No Publish Date Set', cls: 'text-yellow-700', detail: 'Set a publish date to schedule.' };
@@ -1076,7 +1353,6 @@ function SchedulingSection({ formData, set }: {
   };
   const preview = previewStatus();
 
-  // Timeline stages
   const timelineStages = [
     { label: 'Draft', active: true },
     { label: 'Scheduled', active: isScheduled },
@@ -1091,13 +1367,11 @@ function SchedulingSection({ formData, set }: {
 
   return (
     <div className="space-y-4">
-      {/* Section header */}
       <div className="flex items-center gap-2">
         <CalendarClock className="w-4 h-4 text-primary-500" />
-        <h3 className="text-sm font-bold text-primary-800 uppercase tracking-wider">Job Scheduling</h3>
+        <h3 className="text-sm font-bold text-primary-800 uppercase tracking-wider">Publishing Schedule</h3>
       </div>
 
-      {/* Publishing Mode */}
       <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
         <p className="text-xs font-bold text-slate-600 uppercase tracking-wide">Publishing Mode</p>
         <div className="flex flex-col sm:flex-row gap-2">
@@ -1107,7 +1381,7 @@ function SchedulingSection({ formData, set }: {
               className="text-primary-600" />
             <div>
               <p className="text-sm font-bold text-primary-900">Publish Immediately</p>
-              <p className="text-xs text-primary-500 mt-0.5">Visible to candidates right away.</p>
+              <p className="text-xs text-primary-500 mt-0.5">Visible to candidates right away when status is published.</p>
             </div>
           </label>
           <label className={`flex items-center gap-2.5 flex-1 p-3 rounded-xl border-2 cursor-pointer transition-all ${isScheduled ? 'border-primary-400 bg-primary-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
@@ -1116,23 +1390,20 @@ function SchedulingSection({ formData, set }: {
               className="text-primary-600" />
             <div>
               <p className="text-sm font-bold text-primary-900">Schedule Publishing</p>
-              <p className="text-xs text-primary-500 mt-0.5">Set a future publish date and closing date.</p>
+              <p className="text-xs text-primary-500 mt-0.5">Set a future publish date and application closing date.</p>
             </div>
           </label>
         </div>
 
-        {/* Helper text for immediate publish */}
         {!isScheduled && (
           <div className="flex items-start gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
             <Zap className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
-            <p className="text-xs text-emerald-800 font-medium">This job will become visible immediately after clicking Publish.</p>
+            <p className="text-xs text-emerald-800 font-medium">This position will become live immediately on the Careers portal when saved as Published.</p>
           </div>
         )}
       </div>
 
-      {/* Date fields — only enabled in scheduled mode */}
       <div className={`grid sm:grid-cols-2 gap-4 transition-opacity duration-200 ${!isScheduled ? 'opacity-40 pointer-events-none select-none' : ''}`}>
-        {/* Publish Date */}
         <div className="space-y-1.5">
           <label className="block text-xs font-bold text-primary-700">
             Publish Date <span className="text-red-500">*</span>
@@ -1145,11 +1416,8 @@ function SchedulingSection({ formData, set }: {
           />
           {publishInPast && isScheduled && (
             <div className="flex items-center gap-1.5 text-xs text-amber-700">
-              <ShieldAlert className="w-3.5 h-3.5" /> Publish date is in the past — job will be visible immediately.
+              <ShieldAlert className="w-3.5 h-3.5" /> Publish date is in the past — position will be visible immediately.
             </div>
-          )}
-          {!publishInPast && isScheduled && publishDate && (
-            <p className="text-xs text-primary-500">This job will automatically become visible on the selected Publish Date.</p>
           )}
           {isScheduled && !formData.publish_date && (
             <div className="flex items-center gap-1.5 text-xs text-red-600">
@@ -1158,7 +1426,6 @@ function SchedulingSection({ formData, set }: {
           )}
         </div>
 
-        {/* Closing Date */}
         <div className="space-y-1.5">
           <label className="block text-xs font-bold text-primary-700">
             Closing Date {!formData.never_close_applications && <span className="text-red-500">*</span>}
@@ -1180,9 +1447,6 @@ function SchedulingSection({ formData, set }: {
               <Flame className="w-3.5 h-3.5" /> Less than 3 days to closing — candidates will see a "Closing Soon" badge.
             </div>
           )}
-          {!closingBeforePublish && isScheduled && formData.closing_date && !formData.never_close_applications && (
-            <p className="text-xs text-primary-500">Applications will automatically close on the selected Closing Date.</p>
-          )}
           {isScheduled && !formData.closing_date && !formData.never_close_applications && (
             <div className="flex items-center gap-1.5 text-xs text-red-600">
               <ShieldAlert className="w-3.5 h-3.5" /> Closing Date is required unless Never Close Applications is enabled.
@@ -1191,7 +1455,6 @@ function SchedulingSection({ formData, set }: {
         </div>
       </div>
 
-      {/* Never Close Applications */}
       <label className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
         formData.never_close_applications ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-white hover:bg-slate-50'
       } ${!isScheduled ? 'opacity-40 pointer-events-none' : ''}`}>
@@ -1210,13 +1473,12 @@ function SchedulingSection({ formData, set }: {
           <p className="text-sm font-bold text-primary-900">Never Close Applications</p>
           <p className="text-xs text-primary-500 mt-0.5">
             {formData.never_close_applications
-              ? 'This job will remain open until HR manually changes the Recruitment Status.'
-              : 'Enable to keep applications open indefinitely.'}
+              ? 'This position will remain open until HR manually changes status to Closed.'
+              : 'Enable to keep applications open indefinitely without a fixed deadline.'}
           </p>
         </div>
       </label>
 
-      {/* Display Deadline on Careers Page — disabled in immediate mode or when never-close is on */}
       <label className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
         formData.display_deadline_public ? 'border-primary-200 bg-white hover:bg-slate-50' : 'border-slate-200 bg-white hover:bg-slate-50'
       } ${(!isScheduled || formData.never_close_applications) ? 'opacity-40 pointer-events-none' : ''}`}>
@@ -1228,19 +1490,15 @@ function SchedulingSection({ formData, set }: {
         <div>
           <p className="text-sm font-bold text-primary-900">Display Last Date to Apply on Careers Page</p>
           <p className="text-xs text-primary-500 mt-0.5">
-            {formData.never_close_applications
-              ? 'Disabled — applications never close, so no last date to display.'
-              : !isScheduled
-              ? 'Disabled — no closing date in immediate publish mode.'
-              : 'When enabled, candidates see the last date to apply. Disable to hide it completely.'}
+            Candidates see the countdown/last date to apply on public cards and role overview.
           </p>
         </div>
       </label>
 
-      {/* ── Live Recruitment Preview ───────────────────────────────────────── */}
+      {/* Recruitment Preview Status */}
       <div className="p-4 bg-primary-50 rounded-xl border border-primary-200 space-y-3">
         <p className="text-xs font-bold text-primary-700 uppercase tracking-wide flex items-center gap-1.5">
-          <Zap className="w-3.5 h-3.5 text-primary-500" /> Recruitment Preview
+          <Zap className="w-3.5 h-3.5 text-primary-500" /> Candidate Portal Visibility Preview
         </p>
         <div className="grid sm:grid-cols-2 gap-3 text-xs">
           <div className="bg-white rounded-lg border border-primary-100 p-3 space-y-2">
@@ -1250,10 +1508,10 @@ function SchedulingSection({ formData, set }: {
           </div>
           <div className="bg-white rounded-lg border border-primary-100 p-3 space-y-2">
             <p className="font-bold text-primary-600 uppercase tracking-wide text-[11px]">Candidate Visibility</p>
-            {!isScheduled && <p className="font-semibold text-emerald-700">Visible Immediately</p>}
+            {!isScheduled && <p className="font-semibold text-emerald-700">Visible Immediately upon Publish</p>}
             {isScheduled && publishDate && publishDate > now && (
               <>
-                <p className="font-semibold text-blue-700">Hidden Until</p>
+                <p className="font-semibold text-blue-700">Scheduled for</p>
                 <p className="text-primary-700 font-medium">{fmtDt(formData.publish_date)}</p>
               </>
             )}
@@ -1276,9 +1534,9 @@ function SchedulingSection({ formData, set }: {
         </div>
       </div>
 
-      {/* ── Visual Recruitment Timeline ───────────────────────────────────── */}
+      {/* Visual Timeline */}
       <div className="p-4 bg-white rounded-xl border border-primary-200 space-y-3">
-        <p className="text-xs font-bold text-primary-700 uppercase tracking-wide">Recruitment Timeline</p>
+        <p className="text-xs font-bold text-primary-700 uppercase tracking-wide">Recruitment Lifecycle Timeline</p>
         <div className="flex items-center gap-0 overflow-x-auto pb-1">
           {timelineStages.map((stage, i) => (
             <div key={stage.label} className="flex items-center shrink-0">
@@ -1309,8 +1567,6 @@ function SchedulingSection({ formData, set }: {
 
 // ─── Job Health Dashboard Card ────────────────────────────────────────────────
 
-import { getJobHealth, type JobHealthData } from '../lib/api';
-
 function JobHealth({ jobId }: { jobId: string }) {
   const [health, setHealth] = useState<JobHealthData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1328,7 +1584,7 @@ function JobHealth({ jobId }: { jobId: string }) {
       <div className="p-4 bg-white rounded-xl border border-primary-200">
         <div className="flex items-center gap-2 mb-3">
           <Activity className="w-4 h-4 text-primary-500" />
-          <h3 className="text-sm font-bold text-primary-800 uppercase tracking-wider">Job Health</h3>
+          <h3 className="text-sm font-bold text-primary-800 uppercase tracking-wider">Position Health &amp; Analytics</h3>
         </div>
         <div className="w-6 h-6 border-2 border-primary-200 border-t-primary-600 rounded-full animate-spin mx-auto" />
       </div>
@@ -1338,7 +1594,6 @@ function JobHealth({ jobId }: { jobId: string }) {
   if (!health) return null;
 
   const score = health.performanceScore;
-  // Circular progress
   const circumference = 2 * Math.PI * 36;
   const strokeOffset = circumference - (score / 100) * circumference;
   const scoreColor = score >= 90 ? '#10b981' : score >= 60 ? '#eab308' : score >= 40 ? '#f97316' : '#ef4444';
@@ -1346,13 +1601,11 @@ function JobHealth({ jobId }: { jobId: string }) {
 
   return (
     <div className="p-4 bg-white rounded-xl border border-primary-200 space-y-4">
-      {/* Header */}
       <div className="flex items-center gap-2">
         <Activity className="w-4 h-4 text-primary-500" />
-        <h3 className="text-sm font-bold text-primary-800 uppercase tracking-wider">Job Health</h3>
+        <h3 className="text-sm font-bold text-primary-800 uppercase tracking-wider">Position Health &amp; Analytics</h3>
       </div>
 
-      {/* Main metrics grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <MetricCard icon={Eye} label="Total Views" value={health.views.toLocaleString('en-IN')} color="text-blue-600" bg="bg-blue-50" />
         <MetricCard icon={FileText} label="Applications" value={health.applications.toLocaleString('en-IN')} color="text-primary-600" bg="bg-primary-50" />
@@ -1366,9 +1619,7 @@ function JobHealth({ jobId }: { jobId: string }) {
         />
       </div>
 
-      {/* Performance Score + badges row */}
       <div className="flex flex-col sm:flex-row gap-4 items-center">
-        {/* Circular score */}
         <div className={`relative w-24 h-24 rounded-full flex items-center justify-center ${scoreBg}`}>
           <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 80 80">
             <circle cx="40" cy="40" r="36" fill="none" stroke="currentColor" strokeWidth="4" className="text-primary-100" />
@@ -1381,7 +1632,6 @@ function JobHealth({ jobId }: { jobId: string }) {
           </div>
         </div>
 
-        {/* Score label + badges */}
         <div className="flex-1 space-y-2">
           <div className="flex items-center gap-2">
             <Star className="w-4 h-4 text-amber-500" />
@@ -1408,27 +1658,6 @@ function JobHealth({ jobId }: { jobId: string }) {
           </div>
         </div>
       </div>
-
-      {/* Optional analytics widgets */}
-      {(health.avgAppsPerDay != null || health.todayApplications != null || health.mostActiveDay || health.lastApplicantDate) && (
-        <div className="pt-3 border-t border-primary-100">
-          <p className="text-xs font-bold text-primary-400 uppercase tracking-wide mb-2">Extended Analytics</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {health.avgAppsPerDay != null && (
-              <MiniMetric label="Avg Apps/Day" value={String(health.avgAppsPerDay)} />
-            )}
-            {health.todayApplications != null && (
-              <MiniMetric label="Today's Apps" value={String(health.todayApplications)} />
-            )}
-            {health.mostActiveDay && (
-              <MiniMetric label="Most Active Day" value={health.mostActiveDay} />
-            )}
-            {health.lastApplicantDate && (
-              <MiniMetric label="Last Applicant" value={new Date(health.lastApplicantDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} />
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -1443,15 +1672,6 @@ function MetricCard({ icon: Icon, label, value, color, bg }: {
         <span className="text-[11px] font-medium text-primary-500">{label}</span>
       </div>
       <p className={`text-lg font-bold ${color}`}>{value}</p>
-    </div>
-  );
-}
-
-function MiniMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="p-2 rounded-lg bg-primary-50 border border-primary-100">
-      <p className="text-[10px] font-medium text-primary-400 uppercase tracking-wide">{label}</p>
-      <p className="text-xs font-semibold text-primary-700 mt-0.5 truncate">{value}</p>
     </div>
   );
 }

@@ -45,6 +45,8 @@ export interface RmsCandidateProfile {
   user_id: string;
   candidate_id: string;
   mobile: string;
+  alternate_mobile?: string | null;
+  caste_category?: string | null;
   full_name: string;
   date_of_birth: string | null;
   gender: 'male' | 'female' | 'other' | 'prefer_not_to_say' | null;

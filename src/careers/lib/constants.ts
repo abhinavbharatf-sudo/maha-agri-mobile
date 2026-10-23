@@ -119,6 +119,23 @@ export const GENDER_OPTIONS = [
   { value: 'prefer_not_to_say',  label: 'Prefer not to say' },
 ];
 
+// ===== Caste Category Options =====
+export const CASTE_CATEGORY_OPTIONS = [
+  { value: 'OPEN',  label: 'OPEN' },
+  { value: 'SC',    label: 'SC' },
+  { value: 'ST',    label: 'ST' },
+  { value: 'VJ-A',  label: 'VJ-A' },
+  { value: 'NT-B',  label: 'NT-B' },
+  { value: 'NT-C',  label: 'NT-C' },
+  { value: 'NT-D',  label: 'NT-D' },
+  { value: 'SBC',   label: 'SBC' },
+  { value: 'OBC',   label: 'OBC' },
+  { value: 'SEBC',  label: 'SEBC' },
+  { value: 'OTHER', label: 'OTHER' },
+] as const;
+
+export type CasteCategory = typeof CASTE_CATEGORY_OPTIONS[number]['value'];
+
 // ===== Employment Type Labels =====
 export const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
   full_time:   'Full-time',

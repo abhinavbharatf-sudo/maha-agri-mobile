@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -7,6 +7,7 @@ import {
   GraduationCap, IndianRupee, ChevronDown, Lock, CheckCircle2, XCircle,
   Sprout, Siren, BookOpen, Stethoscope, Heart, Trees,
   ArrowDownUp, CalendarClock, TrendingUp, TrendingDown, Building2,
+  AlertCircle, RefreshCw,
 } from 'lucide-react';
 import { listPublicCampaigns, listPublicDrives, listPublishedJobs } from '../lib/api';
 import type { RmsCampaign, RmsRecruitmentDrive, RmsJobPosting, JobStatus } from '../lib/types';
@@ -179,16 +180,30 @@ export default function CareersHome() {
   const [recModeFilter, setRecModeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [sortBy, setSortBy] = useState<SortValue>('newest');
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
+    setLoading(true);
+    setError(null);
     Promise.all([listPublicCampaigns(), listPublicDrives(), listPublishedJobs()])
       .then(([c, d, j]) => {
-        setCampaigns(c.data);
-        setDrives(d.data);
+        if (j.error) {
+          setError(j.error.message || 'Failed to load open positions. Please check your network connection.');
+          return;
+        }
+        setCampaigns(c.data ?? []);
+        setDrives(d.data ?? []);
         setPublishedJobs(j.data ?? []);
+      })
+      .catch(err => {
+        setError(err?.message || 'An unexpected network error occurred while loading careers data.');
       })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Group jobs by department
   const departments = useMemo(() => {
@@ -216,6 +231,14 @@ export default function CareersHome() {
       if (recModeFilter && j.recruitment_mode !== recModeFilter) return false;
       if (statusFilter && j.status !== statusFilter) return false;
       if (experienceFilter && j.experience_required !== experienceFilter) return false;
+      if (districtFilter) {
+        const d = districtFilter.toLowerCase();
+        const loc = (j.location || '').toLowerCase();
+        const directMatch = loc.includes(d);
+        const isStateWide = (loc.includes('maharashtra') || loc.includes('state') || !loc) &&
+          ((j.vacancies_per_district != null && j.vacancies_per_district > 0) || (j.total_vacancies != null && j.total_vacancies > 0));
+        if (!directMatch && !isStateWide) return false;
+      }
       return true;
     };
 
@@ -238,7 +261,7 @@ export default function CareersHome() {
     return departments
       .map(d => ({ ...d, jobs: d.jobs.filter(j => filterFn(j, d.id)).sort(sortFn) }))
       .filter(d => d.jobs.length > 0);
-  }, [departments, search, projectFilter, empTypeFilter, recModeFilter, statusFilter, experienceFilter, sortBy]);
+  }, [departments, search, projectFilter, empTypeFilter, recModeFilter, statusFilter, experienceFilter, districtFilter, sortBy]);
 
   const totalFiltered = filteredDepartments.reduce((s, d) => s + d.jobs.length, 0);
   const totalVacancies = publishedJobs.reduce((s, j) => s + (j.total_vacancies ?? 0), 0);
@@ -304,9 +327,9 @@ export default function CareersHome() {
             {/* Stats row */}
             <div className="flex flex-wrap gap-4 sm:gap-8 mb-4">
               {[
-                { label: 'Open Positions', value: String(publishedJobs.length) },
-                { label: 'Total Vacancies', value: totalVacancies > 0 ? fmtNum(totalVacancies) + '+' : '—' },
-                { label: 'Departments', value: String(departments.length) },
+                { label: 'Open Positions', value: error ? '—' : String(publishedJobs.length) },
+                { label: 'Total Vacancies', value: error ? '—' : totalVacancies > 0 ? fmtNum(totalVacancies) + '+' : '—' },
+                { label: 'Departments', value: error ? '—' : String(departments.length) },
                 { label: 'Districts Covered', value: '36' },
               ].map(s => (
                 <div key={s.label} className="text-center">
@@ -536,8 +559,26 @@ export default function CareersHome() {
             </div>
           )}
 
-          {/* No results */}
-          {!loading && filteredDepartments.length === 0 && (
+          {/* Error state with retry */}
+          {!loading && error && (
+            <div className="bg-white rounded-2xl border border-red-200 p-10 sm:p-14 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center mx-auto mb-3">
+                <AlertCircle className="w-6 h-6 text-red-600" />
+              </div>
+              <p className="text-base sm:text-lg font-bold text-red-900 mb-1">Unable to Load Positions</p>
+              <p className="text-sm text-red-600 max-w-md mx-auto mb-5 leading-relaxed">{error}</p>
+              <button
+                type="button"
+                onClick={loadData}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-900 text-white text-sm font-semibold rounded-xl hover:bg-primary-800 transition-all active:scale-95 shadow-sm"
+              >
+                <RefreshCw className="w-4 h-4" /> Try Again
+              </button>
+            </div>
+          )}
+
+          {/* Genuine empty state (only when query succeeds and filters match nothing) */}
+          {!loading && !error && filteredDepartments.length === 0 && (
             <div className="bg-white rounded-2xl border border-primary-100 p-10 sm:p-16 text-center">
               <Search className="w-10 h-10 text-primary-200 mx-auto mb-3" />
               <p className="text-base sm:text-lg font-semibold text-primary-600 mb-2">No positions match your search.</p>

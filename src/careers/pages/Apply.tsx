@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, ArrowRight, CheckCircle2, AlertCircle, User, MapPin,
   GraduationCap, Briefcase, FileText, Eye, Loader2, Phone, Plus,
-  Trash2, ChevronRight, Shield,
+  Trash2, ChevronRight, Shield, Ban, Lock,
 } from 'lucide-react';
 import {
   getJob, getCandidateProfile, upsertCandidateProfile,
@@ -14,7 +14,7 @@ import {
 import type { RmsJobPosting, RmsCandidateProfile } from '../lib/types';
 import { useCandidateAuth } from '../lib/CandidateAuthContext';
 import OTPLoginModal from '../components/OTPLoginModal';
-import { requestApplicationOtp, submitApplicationWithOtp } from '../../crm/lib/api';
+import { submitApplicationWithOtp } from '../../crm/lib/api';
 import { MAHARASHTRA_DISTRICTS } from '../lib/constants';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -49,17 +49,12 @@ export default function Apply() {
   const { user, loading: authLoading, refreshProfile } = useCandidateAuth();
 
   const [job, setJob] = useState<RmsJobPosting | null>(null);
+  const [jobLoading, setJobLoading] = useState(true);
   const [candidate, setCandidate] = useState<RmsCandidateProfile | null>(null);
   const [step, setStep] = useState<Step>('loading');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [showOtp, setShowOtp] = useState(false);
-  
-  // OTP-2 State
-  const [showOtp2, setShowOtp2] = useState(false);
-  const [otp2Code, setOtp2Code] = useState('');
-  const [expectedOtp2, setExpectedOtp2] = useState('');
-  const [otp2Error, setOtp2Error] = useState('');
 
   // ── Personal ──────────────────────────────────────────────────────────────
   const [fullName, setFullName]     = useState('');
@@ -91,8 +86,14 @@ export default function Apply() {
 
   // ── Init: fetch job ─────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!jobId) return;
-    getJob(jobId).then(r => setJob(r.data));
+    if (!jobId) {
+      setJobLoading(false);
+      return;
+    }
+    setJobLoading(true);
+    getJob(jobId)
+      .then(r => setJob(r.data))
+      .finally(() => setJobLoading(false));
   }, [jobId]);
 
   const loadCandidate = useCallback(async (uid: string) => {
@@ -199,41 +200,20 @@ export default function Apply() {
     setStep('declaration');
   };
 
-  // ── Final Submit (Initiate OTP-2) ──────────────────────────────────────────
-  const handleInitiateSubmit = async () => {
+  // ── Final Application Submit (Direct submission for authenticated candidate) ──
+  const handleSubmitApplication = async () => {
     if (!user || !candidate || !job || !declared) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      const res = await requestApplicationOtp(candidate.mobile);
-      if (res.error) {
-        setError('Failed to send OTP-2. Please try again.');
-        setSubmitting(false);
-        return;
-      }
-      setExpectedOtp2(res.generatedOtp);
-      setShowOtp2(true);
-      setSubmitting(false);
-    } catch (err) {
-      setError('An error occurred while sending OTP. Please try again.');
-      setSubmitting(false);
-    }
-  };
-
-  const handleFinalSubmit = async () => {
-    if (!user || !candidate || !job || !declared) return;
-    if (otp2Code !== expectedOtp2) {
-      setOtp2Error('Invalid OTP code. Please try again.');
+    if (job.status !== 'published' || job.is_trashed) {
+      setError('Applications are closed for this position.');
       return;
     }
-    
-    setShowOtp2(false);
+
     setSubmitting(true);
     setError(null);
 
     // Ensure profile_complete is set
     await upsertCandidateProfile({
-      user_id: user!.id,
+      user_id: user.id,
       mobile: candidate.mobile,
       full_name: candidate.full_name,
       profile_complete: true,
@@ -251,26 +231,97 @@ export default function Apply() {
       setSubmitting(false);
       if ((err as { code?: string })?.code === '23505')
         return setError('You have already applied for this position.');
+      if (
+        (err as { code?: string })?.code === 'APPLICATIONS_CLOSED' ||
+        (err as { code?: string })?.code === '23514' ||
+        (err as { message?: string })?.message?.includes('closed')
+      )
+        return setError('Applications are closed for this position.');
       return setError('Failed to submit. Please try again.');
     }
 
     await updateApplicationStatus(data.id, 'submitted');
-    
-    // CRM Integration: Track Application Submitted (OTP-2 success)
+
+    // CRM Integration: Track Application Submitted
     try {
       await submitApplicationWithOtp(user.id, job.id, user.id, profileData);
     } catch (err) {
       console.error('Failed to log application via CRM API:', err);
     }
-    
+
     navigate('/careers/apply/success/' + data.id);
   };
 
   // ─── Render loading ────────────────────────────────────────────────────────
-  if (step === 'loading') {
+  if (step === 'loading' || jobLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary-400" />
+      </div>
+    );
+  }
+
+  // ─── Missing Job / Invalid ID ──────────────────────────────────────────────
+  if (!job) {
+    return (
+      <div className="min-h-screen bg-primary-50 flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white rounded-2xl border border-primary-100 p-8 text-center shadow-sm">
+          <div className="w-14 h-14 rounded-2xl bg-amber-100 flex items-center justify-center mx-auto mb-4">
+            <AlertCircle className="w-7 h-7 text-amber-600" />
+          </div>
+          <h2 className="text-xl font-bold text-primary-900 mb-2">Position Not Found</h2>
+          <p className="text-sm text-primary-600 mb-6">
+            The job listing could not be found or the link may be invalid.
+          </p>
+          <button
+            onClick={() => navigate('/careers')}
+            className="w-full flex items-center justify-center gap-2 py-3.5 bg-primary-900 text-white font-bold rounded-xl hover:bg-primary-800 transition-all"
+          >
+            Browse All Positions <ArrowRight className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Closed / Non-published Job Guard ──────────────────────────────────────
+  if (job.status !== 'published' || job.is_trashed) {
+    const isClosed = job.status === 'applications_closed';
+    const isComingSoon = job.status === 'coming_soon';
+    const isFilled = job.status === 'filled';
+    const titleText = isClosed
+      ? 'Applications Closed'
+      : isComingSoon
+      ? 'Applications Opening Soon'
+      : isFilled
+      ? 'Position Filled'
+      : 'Position Not Available';
+
+    const messageText = isClosed
+      ? `Applications for "${job.title}" are now closed. No new applications are being accepted for this position.`
+      : isComingSoon
+      ? `Applications for "${job.title}" have not opened yet. Please check back when applications are officially opened.`
+      : isFilled
+      ? `This position ("${job.title}") has already been filled.`
+      : `This position is currently not accepting applications.`;
+
+    return (
+      <div className="min-h-screen bg-primary-50 flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white rounded-2xl border border-primary-100 p-8 text-center shadow-sm">
+          <div className="w-14 h-14 rounded-2xl bg-red-100 flex items-center justify-center mx-auto mb-4">
+            <Ban className="w-7 h-7 text-red-600" />
+          </div>
+          <h2 className="text-xl font-bold text-primary-900 mb-2">{titleText}</h2>
+          <p className="text-sm text-primary-600 mb-6 leading-relaxed">
+            {messageText}
+          </p>
+          <button
+            onClick={() => navigate('/careers')}
+            className="w-full flex items-center justify-center gap-2 py-3.5 bg-primary-900 text-white font-bold rounded-xl hover:bg-primary-800 transition-all"
+          >
+            Browse Active Openings <ArrowRight className="w-5 h-5" />
+          </button>
+        </div>
       </div>
     );
   }
@@ -314,15 +365,6 @@ export default function Apply() {
         </div>
         <OTPLoginModal isOpen={showOtp} onClose={() => setShowOtp(false)} onSuccess={handleOtpSuccess}
           title="Login to Apply" subtitle="Sign in with your registered mobile number" />
-      </div>
-    );
-  }
-
-  if (!job) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
-        <AlertCircle className="w-12 h-12 text-primary-400" />
-        <p className="text-primary-600">Position not found.</p>
       </div>
     );
   }
@@ -672,10 +714,10 @@ export default function Apply() {
                     className="flex items-center gap-2 px-5 py-3 border border-primary-200 text-primary-700 font-semibold rounded-xl hover:bg-primary-50 transition-colors disabled:opacity-50">
                     <ArrowLeft className="w-4 h-4" /> Edit
                   </button>
-                  <button onClick={handleInitiateSubmit} disabled={submitting}
+                  <button onClick={handleSubmitApplication} disabled={submitting}
                     className="flex-1 flex items-center justify-center gap-2 py-3 bg-primary-900 text-white font-bold rounded-xl hover:bg-primary-800 disabled:opacity-70 transition-all">
                     {submitting
-                      ? <><Loader2 className="w-5 h-5 animate-spin" /> Sending OTP...</>
+                      ? <><Loader2 className="w-5 h-5 animate-spin" /> Submitting Application...</>
                       : <><CheckCircle2 className="w-5 h-5" /> Submit Application</>}
                   </button>
                 </div>
@@ -683,32 +725,6 @@ export default function Apply() {
             )}
           </motion.div>
         </AnimatePresence>
-        
-        {/* OTP-2 Modal for Application Submission */}
-        {showOtp2 && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary-900/40 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
-              <h3 className="text-xl font-bold text-primary-900 mb-2">Verify Submission</h3>
-              <p className="text-sm text-primary-500 mb-4">Enter the OTP sent to {candidate?.mobile} to confirm your application.</p>
-              
-              <input
-                type="text"
-                value={otp2Code}
-                onChange={e => setOtp2Code(e.target.value)}
-                placeholder="Enter 6-digit OTP"
-                className="w-full border border-primary-200 rounded-xl px-4 py-3 text-center tracking-widest text-lg focus:ring-2 focus:ring-primary-500 mb-2"
-                maxLength={6}
-              />
-              
-              {otp2Error && <p className="text-xs text-red-500 mb-4">{otp2Error}</p>}
-              
-              <div className="flex gap-2 mt-4">
-                <button onClick={() => setShowOtp2(false)} className="flex-1 py-2.5 rounded-xl border border-primary-200 font-semibold text-primary-600">Cancel</button>
-                <button onClick={handleFinalSubmit} className="flex-1 py-2.5 rounded-xl bg-primary-900 font-bold text-white">Verify & Submit</button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
