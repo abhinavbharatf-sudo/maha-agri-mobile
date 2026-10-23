@@ -239,12 +239,26 @@ export class PaymentGatewayService {
 
     const transactionRef = params.paymentId || `PAY_${params.orderId}`;
 
-    // Persist payment to PostgreSQL integ_payment_txns model
+    // GUARD: Resolve candidate BEFORE any database write — fail early with a retryable error.
+    // This prevents orphaned integ_payment_txns rows and ensures activation is never attempted
+    // for a candidate that does not exist in the system.
+    const cand = candidateId
+      ? await this.edpLifecycleService.findCandidateAsync(candidateId)
+      : null;
+    if (!cand) {
+      this.logAudit('PAYMENT_VERIFY_CANDIDATE_MISSING', { candidateId, orderId: params.orderId });
+      throw new BadRequestException(
+        `Candidate '${candidateId}' is not registered in the system. ` +
+        `Payment verified by provider but cannot be captured without a valid candidate record. ` +
+        `Register the candidate and retry verification.`,
+      );
+    }
+
+    // Persist payment to PostgreSQL integ_payment_txns — safe: candidate confirmed above
     if (this.prisma?.integPaymentTxn) {
       try {
-        const cand = candidateId ? await this.edpLifecycleService.findCandidateAsync(candidateId) : null;
-        const candidateUuid = this.isUuid(cand?.id) ? cand.id : (this.isUuid(order?.candidateId) ? order.candidateId : null);
-        const candidateCodeVal = cand?.candidateCode || order?.candidateCode || candidateId;
+        const candidateUuid = this.isUuid(cand.id) ? cand.id : (this.isUuid(order?.candidateId) ? order.candidateId : null);
+        const candidateCodeVal = cand.candidateCode || order?.candidateCode || candidateId;
 
         await this.prisma.integPaymentTxn.upsert({
           where: { txnCode: transactionRef },
@@ -259,10 +273,7 @@ export class PaymentGatewayService {
             status: 'SUCCESS',
             settledAt: new Date(),
           },
-          update: {
-            status: 'SUCCESS',
-            settledAt: new Date(),
-          },
+          update: { status: 'SUCCESS', settledAt: new Date() },
         });
         this.logger.log(`Persisted verified payment transaction ${transactionRef} in PostgreSQL`);
       } catch (dbErr: any) {
@@ -270,29 +281,22 @@ export class PaymentGatewayService {
       }
     }
 
-    // Activate candidate portal in authoritative lifecycle service (do not swallow activation failures)
-    const cand = candidateId ? await this.edpLifecycleService.findCandidateAsync(candidateId) : null;
-    if (this.activeAdapter.providerName === 'CASHFREE' || cand) {
-      await this.edpLifecycleService.confirmPaymentAndActivatePortal(
-        candidateId,
-        transactionRef,
-        this.activeAdapter.providerName === 'CASHFREE' ? 'CASHFREE_GATEWAY' : 'RAZORPAY_GATEWAY',
-      );
-    }
+    // Activate candidate portal — cand is guaranteed non-null (guard above).
+    // NOTE: confirmPaymentAndActivatePortal atomically updates integ_payment_orders to PAID
+    // inside its own Prisma $transaction (lifecycle service step 4). Do not issue a separate
+    // integPaymentOrder.updateMany here to avoid a double-write.
+    await this.edpLifecycleService.confirmPaymentAndActivatePortal(
+      candidateId,
+      transactionRef,
+      this.activeAdapter.providerName === 'CASHFREE' ? 'CASHFREE_GATEWAY' : 'RAZORPAY_GATEWAY',
+    );
 
+    // Update in-memory orderStore to reflect PAID status for subsequent calls within this process.
+    // PostgreSQL integ_payment_orders was already updated atomically by confirmPaymentAndActivatePortal.
     if (order) {
       order.status = 'PAID';
       order.paymentId = transactionRef;
       order.paidAt = new Date().toISOString();
-    }
-
-    if (this.prisma?.integPaymentOrder) {
-      try {
-        await this.prisma.integPaymentOrder.updateMany({
-          where: { orderCode: params.orderId },
-          data: { status: 'PAID' },
-        });
-      } catch (e: any) {}
     }
 
     this.logAudit('PAYMENT_VERIFIED_SUCCESS', { ...params, amount: order?.amount, transactionRef });
