@@ -4,16 +4,18 @@ import {
   X, User, Phone, MapPin, Briefcase, Calendar, FileText,
   CreditCard, Clock, MessageSquare, CheckCircle, XCircle,
   AlertTriangle, ChevronRight, ExternalLink, Download,
-  Send, Loader2, Shield,
+  Send, Loader2, Shield, Archive, Trash2, RotateCcw, AlertCircle, ShieldAlert
 } from 'lucide-react';
 import {
   getApplicationForHR, updateApplicationStatus, addApplicationNote,
   verifyDocument, rejectDocument, requestDocumentCorrection,
-  fetchCandidateCRMTimeline
+  fetchCandidateCRMTimeline, archiveApplication, restoreApplication,
+  trashApplication, restoreTrashApplication, permanentlyDeleteApplication
 } from '../lib/api';
 import type { ApplicationStatus, RmsCandidateDocument } from '../lib/types';
 import ApplicationStatusBadge from '../components/ApplicationStatusBadge';
 import { APPLICATION_STATUS_CONFIG } from '../lib/constants';
+import { useAuth } from '../../lib/auth/AuthContext';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface Props {
@@ -58,6 +60,21 @@ const HR_ACTIONS: { status: ApplicationStatus; label: string; style: string }[] 
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function HRCandidateProfile({ applicationId, onClose, onStatusChanged }: Props) {
+  const { roleKey, permissions } = useAuth();
+  const isSuperAdmin =
+    roleKey === 'super_admin' ||
+    roleKey === 'SUPER_ADMIN' ||
+    roleKey === 'ROOT_SUPER_ADMIN' ||
+    permissions.has('super_admin') ||
+    permissions.has('all');
+  const isAdmin =
+    isSuperAdmin ||
+    roleKey === 'admin' ||
+    roleKey === 'STATE_ADMIN' ||
+    roleKey === 'hr_manager' ||
+    permissions.has('admin') ||
+    permissions.has('hr');
+
   const [data, setData] = useState<Awaited<ReturnType<typeof getApplicationForHR>> | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('profile');
@@ -69,6 +86,10 @@ export default function HRCandidateProfile({ applicationId, onClose, onStatusCha
   const [docLoading, setDocLoading] = useState<string | null>(null);
   
   const [crmTimeline, setCrmTimeline] = useState<any[]>([]);
+
+  // Confirm Archive / Trash / Restore / Delete modal
+  const [confirmAction, setConfirmAction] = useState<'archive' | 'restore' | 'trash' | 'restore_trash' | 'delete' | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -87,6 +108,47 @@ export default function HRCandidateProfile({ applicationId, onClose, onStatusCha
   }, [applicationId]);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleExecuteArchiveTrash = async () => {
+    if (!confirmAction) return;
+    setActionLoading(true);
+    setActionError(null);
+    let err: string | null = null;
+    try {
+      if (confirmAction === 'archive') {
+        const res = await archiveApplication(applicationId);
+        err = res.error;
+      } else if (confirmAction === 'restore') {
+        const res = await restoreApplication(applicationId);
+        err = res.error;
+      } else if (confirmAction === 'trash') {
+        const res = await trashApplication(applicationId);
+        err = res.error;
+      } else if (confirmAction === 'restore_trash') {
+        const res = await restoreTrashApplication(applicationId);
+        err = res.error;
+      } else if (confirmAction === 'delete') {
+        const res = await permanentlyDeleteApplication(applicationId);
+        err = res.error;
+        if (!err) {
+          setActionLoading(false);
+          onStatusChanged?.();
+          onClose();
+          return;
+        }
+      }
+    } catch (e: any) {
+      err = e.message || 'Operation failed.';
+    }
+    setActionLoading(false);
+    if (err) {
+      setActionError(err);
+    } else {
+      setConfirmAction(null);
+      load();
+      onStatusChanged?.();
+    }
+  };
 
   const handleStatusChange = async (status: ApplicationStatus) => {
     if (!data?.application) return;
@@ -128,7 +190,8 @@ export default function HRCandidateProfile({ applicationId, onClose, onStatusCha
   };
 
   const app = data?.application;
-  const candidate = app?.candidate as Record<string, unknown> | undefined;
+  const rawCandidate = app?.candidate;
+  const candidate = (Array.isArray(rawCandidate) ? rawCandidate[0] : rawCandidate) as Record<string, unknown> | undefined;
   const job = app?.job_posting;
 
   // Determine timeline step
@@ -189,9 +252,67 @@ export default function HRCandidateProfile({ applicationId, onClose, onStatusCha
           </button>
         </div>
 
+        {/* Archived Banner */}
+        {!loading && app?.is_archived && !app?.is_trashed && (
+          <div className="bg-amber-50 border-b border-amber-200 px-5 py-3 flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 text-amber-900 font-medium">
+              <Archive className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>This application is <strong>Archived</strong>. All candidate details, payments, and history are preserved.</span>
+            </div>
+            {isAdmin && (
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => { setActionError(null); setConfirmAction('restore'); }}
+                  className="flex items-center gap-1 font-bold px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
+                >
+                  <RotateCcw className="w-3 h-3" /> Restore to Active
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setActionError(null); setConfirmAction('trash'); }}
+                  className="flex items-center gap-1 font-medium px-2.5 py-1 border border-slate-300 text-slate-700 bg-white rounded-lg hover:bg-red-50 hover:text-red-700 transition-colors"
+                >
+                  <Trash2 className="w-3 h-3" /> Move to Trash
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Trashed Banner */}
+        {!loading && app?.is_trashed && (
+          <div className="bg-red-50 border-b border-red-200 px-5 py-3 flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 text-red-900 font-medium">
+              <Trash2 className="w-4 h-4 text-red-600 shrink-0" />
+              <span>This application is currently in the <strong>Trash</strong>.</span>
+            </div>
+            {isAdmin && (
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => { setActionError(null); setConfirmAction('restore_trash'); }}
+                  className="flex items-center gap-1 font-bold px-2.5 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
+                >
+                  <RotateCcw className="w-3 h-3" /> Restore
+                </button>
+                {isSuperAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => { setActionError(null); setConfirmAction('delete'); }}
+                    className="flex items-center gap-1 font-bold px-2.5 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    <Trash2 className="w-3 h-3" /> Delete Permanently
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* HR Quick Actions */}
         {!loading && app && (
-          <div className="px-5 py-3 border-b border-primary-100 bg-white">
+          <div className="px-5 py-3 border-b border-primary-100 bg-white flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-bold text-primary-500 mr-1">Actions:</span>
               {HR_ACTIONS.filter(a => a.status !== app.status).slice(0, 5).map(action => (
@@ -203,6 +324,28 @@ export default function HRCandidateProfile({ applicationId, onClose, onStatusCha
                 </button>
               ))}
             </div>
+
+            {/* Archive / Trash quick triggers when application is active */}
+            {!app.is_archived && !app.is_trashed && isAdmin && (
+              <div className="flex items-center gap-1.5 pl-2 border-l border-primary-200">
+                <button
+                  type="button"
+                  onClick={() => { setActionError(null); setConfirmAction('archive'); }}
+                  title="Archive Application"
+                  className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-full border border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 transition-all"
+                >
+                  <Archive className="w-3 h-3" /> Archive
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setActionError(null); setConfirmAction('trash'); }}
+                  title="Move to Trash"
+                  className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-full border border-slate-300 text-slate-700 bg-slate-50 hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition-all"
+                >
+                  <Trash2 className="w-3 h-3" /> Trash
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -544,6 +687,136 @@ export default function HRCandidateProfile({ applicationId, onClose, onStatusCha
             </>
           )}
         </div>
+
+        {/* Confirmation Modal */}
+        <AnimatePresence>
+          {confirmAction && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-primary-100 space-y-4 text-left"
+              >
+                <div className="flex items-start gap-3">
+                  <div className={`p-2.5 rounded-xl shrink-0 ${
+                    confirmAction === 'delete'
+                      ? 'bg-red-100 text-red-600'
+                      : confirmAction === 'archive'
+                      ? 'bg-amber-100 text-amber-700'
+                      : confirmAction === 'trash'
+                      ? 'bg-orange-100 text-orange-700'
+                      : 'bg-emerald-100 text-emerald-700'
+                  }`}>
+                    {confirmAction === 'delete' ? (
+                      <ShieldAlert className="w-6 h-6" />
+                    ) : confirmAction === 'archive' ? (
+                      <Archive className="w-6 h-6" />
+                    ) : confirmAction === 'trash' ? (
+                      <Trash2 className="w-6 h-6" />
+                    ) : (
+                      <RotateCcw className="w-6 h-6" />
+                    )}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-base font-bold text-primary-900">
+                      {confirmAction === 'archive' && 'Archive Application'}
+                      {confirmAction === 'restore' && 'Restore Application'}
+                      {confirmAction === 'trash' && 'Move to Trash'}
+                      {confirmAction === 'restore_trash' && 'Restore from Trash'}
+                      {confirmAction === 'delete' && 'Permanently Delete Application'}
+                    </h3>
+                    <p className="text-xs text-primary-500 font-mono mt-0.5">
+                      {app?.application_number} · {String(candidate?.full_name ?? 'Candidate')}
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => { if (!actionLoading) setConfirmAction(null); }}
+                    className="p-1 rounded-lg hover:bg-primary-50 text-primary-400 hover:text-primary-700"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="text-sm text-primary-700 leading-relaxed bg-slate-50 p-3.5 rounded-xl border border-primary-100">
+                  {confirmAction === 'archive' && (
+                    <p>
+                      Archiving removes this application from the active HR queue while safely preserving all applicant details, uploaded documents, fee payments, and interview records. You can restore it anytime.
+                    </p>
+                  )}
+                  {confirmAction === 'restore' && (
+                    <p>
+                      This application will be restored to the active recruitment list with its status preserved.
+                    </p>
+                  )}
+                  {confirmAction === 'trash' && (
+                    <p>
+                      This application will be moved to the Trash. You can restore it later if needed.
+                    </p>
+                  )}
+                  {confirmAction === 'restore_trash' && (
+                    <p>
+                      This application will be restored from Trash to the active queue.
+                    </p>
+                  )}
+                  {confirmAction === 'delete' && (
+                    <div className="space-y-1.5">
+                      <p className="text-red-700 font-semibold flex items-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4 shrink-0" />
+                        Warning: Permanent deletion cannot be undone.
+                      </p>
+                      <p className="text-xs text-slate-600">
+                        Restricted to Super Admin role. Applications with payments, appointment letters, interview bookings, evaluations, notes, candidate documents, or training allocations cannot be permanently deleted and must remain archived or trashed.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {actionError && (
+                  <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium">
+                    <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                    <span>{actionError}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    disabled={actionLoading}
+                    onClick={() => setConfirmAction(null)}
+                    className="px-4 py-2 border border-primary-200 text-primary-700 font-semibold rounded-xl hover:bg-primary-50 text-xs transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={actionLoading}
+                    onClick={handleExecuteArchiveTrash}
+                    className={`flex items-center gap-1.5 px-4 py-2 font-bold rounded-xl text-xs text-white shadow-sm transition-all disabled:opacity-60 ${
+                      confirmAction === 'delete'
+                        ? 'bg-red-600 hover:bg-red-700'
+                        : confirmAction === 'archive'
+                        ? 'bg-amber-600 hover:bg-amber-700'
+                        : confirmAction === 'trash'
+                        ? 'bg-orange-600 hover:bg-orange-700'
+                        : 'bg-emerald-600 hover:bg-emerald-700'
+                    }`}
+                  >
+                    {actionLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    {confirmAction === 'archive' && (actionLoading ? 'Archiving...' : 'Confirm Archive')}
+                    {confirmAction === 'restore' && (actionLoading ? 'Restoring...' : 'Confirm Restore')}
+                    {confirmAction === 'trash' && (actionLoading ? 'Moving to Trash...' : 'Move to Trash')}
+                    {confirmAction === 'restore_trash' && (actionLoading ? 'Restoring...' : 'Restore Application')}
+                    {confirmAction === 'delete' && (actionLoading ? 'Deleting...' : 'Permanently Delete')}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </>
   );

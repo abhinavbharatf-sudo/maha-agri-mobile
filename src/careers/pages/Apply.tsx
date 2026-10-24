@@ -11,11 +11,12 @@ import {
   createApplication, updateApplicationStatus, checkDuplicateAadhaar,
   getExistingApplication
 } from '../lib/api';
-import type { RmsJobPosting, RmsCandidateProfile } from '../lib/types';
+import type { RmsJobPosting, RmsCandidateProfile, RmsApplication } from '../lib/types';
 import { useCandidateAuth } from '../lib/CandidateAuthContext';
 import OTPLoginModal from '../components/OTPLoginModal';
 import { submitApplicationWithOtp } from '../../crm/lib/api';
 import { MAHARASHTRA_DISTRICTS } from '../lib/constants';
+import { sendApplicationSubmittedTemplate } from '../../services/whatsappService';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Step =
@@ -51,6 +52,7 @@ export default function Apply() {
   const [job, setJob] = useState<RmsJobPosting | null>(null);
   const [jobLoading, setJobLoading] = useState(true);
   const [candidate, setCandidate] = useState<RmsCandidateProfile | null>(null);
+  const [lockedApp, setLockedApp] = useState<RmsApplication | null>(null);
   const [step, setStep] = useState<Step>('loading');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -96,10 +98,20 @@ export default function Apply() {
       .finally(() => setJobLoading(false));
   }, [jobId]);
 
-  const loadCandidate = useCallback(async (uid: string) => {
+  const loadCandidate = useCallback(async (uid: string, currentJobId?: string) => {
     const { data } = await getCandidateProfile(uid);
     setCandidate(data);
     if (data) {
+      // 1. Guard against duplicate active applications for THIS specific job
+      if (currentJobId) {
+        const { data: existingApp } = await getExistingApplication(data.id, currentJobId);
+        if (existingApp && !existingApp.is_trashed) {
+          setLockedApp(existingApp);
+          setStep('locked');
+          return;
+        }
+      }
+
       setFullName(data.full_name ?? '');
       setDob(data.date_of_birth ?? '');
       setGender(data.gender ?? '');
@@ -121,7 +133,7 @@ export default function Apply() {
   }, []);
 
   // ── Auth gate: wait for auth to settle, then route to OTP gate or form ───────
-  // Runs whenever authLoading or user changes (no stale closure on auth state).
+  // Runs whenever authLoading, user, or jobId changes.
   useEffect(() => {
     if (authLoading) return;                              // still resolving session
     if (step !== 'loading' && step !== 'otp') return;    // already past auth gate
@@ -129,15 +141,16 @@ export default function Apply() {
       setStep('otp');                                     // not signed in → gate
       return;
     }
-    loadCandidate(user.id);                               // signed in → load profile
-  }, [authLoading, user, step, loadCandidate]);
+    loadCandidate(user.id, jobId);                       // signed in → load profile & check job application
+  }, [authLoading, user, step, loadCandidate, jobId]);
 
   // ── OTP Success ───────────────────────────────────────────────────────────
   const handleOtpSuccess = () => {
     setShowOtp(false);
-    // The effect above watches `user`; once onAuthStateChange updates it,
-    // loadCandidate fires automatically — no race condition.
-    void refreshProfile;
+    if (user && jobId) {
+      loadCandidate(user.id, jobId);
+    }
+    void refreshProfile();
   };
 
   // ── Profile Save + Advance ────────────────────────────────────────────────
@@ -223,12 +236,14 @@ export default function Apply() {
       candidate_id: candidate.id,
       job_posting_id: job.id,
       preferred_district: prefDistrict,
+      preferred_location: prefTaluka || undefined,
       preferred_taluka: prefTaluka || null,
       application_data: { preferred_taluka: prefTaluka },
     });
 
     if (err || !data) {
       setSubmitting(false);
+      console.error('[Apply] Application submission failed:', err);
       if ((err as { code?: string })?.code === '23505')
         return setError('You have already applied for this position.');
       if (
@@ -242,9 +257,24 @@ export default function Apply() {
 
     await updateApplicationStatus(data.id, 'submitted');
 
+    // WhatsApp Notification: Dispatch application confirmation for free jobs
+    const isFreeJob = Number(job.application_fee_amount ?? 0) === 0;
+    if (isFreeJob && candidate.mobile) {
+      try {
+        await sendApplicationSubmittedTemplate(
+          candidate.mobile,
+          candidate.full_name || 'Candidate',
+          job.title,
+          data.application_number,
+        );
+      } catch (notifErr) {
+        console.error('[Apply] Failed to dispatch application submitted WhatsApp message:', notifErr);
+      }
+    }
+
     // CRM Integration: Track Application Submitted
     try {
-      await submitApplicationWithOtp(user.id, job.id, user.id, profileData);
+      await submitApplicationWithOtp(user.id, job.id, user.id, candidate);
     } catch (err) {
       console.error('Failed to log application via CRM API:', err);
     }
@@ -333,14 +363,24 @@ export default function Apply() {
           <div className="w-14 h-14 rounded-2xl bg-amber-100 flex items-center justify-center mx-auto mb-4">
             <Shield className="w-7 h-7 text-amber-600" />
           </div>
-          <h2 className="text-xl font-bold text-primary-900 mb-2">Application Locked</h2>
+          <h2 className="text-xl font-bold text-primary-900 mb-2">Application Already Submitted</h2>
           <p className="text-sm text-primary-600 mb-6">
-            You have already applied for this position (ID: {lockedApp?.application_number}). The application is currently under review by the HR team and can no longer be edited.
+            You have already submitted an active application for this position{lockedApp?.application_number ? ` (ID: ${lockedApp.application_number})` : ''}. The application is currently under review by our recruitment team.
           </p>
-          <button onClick={() => navigate('/careers')}
-            className="w-full flex items-center justify-center gap-2 py-3.5 bg-primary-900 text-white font-bold rounded-xl hover:bg-primary-800 transition-all">
-            Browse Other Jobs <ArrowRight className="w-5 h-5" />
-          </button>
+          <div className="space-y-2.5">
+            <button
+              onClick={() => navigate('/candidate/applications')}
+              className="w-full flex items-center justify-center gap-2 py-3 bg-primary-900 text-white font-bold rounded-xl hover:bg-primary-800 transition-all shadow-sm"
+            >
+              View My Applications <ArrowRight className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => navigate('/careers')}
+              className="w-full flex items-center justify-center gap-2 py-3 bg-white border border-primary-200 text-primary-700 font-bold rounded-xl hover:bg-primary-50 transition-all"
+            >
+              Browse Other Positions
+            </button>
+          </div>
         </div>
       </div>
     );

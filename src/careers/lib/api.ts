@@ -3,6 +3,7 @@
 // ============================================================
 
 import { supabase } from '../../lib/supabase/client';
+import { sendInterviewConfirmedTemplate } from '../../services/whatsappService';
 import type {
   RmsCandidateProfile,
   RmsCampaign,
@@ -123,20 +124,42 @@ export async function listTrashedJobs() {
   return { data: (data ?? []) as RmsJobPosting[], error };
 }
 
-export async function archiveJob(id: string) {
-  const { error } = await supabase
+export async function archiveJob(id: string): Promise<{ error: string | null }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) {
+    return { error: 'Authentication required: You must be logged in as an authorized administrator to archive jobs.' };
+  }
+
+  const { data, error } = await supabase
     .from('rms_job_postings' as never)
     .update({ is_trashed: true, trashed_at: new Date().toISOString() } as never)
-    .eq('id', id);
-  return { error };
+    .eq('id', id)
+    .select('id');
+
+  if (error) return { error: error.message };
+  if (!data || (data as unknown[]).length === 0) {
+    return { error: 'Action failed: Could not move job to trash. Please verify administrative write permissions.' };
+  }
+  return { error: null };
 }
 
-export async function restoreJob(id: string) {
-  const { error } = await supabase
+export async function restoreJob(id: string): Promise<{ error: string | null }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) {
+    return { error: 'Authentication required: You must be logged in as an authorized administrator to restore jobs.' };
+  }
+
+  const { data, error } = await supabase
     .from('rms_job_postings' as never)
     .update({ is_trashed: false, trashed_at: null } as never)
-    .eq('id', id);
-  return { error };
+    .eq('id', id)
+    .select('id');
+
+  if (error) return { error: error.message };
+  if (!data || (data as unknown[]).length === 0) {
+    return { error: 'Action failed: Could not restore job. Please verify administrative write permissions.' };
+  }
+  return { error: null };
 }
 
 export async function duplicateJob(id: string): Promise<{ data: RmsJobPosting | null; error: string | null }> {
@@ -172,45 +195,97 @@ export async function duplicateJob(id: string): Promise<{ data: RmsJobPosting | 
   return { data: inserted as RmsJobPosting, error: null };
 }
 
-export async function setJobStatus(id: string, status: string) {
-  const { error } = await supabase
+export async function setJobStatus(id: string, status: string): Promise<{ data: RmsJobPosting | null; error: string | null }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) {
+    return { data: null, error: 'Authentication required: You must be logged in as an authorized administrator to update job status.' };
+  }
+
+  const { data, error } = await supabase
     .from('rms_job_postings' as never)
     .update({ status } as never)
-    .eq('id', id);
-  return { error };
+    .eq('id', id)
+    .select('*');
+
+  if (error) return { data: null, error: error.message };
+  if (!data || (data as unknown[]).length === 0) {
+    return { data: null, error: 'Action failed: No job record was updated. You may not have administrative write permissions or your session has expired.' };
+  }
+  return { data: (data as RmsJobPosting[])[0], error: null };
 }
 
-export async function toggleJobFeatured(id: string, featured: boolean) {
-  const { error } = await supabase
+export async function toggleJobFeatured(id: string, featured: boolean): Promise<{ error: string | null }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) {
+    return { error: 'Authentication required: You must be logged in as an authorized administrator.' };
+  }
+
+  const { data, error } = await supabase
     .from('rms_job_postings' as never)
     .update({ is_featured: featured } as never)
-    .eq('id', id);
-  return { error };
+    .eq('id', id)
+    .select('id');
+
+  if (error) return { error: error.message };
+  if (!data || (data as unknown[]).length === 0) {
+    return { error: 'Action failed: No job record was updated. You may not have administrative write permissions.' };
+  }
+  return { error: null };
 }
 
-export async function toggleJobUrgent(id: string, urgent: boolean) {
-  const { error } = await supabase
+export async function toggleJobUrgent(id: string, urgent: boolean): Promise<{ error: string | null }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) {
+    return { error: 'Authentication required: You must be logged in as an authorized administrator.' };
+  }
+
+  const { data, error } = await supabase
     .from('rms_job_postings' as never)
     .update({ is_urgent: urgent } as never)
-    .eq('id', id);
-  return { error };
+    .eq('id', id)
+    .select('id');
+
+  if (error) return { error: error.message };
+  if (!data || (data as unknown[]).length === 0) {
+    return { error: 'Action failed: No job record was updated. You may not have administrative write permissions.' };
+  }
+  return { error: null };
 }
 
-export async function updateJobOrder(id: string, sortOrder: number) {
-  const { error } = await supabase
+export async function updateJobOrder(id: string, sortOrder: number): Promise<{ error: string | null }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) {
+    return { error: 'Authentication required: You must be logged in as an authorized administrator.' };
+  }
+
+  const { data, error } = await supabase
     .from('rms_job_postings' as never)
     .update({ sort_order: sortOrder } as never)
-    .eq('id', id);
-  return { error };
+    .eq('id', id)
+    .select('id');
+
+  if (error) return { error: error.message };
+  if (!data || (data as unknown[]).length === 0) {
+    return { error: 'Action failed: Could not update job sort order. Please verify administrative write permissions.' };
+  }
+  return { error: null };
 }
 
-export async function reorderJobs(orderedIds: string[]) {
+export async function reorderJobs(orderedIds: string[]): Promise<{ error: string | null }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) {
+    return { error: 'Authentication required: You must be logged in as an authorized administrator.' };
+  }
+
   const updates = orderedIds.map((id, idx) =>
-    supabase.from('rms_job_postings' as never).update({ sort_order: idx } as never).eq('id', id)
+    supabase.from('rms_job_postings' as never).update({ sort_order: idx } as never).eq('id', id).select('id')
   );
   const results = await Promise.all(updates);
-  const firstError = results.find(r => r.error);
-  return { error: firstError?.error ?? null };
+  const failed = results.find(r => r.error || !r.data || (r.data as unknown[]).length === 0);
+  if (failed) {
+    return { error: failed.error?.message || 'Action failed: Could not update order for all jobs. Please check write permissions.' };
+  }
+  return { error: null };
 }
 
 export async function bulkJobStatus(ids: string[], status: string) {
@@ -324,11 +399,13 @@ export async function getJobHealth(jobId: string): Promise<{ data: JobHealthData
       avgAppsPerDay = Math.round((applications / daysSincePublished) * 10) / 10;
     }
 
-    // Fetch last applicant date
+    // Fetch last applicant date (excluding trashed/archived)
     const { data: lastApp } = await supabase
       .from('rms_applications' as never)
       .select('created_at')
       .eq('job_posting_id', jobId)
+      .or('is_trashed.is.null,is_trashed.eq.false')
+      .or('is_archived.is.null,is_archived.eq.false')
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -342,7 +419,9 @@ export async function getJobHealth(jobId: string): Promise<{ data: JobHealthData
       const { data: appByDay } = await supabase
         .from('rms_applications' as never)
         .select('created_at')
-        .eq('job_posting_id', jobId);
+        .eq('job_posting_id', jobId)
+        .or('is_trashed.is.null,is_trashed.eq.false')
+        .or('is_archived.is.null,is_archived.eq.false');
       if (appByDay && (appByDay as unknown[]).length > 0) {
         const dayCount: Record<string, number> = {};
         const todayStr = now.toISOString().slice(0, 10);
@@ -405,6 +484,16 @@ export async function getJob(id: string) {
 }
 
 export async function upsertJob(job: Partial<RmsJobPosting>) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) {
+    return {
+      data: null,
+      error: {
+        message: 'Authentication required: You must be logged in as an authorized administrator to save job postings.'
+      } as any
+    };
+  }
+
   const { data, error } = await supabase
     .from('rms_job_postings' as never)
     .upsert(job)
@@ -431,6 +520,7 @@ export async function getMyApplications(candidateId: string) {
       campaign:rms_campaigns(id, name, status)
     `)
     .eq('candidate_id', candidateId)
+    .or('is_trashed.is.null,is_trashed.eq.false')
     .order('created_at', { ascending: false });
   return { data: (data ?? []) as RmsApplicationWithDetails[], error };
 }
@@ -455,6 +545,8 @@ export async function createApplication(payload: {
   campaign_id?: string;
   drive_id?: string;
   preferred_district?: string;
+  preferred_location?: string;
+  preferred_taluka?: string | null;
   application_data?: Record<string, unknown>;
 }) {
   // 1. Verify job is actively accepting applications at API boundary
@@ -479,12 +571,37 @@ export async function createApplication(payload: {
     };
   }
 
-  // 2. Perform insert
+  // 2. Perform insert with sanitized columns matching rms_applications schema
+  const applicationData = {
+    ...(payload.application_data || {}),
+    ...(payload.preferred_taluka ? { preferred_taluka: payload.preferred_taluka } : {}),
+  };
+
+  const insertRow: Record<string, unknown> = {
+    candidate_id: payload.candidate_id,
+    job_posting_id: payload.job_posting_id,
+    application_number: '',
+    status: 'draft',
+    application_data: applicationData,
+  };
+
+  if (payload.campaign_id) insertRow.campaign_id = payload.campaign_id;
+  if (payload.drive_id) insertRow.drive_id = payload.drive_id;
+  if (payload.preferred_district) insertRow.preferred_district = payload.preferred_district;
+  if (payload.preferred_location || payload.preferred_taluka) {
+    insertRow.preferred_location = payload.preferred_location || payload.preferred_taluka;
+  }
+
   const { data, error } = await supabase
     .from('rms_applications' as never)
-    .insert({ ...payload, application_number: '', status: 'draft' })
+    .insert(insertRow)
     .select()
     .single();
+
+  if (error) {
+    console.error('[createApplication] Insert error:', error);
+  }
+
   return { data: data as RmsApplication | null, error };
 }
 
@@ -863,8 +980,25 @@ export async function getApplicationForHR(id: string) {
       .order('created_at', { ascending: false }),
   ]);
 
+  const appData = appRes.data as any;
+  if (appData) {
+    if (Array.isArray(appData.candidate)) {
+      appData.candidate = appData.candidate[0] || null;
+    }
+    if (!appData.candidate && appData.candidate_id) {
+      const { data: directCand } = await supabase
+        .from('rms_candidate_profiles' as never)
+        .select('*')
+        .eq('id', appData.candidate_id)
+        .maybeSingle();
+      if (directCand) {
+        appData.candidate = directCand;
+      }
+    }
+  }
+
   return {
-    application: appRes.data as (RmsApplicationWithDetails & {
+    application: appData as (RmsApplicationWithDetails & {
       interview_booking?: RmsInterviewBooking & { slot?: RmsInterviewSlot };
       campaign?: Pick<RmsCampaign, 'id' | 'name' | 'status'>;
     }) | null,
@@ -911,15 +1045,90 @@ export async function updateInterviewSlot(id: string, updates: Partial<RmsInterv
 }
 
 export async function bookApplicationToSlot(applicationId: string, slotId: string) {
+  // 1. Validate payment boundary: paid jobs must be payment_successful before booking
+  const { data: appData, error: appErr } = await supabase
+    .from('rms_applications' as never)
+    .select(`
+      id, status,
+      job_posting:rms_job_postings(id, title, application_fee_amount),
+      candidate:rms_candidate_profiles(full_name, mobile)
+    `)
+    .eq('id', applicationId)
+    .single();
+
+  if (appErr || !appData) {
+    return { data: null, error: { message: 'Application not found.', code: 'APP_NOT_FOUND' } as any };
+  }
+
+  const app = appData as any;
+  const fee = Number(app.job_posting?.application_fee_amount ?? 0);
+  if (fee > 0 && app.status !== 'payment_successful') {
+    return {
+      data: null,
+      error: {
+        message: 'This position requires payment of the application fee before booking an interview slot.',
+        code: 'PAYMENT_REQUIRED',
+      } as any,
+    };
+  }
+
+  // 2. Perform booking
   const { data, error } = await supabase
     .from('rms_interview_bookings' as never)
     .upsert([{ application_id: applicationId, slot_id: slotId, attendance_status: 'booked' }], { onConflict: 'application_id' })
-    .select()
+    .select(`*, slot:rms_interview_slots(*)`)
     .single();
-  if (!error) {
-    await updateApplicationStatus(applicationId, 'interview_scheduled');
+
+  if (error) {
+    return { data: null, error };
   }
-  return { data: data as RmsInterviewBooking | null, error };
+
+  // 3. Update application status to interview_scheduled
+  await updateApplicationStatus(applicationId, 'interview_scheduled');
+
+  // 4. Update slot capacity / status if capacity reached
+  try {
+    const { count } = await supabase
+      .from('rms_interview_bookings' as never)
+      .select('id', { count: 'exact', head: true })
+      .eq('slot_id', slotId);
+
+    const slotCapacity = (data as any)?.slot?.capacity ?? 1;
+    if (count != null && count >= slotCapacity) {
+      await supabase
+        .from('rms_interview_slots' as never)
+        .update({ status: 'full' } as any)
+        .eq('id', slotId);
+    }
+  } catch (capErr) {
+    console.error('[bookApplicationToSlot] Slot capacity check error:', capErr);
+  }
+
+  // 5. Dispatch Interview Confirmation WhatsApp Template
+  try {
+    const candidateMobile = app.candidate?.mobile;
+    const candidateName = app.candidate?.full_name || 'Candidate';
+    const jobTitle = app.job_posting?.title || 'Job';
+    const slot = (data as any)?.slot;
+    const slotDate = slot?.slot_date || '';
+    const slotTime = slot?.slot_time?.slice(0, 5) || '';
+    const venueOrLink = slot?.location_or_link || (slot?.mode === 'online' ? 'Online Video Call' : 'Designated Centre');
+
+    if (candidateMobile) {
+      await sendInterviewConfirmedTemplate(
+        candidateMobile,
+        candidateName,
+        jobTitle,
+        slotDate,
+        slotTime,
+        venueOrLink,
+      );
+    }
+  } catch (notifErr) {
+    console.error('[bookApplicationToSlot] Failed to dispatch interview confirmation WhatsApp:', notifErr);
+  }
+
+  return { data: data as RmsInterviewBooking | null, error: null };
 }
 
 export async function updateInterviewAttendance(bookingId: string, status: 'booked' | 'present' | 'absent' | 'rescheduled') {
@@ -1036,7 +1245,9 @@ export async function listApplicationsForHR(filters?: {
   job_posting_id?: string;
   status?: ApplicationStatus | '';
   search?: string;
+  view?: 'active' | 'archived' | 'trash';
 }) {
+  const view = filters?.view || 'active';
   const { data, error } = await supabase
     .from('rms_applications' as never)
     .select(`*,
@@ -1047,7 +1258,51 @@ export async function listApplicationsForHR(filters?: {
 
   if (error) return { data: [] as RmsApplicationWithDetails[], error };
 
-  let results = (data ?? []) as RmsApplicationWithDetails[];
+  let results = (data ?? []).map((app: any) => {
+    let candidate = app.candidate;
+    if (Array.isArray(candidate)) {
+      candidate = candidate[0] || null;
+    }
+    return {
+      ...app,
+      candidate,
+    };
+  }) as RmsApplicationWithDetails[];
+
+  // Fallback: If any candidates failed to join via PostgREST embedding, fetch by IDs directly
+  const missingCandIds = results
+    .filter(a => !a.candidate && a.candidate_id)
+    .map(a => a.candidate_id);
+
+  if (missingCandIds.length > 0) {
+    try {
+      const { data: directCands } = await supabase
+        .from('rms_candidate_profiles' as never)
+        .select('id, full_name, mobile, candidate_id, district, taluka')
+        .in('id', missingCandIds);
+
+      if (directCands && (directCands as any[]).length > 0) {
+        const candMap = new Map((directCands as any[]).map(c => [c.id, c]));
+        results = results.map(a => {
+          if (!a.candidate && a.candidate_id && candMap.has(a.candidate_id)) {
+            return { ...a, candidate: candMap.get(a.candidate_id) };
+          }
+          return a;
+        });
+      }
+    } catch (e) {
+      console.warn('[listApplicationsForHR] Fallback candidate fetch error:', e);
+    }
+  }
+
+  // View filtering: active vs archived vs trash
+  if (view === 'active') {
+    results = results.filter(a => !a.is_archived && !a.is_trashed);
+  } else if (view === 'archived') {
+    results = results.filter(a => !!a.is_archived && !a.is_trashed);
+  } else if (view === 'trash') {
+    results = results.filter(a => !!a.is_trashed);
+  }
 
   if (filters?.status) results = results.filter(a => a.status === filters.status);
   if (filters?.district) {
@@ -1081,6 +1336,203 @@ export async function listApplicationsForHR(filters?: {
 }
 
 // ============================================================
+// Application Archive, Restore & Delete Operations
+// ============================================================
+
+export async function archiveApplication(id: string, notes?: string): Promise<{ error: string | null }> {
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: app, error: appErr } = await supabase
+    .from('rms_applications' as never)
+    .select('id, status, application_number')
+    .eq('id', id)
+    .single();
+
+  if (appErr || !app) {
+    return { error: appErr?.message || 'Application not found' };
+  }
+
+  const { error } = await supabase
+    .from('rms_applications' as never)
+    .update({
+      is_archived: true,
+      archived_at: new Date().toISOString(),
+      archived_by: user?.id || null,
+      is_trashed: false,
+      trashed_at: null,
+      trashed_by: null,
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq('id', id);
+
+  if (error) return { error: error.message };
+
+  await supabase
+    .from('rms_application_status_log' as never)
+    .insert([{
+      application_id: id,
+      from_status: (app as any).status,
+      to_status: (app as any).status,
+      changed_by: user?.id || null,
+      notes: notes || 'Application archived by Admin',
+    }] as never);
+
+  return { error: null };
+}
+
+export async function restoreApplication(id: string, notes?: string): Promise<{ error: string | null }> {
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: app, error: appErr } = await supabase
+    .from('rms_applications' as never)
+    .select('id, status, application_number')
+    .eq('id', id)
+    .single();
+
+  if (appErr || !app) {
+    return { error: appErr?.message || 'Application not found' };
+  }
+
+  const { error } = await supabase
+    .from('rms_applications' as never)
+    .update({
+      is_archived: false,
+      archived_at: null,
+      archived_by: null,
+      is_trashed: false,
+      trashed_at: null,
+      trashed_by: null,
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq('id', id);
+
+  if (error) return { error: error.message };
+
+  await supabase
+    .from('rms_application_status_log' as never)
+    .insert([{
+      application_id: id,
+      from_status: (app as any).status,
+      to_status: (app as any).status,
+      changed_by: user?.id || null,
+      notes: notes || 'Application restored from archive to active queue',
+    }] as never);
+
+  return { error: null };
+}
+
+export async function trashApplication(id: string, notes?: string): Promise<{ error: string | null }> {
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: app, error: appErr } = await supabase
+    .from('rms_applications' as never)
+    .select('id, status, application_number')
+    .eq('id', id)
+    .single();
+
+  if (appErr || !app) {
+    return { error: appErr?.message || 'Application not found' };
+  }
+
+  const { error } = await supabase
+    .from('rms_applications' as never)
+    .update({
+      is_trashed: true,
+      trashed_at: new Date().toISOString(),
+      trashed_by: user?.id || null,
+      is_archived: false,
+      archived_at: null,
+      archived_by: null,
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq('id', id);
+
+  if (error) return { error: error.message };
+
+  await supabase
+    .from('rms_application_status_log' as never)
+    .insert([{
+      application_id: id,
+      from_status: (app as any).status,
+      to_status: (app as any).status,
+      changed_by: user?.id || null,
+      notes: notes || 'Application moved to trash',
+    }] as never);
+
+  return { error: null };
+}
+
+export async function restoreTrashApplication(id: string, notes?: string): Promise<{ error: string | null }> {
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: app, error: appErr } = await supabase
+    .from('rms_applications' as never)
+    .select('id, status, application_number, candidate_id, job_posting_id')
+    .eq('id', id)
+    .single();
+
+  if (appErr || !app) {
+    return { error: appErr?.message || 'Application not found' };
+  }
+
+  // Guard: Verify candidate does not already have an active application for this job posting
+  const { data: activeApp } = await supabase
+    .from('rms_applications' as never)
+    .select('id, application_number')
+    .eq('candidate_id', (app as any).candidate_id)
+    .eq('job_posting_id', (app as any).job_posting_id)
+    .neq('id', id)
+    .or('is_trashed.is.null,is_trashed.eq.false')
+    .limit(1)
+    .maybeSingle();
+
+  if (activeApp) {
+    return { error: `Cannot restore: candidate already has an active application (${(activeApp as any).application_number}) for this job.` };
+  }
+
+  const { error } = await supabase
+    .from('rms_applications' as never)
+    .update({
+      is_trashed: false,
+      trashed_at: null,
+      trashed_by: null,
+      is_archived: false,
+      archived_at: null,
+      archived_by: null,
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq('id', id);
+
+  if (error) return { error: error.message };
+
+  await supabase
+    .from('rms_application_status_log' as never)
+    .insert([{
+      application_id: id,
+      from_status: (app as any).status,
+      to_status: (app as any).status,
+      changed_by: user?.id || null,
+      notes: notes || 'Application restored from trash to active queue',
+    }] as never);
+
+  return { error: null };
+}
+
+export async function permanentlyDeleteApplication(id: string): Promise<{ success: boolean; error: string | null }> {
+  // Call the database function which verifies Super Admin authorization, checks payment retention, logs audit, and deletes
+  const { data, error } = await supabase.rpc('rms_permanently_delete_application' as never, {
+    p_application_id: id,
+  } as never);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  const res = data as { success?: boolean; error?: string };
+  if (res && res.success === false) {
+    return { success: false, error: res.error || 'Failed to permanently delete application.' };
+  }
+
+  return { success: true, error: null };
+}
+
+// ============================================================
 // Candidate Portal — extra helpers
 // ============================================================
 
@@ -1095,11 +1547,12 @@ export async function checkDuplicateAadhaar(aadhaar: string, userId: string): Pr
 }
 
 export async function getMyPayments(candidateId: string) {
-  // Get all application IDs for this candidate first
+  // Get all active application IDs for this candidate first
   const { data: apps } = await supabase
     .from('rms_applications' as never)
     .select('id')
-    .eq('candidate_id', candidateId);
+    .eq('candidate_id', candidateId)
+    .or('is_trashed.is.null,is_trashed.eq.false');
   const appIds = (apps ?? []).map((a: { id: string }) => a.id);
   if (appIds.length === 0) return { data: [], error: null };
 
@@ -1258,12 +1711,13 @@ export async function getExistingApplication(candidateId: string, jobId: string)
     .select('*')
     .eq('candidate_id', candidateId)
     .eq('job_posting_id', jobId)
+    .or('is_trashed.is.null,is_trashed.eq.false')
     .order('created_at', { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
     
   if (error && error.code !== 'PGRST116') throw error;
-  return { data, error };
+  return { data: data as RmsApplication | null, error: null };
 }
 
 export async function fetchCandidateCRMTimeline(candidateId: string) {

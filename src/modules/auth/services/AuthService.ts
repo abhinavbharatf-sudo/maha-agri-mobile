@@ -31,12 +31,21 @@ export class AuthService {
   }
 
   /**
-   * Login with Mobile Number + Password (V1 Specification)
+   * Login with Mobile Number or Admin Email + Password
    */
   async login(credentials: LoginCredentials): Promise<AuthResponse<MahaAgriSession>> {
-    const mobileValidation = validateMobileNumber(credentials.mobile);
-    if (!mobileValidation.isValid) {
-      return { success: false, error: mobileValidation.error };
+    const rawInput = (credentials.mobile || '').trim();
+    const isEmail = rawInput.includes('@');
+
+    if (isEmail) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawInput)) {
+        return { success: false, error: 'Please enter a valid email address.' };
+      }
+    } else {
+      const mobileValidation = validateMobileNumber(rawInput);
+      if (!mobileValidation.isValid) {
+        return { success: false, error: mobileValidation.error };
+      }
     }
 
     if (!credentials.password || credentials.password.trim().length === 0) {

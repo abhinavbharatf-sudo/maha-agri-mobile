@@ -157,41 +157,51 @@ export class SupabaseAuthProvider implements IAuthRepository {
   }
 
   /**
-   * Login with Mobile Number + Password
+   * Login with Mobile Number or Admin Email + Password
    */
   async loginWithMobileAndPassword(credentials: LoginCredentials): Promise<AuthResponse<MahaAgriSession>> {
     try {
-      const mobile = normalizeMobileNumber(credentials.mobile);
-      if (!mobile) {
-        return { success: false, error: 'Please enter a valid mobile number.' };
+      const input = (credentials.mobile || '').trim();
+      if (!input) {
+        return { success: false, error: 'Please enter a valid mobile number or email.' };
       }
 
-      // 1. Resolve email/phone auth user in Supabase
-      // Email format fallback for Supabase Auth: e.g. 9876543210@mahaagri.org or standard auth
-      const syntheticEmail = `${mobile}@mahaagri.org`;
+      const isEmail = input.includes('@');
+      let targetEmail: string | null = null;
+      let mobile = '';
 
-      let authRes = await supabase.auth.signInWithPassword({
-        email: syntheticEmail,
-        password: credentials.password,
-      });
+      if (isEmail) {
+        targetEmail = input.toLowerCase();
+      } else {
+        mobile = normalizeMobileNumber(input);
+        if (!mobile) {
+          return { success: false, error: 'Please enter a valid 10-digit mobile number.' };
+        }
 
-      if (authRes.error) {
-        // Fallback: try mobile directly or custom mobile auth check
-        const { data: userByMobile } = await supabase
-          .from('profiles' as never)
-          .select('email, id' as never)
-          .eq('phone' as never, mobile)
-          .maybeSingle();
-
-        if (userByMobile && (userByMobile as { email?: string }).email) {
-          authRes = await supabase.auth.signInWithPassword({
-            email: (userByMobile as { email: string }).email,
-            password: credentials.password,
-          });
+        // Check if this mobile or employee code corresponds to a known administrative seed account
+        const { ENTERPRISE_SEED_ACCOUNTS } = await import('../seed/demoAccounts');
+        const seedUser = ENTERPRISE_SEED_ACCOUNTS.find(
+          (acc) => acc.mobile === mobile || acc.employeeCode.toLowerCase() === input.toLowerCase()
+        );
+        if (seedUser) {
+          targetEmail = seedUser.roleKey === 'SUPER_ADMIN'
+            ? 'admin@abhinavbharat.org'
+            : `${seedUser.roleKey.toLowerCase()}@abhinavbharat.org`;
+        } else {
+          // Synthetic mobile email fallback
+          targetEmail = `${mobile}@mahaagri.org`;
         }
       }
 
-      if (authRes.error || !authRes.data.user) {
+      let authRes: { data: { session: any; user: any } | null; error: any } = { data: null, error: null };
+      if (targetEmail) {
+        authRes = await supabase.auth.signInWithPassword({
+          email: targetEmail,
+          password: credentials.password,
+        });
+      }
+
+      if (authRes.error || !authRes.data?.user) {
         // Enforce production security: Disable UAT seed fallback in production mode
         const isProductionEnv = import.meta.env.PROD && import.meta.env.VITE_SUPABASE_URL;
         if (isProductionEnv) {

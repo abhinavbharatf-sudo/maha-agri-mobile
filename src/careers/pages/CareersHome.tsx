@@ -152,20 +152,8 @@ export default function CareersHome() {
     setOtpOpen(true);
   };
 
-  const handleLoginSuccess = async (isNewUser?: boolean, mobile?: string) => {
+  const handleLoginSuccess = async (_isNewUser?: boolean, _mobile?: string) => {
     setOtpOpen(false);
-    
-    // Only send the welcome message on THIS specific OTP verification (1st OTP)
-    if (isNewUser && mobile) {
-      try {
-        const { supabase } = await import('../../lib/supabase/client');
-        await supabase.functions.invoke('whatsapp', {
-          body: { action: 'sendTemplate', phone: mobile, template: 'welcome_to_recruitment_portal' }
-        });
-      } catch (err) {
-        console.error('Failed to send welcome message', err);
-      }
-    }
 
     if (pendingJobSlug) {
       navigate(`/careers/jobs/${pendingJobSlug}`);
@@ -234,8 +222,10 @@ export default function CareersHome() {
       if (districtFilter) {
         const d = districtFilter.toLowerCase();
         const loc = (j.location || '').toLowerCase();
-        const directMatch = loc.includes(d);
-        const isStateWide = (loc.includes('maharashtra') || loc.includes('state') || !loc) &&
+        const inDistricts = Array.isArray(j.location_districts) &&
+          j.location_districts.some(dist => dist.toLowerCase() === d);
+        const directMatch = inDistricts || loc.includes(d);
+        const isStateWide = (j.location_type === 'State-wide' || loc.includes('maharashtra') || loc.includes('state') || !loc) &&
           ((j.vacancies_per_district != null && j.vacancies_per_district > 0) || (j.total_vacancies != null && j.total_vacancies > 0));
         if (!directMatch && !isStateWide) return false;
       }
@@ -785,22 +775,26 @@ function JobCard({ job, theme, ji, fmtDate, onClick }: {
 
       {/* Details grid — compact */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-2 mb-3 pl-1">
-        <DetailItem icon={MapPin} label="Location" value={job.location || 'Maharashtra'} />
+        {(() => {
+          const loc = job.location?.trim() || (job.location_type === 'Remote' ? 'Remote' : (job.location_type === 'State-wide' ? 'Maharashtra' : ''));
+          return loc ? <DetailItem icon={MapPin} label="Location" value={loc} /> : null;
+        })()}
         {job.total_vacancies != null && (
           <DetailItem icon={Users} label="Vacancies" value={`${fmtNum(job.total_vacancies)} Vacanc${job.total_vacancies !== 1 ? 'ies' : 'y'}`} />
         )}
-        {job.vacancies_per_district != null && (
+        {job.vacancies_per_district != null && job.vacancies_per_district > 0 && (
           <DetailItem icon={MapPin} label="Per District" value={fmtNum(job.vacancies_per_district)} />
         )}
-        {job.vacancies_per_taluka != null && (
+        {job.vacancies_per_taluka != null && job.vacancies_per_taluka > 0 && (
           <DetailItem icon={MapPin} label="Per Taluka" value={fmtNum(job.vacancies_per_taluka)} />
         )}
-        <DetailItem
-          icon={GraduationCap}
-          label="Qualification"
-          value={(job.eligibility_criteria as { label?: string }[] | null)?.[0]?.label ?? 'As per JD'}
-        />
-        <DetailItem icon={Clock} label="Experience" value={job.experience_required || 'As per JD'} />
+        {(() => {
+          const qual = (job.eligibility_criteria as { label?: string }[] | null)?.[0]?.label?.trim();
+          return qual ? <DetailItem icon={GraduationCap} label="Qualification" value={qual} /> : null;
+        })()}
+        {job.experience_required?.trim() ? (
+          <DetailItem icon={Clock} label="Experience" value={job.experience_required.trim()} />
+        ) : null}
         {(job.min_age != null || job.max_age != null) && (
           <DetailItem
             icon={Calendar}
@@ -816,15 +810,17 @@ function JobCard({ job, theme, ji, fmtDate, onClick }: {
           <DetailItem icon={IndianRupee} label="Salary / Honorarium" value={salaryDisplay} highlight />
         )}
         {(() => { const sp = formatSalaryPackage(job); return sp && <DetailItem icon={IndianRupee} label="Salary Package" value={sp} />; })()}
-        <DetailItem
-          icon={IndianRupee}
-          label="Application Fee"
-          value={Number(job.application_fee_amount ?? 0) === 0 ? 'Free' : `₹${fmtNum(Number(job.application_fee_amount))}`}
-          feeHighlight={Number(job.application_fee_amount ?? 0) > 0}
-        />
-        {recModeLabel && (
-          <DetailItem icon={Briefcase} label="Recruitment Mode" value={recModeLabel} />
+        {job.application_fee_amount != null && (
+          <DetailItem
+            icon={IndianRupee}
+            label="Application Fee"
+            value={Number(job.application_fee_amount) === 0 ? 'Free' : `₹${fmtNum(Number(job.application_fee_amount))}`}
+            feeHighlight={Number(job.application_fee_amount) > 0}
+          />
         )}
+        {recModeLabel?.trim() ? (
+          <DetailItem icon={Briefcase} label="Recruitment Mode" value={recModeLabel.trim()} />
+        ) : null}
       </div>
 
       {/* Footer: date badges (left) + button (right) */}

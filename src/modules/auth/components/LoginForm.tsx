@@ -71,10 +71,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         </div>
       )}
 
-      {/* 1. Mobile Number Field */}
+      {/* 1. Mobile Number / Email Field */}
       <div className="space-y-1.5">
         <label htmlFor="login-mobile" className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-          Mobile Number
+          Mobile Number or Email
         </label>
         <div className="relative flex items-center">
           <div className="absolute left-3.5 text-slate-400 pointer-events-none">
@@ -82,12 +82,11 @@ export const LoginForm: React.FC<LoginFormProps> = ({
           </div>
           <input
             id="login-mobile"
-            type="tel"
+            type="text"
             value={mobile}
             onChange={(e) => setMobile(e.target.value)}
-            placeholder="Enter 10-digit mobile number"
-            maxLength={10}
-            autoComplete="tel"
+            placeholder="Enter 10-digit mobile or admin email"
+            autoComplete="username"
             disabled={loading}
             className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 border ${
               fieldErrors.mobile

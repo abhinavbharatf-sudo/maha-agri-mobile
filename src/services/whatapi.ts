@@ -123,11 +123,23 @@ async function callEdgeFunction(body: Record<string, unknown>): Promise<Record<s
     body: JSON.stringify(body),
   });
 
-  if (!res.ok) {
-    throw new Error(`WhatsApp service unreachable (${res.status}). Please try again.`);
+  let data: Record<string, unknown> = {};
+  try {
+    data = (await res.json()) as Record<string, unknown>;
+  } catch {
+    // Non-JSON response payload
   }
 
-  const data = await res.json() as Record<string, unknown>;
+  if (!res.ok) {
+    const errorMsg = (data.error as string) || (data.message as string);
+    if (res.status === 429) {
+      throw new Error(errorMsg || 'Too many requests. Please try again later.');
+    }
+    if (errorMsg) {
+      throw new Error(errorMsg);
+    }
+    throw new Error(`WhatsApp service unreachable (${res.status}). Please try again.`);
+  }
 
   // The edge function returns HTTP 200 with { success: false, error } on handled errors.
   if (data.success === false) {

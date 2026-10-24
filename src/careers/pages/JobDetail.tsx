@@ -232,13 +232,36 @@ export default function JobDetail() {
   const DEFAULT_ACK = 'I confirm that I have reviewed all project documents, eligibility criteria, recruitment process, responsibilities and terms before submitting my application.';
   const ackText = job.acknowledgement_text?.trim() || DEFAULT_ACK;
 
-  // Active steps and FAQs — use DB-configured items if available, else static defaults
+  // Smart dynamic steps and FAQs — auto-adapts for free/paid and DB-configured items
   const activeSteps = customSteps.length > 0
     ? customSteps.map(s => ({ label: s.label, desc: s.description ?? '' }))
+    : Number(job.application_fee_amount ?? 0) === 0
+    ? SELECTION_STEPS.filter(s => s.label !== 'Application Fee')
     : SELECTION_STEPS;
+
   const activeFaqs = customFaqs.length > 0
     ? customFaqs.map(f => ({ q: f.question, a: f.answer }))
+    : Number(job.application_fee_amount ?? 0) === 0
+    ? FAQ_ITEMS.map(item =>
+        item.q.toLowerCase().includes('application fee')
+          ? {
+              q: item.q,
+              a: 'There is no application fee for this position. Applying is completely free of cost.',
+            }
+          : item
+      )
     : FAQ_ITEMS;
+
+  // Meaningful content detection for optional sections
+  const hasProjectPdf = job.project_pdf_enabled !== false && Boolean(job.project_pdf_url?.trim());
+  const hasProjectVideo = job.project_video_enabled !== false && Boolean(job.project_video_url?.trim());
+  const hasProjectResources = hasProjectPdf || hasProjectVideo;
+
+  const hasJdPdf = Boolean(job.jd_pdf_url?.trim());
+  const hasEligibility = eligibility.length > 0 && eligibility.some(c => c.label?.trim());
+  const hasDocuments = documents.length > 0 && documents.some(d => d.label?.trim());
+  const hasSkills = Boolean(job.skills_required && job.skills_required.length > 0 && job.skills_required.some(s => s?.trim()));
+  const hasJdSection = hasJdPdf || hasEligibility || hasDocuments || hasSkills;
 
   return (
     <>
@@ -331,13 +354,17 @@ export default function JobDetail() {
               {/* 1. ROLE OVERVIEW */}
               <SectionCard delay={0} icon={<Briefcase className="w-4 h-4" />} label="Position Summary" title="Role Overview">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
-                  {job.location && <SummaryItem icon={MapPin} label="Location" value={job.location} />}
+                  {job.location?.trim() && <SummaryItem icon={MapPin} label="Location" value={job.location.trim()} />}
                   {job.employment_type && <SummaryItem icon={Calendar} label="Employment Type" value={EMPLOYMENT_TYPE_LABELS[job.employment_type]} />}
-                  {job.experience_required && <SummaryItem icon={Clock} label="Experience" value={job.experience_required} />}
-                  {eligibility.length > 0 && <SummaryItem icon={Info} label="Qualification" value={eligibility[0]?.label ?? 'As per JD'} />}
+                  {job.experience_required?.trim() ? <SummaryItem icon={Clock} label="Experience" value={job.experience_required.trim()} /> : null}
+                  {(() => {
+                    const qual = eligibility[0]?.label?.trim();
+                    return qual ? <SummaryItem icon={Info} label="Qualification" value={qual} /> : null;
+                  })()}
                   {ageCriteria && <SummaryItem icon={Calendar} label="Age Criteria" value={ageCriteria} />}
                   {(() => { const sd = formatSalaryDisplay(job); return sd && <SummaryItem icon={IndianRupee} label="Salary / Honorarium" value={sd} accent="amber" />; })()}
-                  {job.application_fee_amount >= 0 && (
+                  {(() => { const sp = formatSalaryPackage(job); return sp && <SummaryItem icon={Package} label="Salary Package" value={sp} />; })()}
+                  {job.application_fee_amount != null && (
                     <SummaryItem
                       icon={IndianRupee}
                       label="Application Fee"
@@ -345,11 +372,11 @@ export default function JobDetail() {
                       accent={job.application_fee_amount > 0 ? 'amber' : 'green'}
                     />
                   )}
-                  <SummaryItem icon={Info} label="Recruitment Mode" value={job.recruitment_mode ?? 'Online'} />
-                  {job.project_duration && <SummaryItem icon={Clock} label="Project Duration" value={job.project_duration} />}
+                  {job.recruitment_mode?.trim() ? <SummaryItem icon={Info} label="Recruitment Mode" value={job.recruitment_mode.trim()} /> : null}
+                  {job.project_duration?.trim() && <SummaryItem icon={Clock} label="Project Duration" value={job.project_duration.trim()} />}
                   {job.total_vacancies != null && <SummaryItem icon={Users} label="Total Vacancies" value={job.total_vacancies.toLocaleString('en-IN') + ' Vacancies'} />}
-                  {job.vacancies_per_district != null && <SummaryItem icon={MapPin} label="Per District" value={job.vacancies_per_district.toLocaleString('en-IN') + ' Vacancies'} />}
-                  {job.vacancies_per_taluka != null && <SummaryItem icon={MapPin} label="Per Taluka" value={job.vacancies_per_taluka.toLocaleString('en-IN') + ' Vacanc' + (job.vacancies_per_taluka === 1 ? 'y' : 'ies')} />}
+                  {job.vacancies_per_district != null && job.vacancies_per_district > 0 && <SummaryItem icon={MapPin} label="Per District" value={job.vacancies_per_district.toLocaleString('en-IN') + ' Vacancies'} />}
+                  {job.vacancies_per_taluka != null && job.vacancies_per_taluka > 0 && <SummaryItem icon={MapPin} label="Per Taluka" value={job.vacancies_per_taluka.toLocaleString('en-IN') + ' Vacanc' + (job.vacancies_per_taluka === 1 ? 'y' : 'ies')} />}
                   <SummaryItem
                     icon={CheckCircle2}
                     label="Application Status"
@@ -368,6 +395,45 @@ export default function JobDetail() {
                   </div>
                 )}
 
+                {/* Eligible Districts / Vacancy Distribution */}
+                {job.location_districts && job.location_districts.length > 0 && (
+                  <div className="mt-4 pt-3 border-t border-primary-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-primary-600" />
+                        Eligible Posting Districts ({job.location_districts.length} Districts)
+                      </span>
+                      {job.location_type && (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary-50 text-primary-700 border border-primary-200">
+                          {job.location_type}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {job.location_districts.map(d => {
+                        const distAlloc = job.vacancy_allocations?.district_allocations?.[d];
+                        const distTotal = distAlloc?.calculated_district_total;
+                        return (
+                          <span
+                            key={d}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs bg-slate-50 border border-slate-200 text-slate-700"
+                          >
+                            <span>{d}</span>
+                            {distTotal != null && distTotal > 0 && (
+                              <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-primary-100 text-primary-800 font-bold">
+                                {distTotal} Vacanc{distTotal === 1 ? 'y' : 'ies'}
+                              </span>
+                            )}
+                          </span>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-2">
+                      Candidates select their preferred district and taluka during application. Final posting location is determined by HR based on eligibility and vacant quotas.
+                    </p>
+                  </div>
+                )}
+
                 {/* Project Overview — only if HR has entered content */}
                 {job.project_overview?.trim() && (
                   <div className="mt-3 p-3.5 rounded-xl bg-primary-50 border border-primary-100">
@@ -377,12 +443,12 @@ export default function JobDetail() {
                 )}
               </SectionCard>
 
-              {/* 2. PROJECT RESOURCES — compact link list */}
-              <SectionCard delay={0.08} icon={<Download className="w-4 h-4" />} label="Before You Apply" title="Project Resources">
-                {(job.project_pdf_enabled !== false && job.project_pdf_url?.trim()) || (job.project_video_enabled !== false && job.project_video_url?.trim()) ? (
+              {/* 2. PROJECT RESOURCES — auto-hide if none configured */}
+              {hasProjectResources && (
+                <SectionCard delay={0.08} icon={<Download className="w-4 h-4" />} label="Before You Apply" title="Project Resources">
                   <div className="divide-y divide-primary-50">
-                    {job.project_pdf_enabled !== false && job.project_pdf_url?.trim() && (
-                      <a href={job.project_pdf_url} target="_blank" rel="noopener noreferrer"
+                    {hasProjectPdf && (
+                      <a href={job.project_pdf_url!} target="_blank" rel="noopener noreferrer"
                         onClick={() => setOpened(p => ({ ...p, pdf: true }))}
                         className="flex items-center gap-3 py-3 first:pt-0 last:pb-0 group hover:bg-primary-50 rounded-xl px-2 -mx-2 transition-colors">
                         <div className="w-8 h-8 rounded-lg bg-red-50 border border-red-100 flex items-center justify-center shrink-0">
@@ -397,8 +463,8 @@ export default function JobDetail() {
                         </span>
                       </a>
                     )}
-                    {job.project_video_enabled !== false && job.project_video_url?.trim() && (
-                      <a href={job.project_video_url} target="_blank" rel="noopener noreferrer"
+                    {hasProjectVideo && (
+                      <a href={job.project_video_url!} target="_blank" rel="noopener noreferrer"
                         onClick={() => setOpened(p => ({ ...p, video: true }))}
                         className="flex items-center gap-3 py-3 first:pt-0 last:pb-0 group hover:bg-primary-50 rounded-xl px-2 -mx-2 transition-colors">
                         <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
@@ -414,104 +480,98 @@ export default function JobDetail() {
                       </a>
                     )}
                   </div>
-                ) : (
-                  <p className="text-xs text-primary-400 py-2">Project resources will be made available shortly. Please check back before applying.</p>
-                )}
-              </SectionCard>
+                </SectionCard>
+              )}
 
-              {/* 3. JOB DESCRIPTION */}
-              <SectionCard delay={0.12} icon={<FileText className="w-4 h-4" />} label="Role Details" title="Job Description">
+              {/* 3. JOB DESCRIPTION & QUALIFICATIONS — auto-hide if none configured */}
+              {hasJdSection && (
+                <SectionCard delay={0.12} icon={<FileText className="w-4 h-4" />} label="Role Details" title="Job Description">
 
-                {/* JD PDF actions */}
-                <div className={`flex items-center gap-3 p-3.5 rounded-xl border-2 mb-4 ${
-                  opened.jd ? 'border-emerald-300 bg-emerald-50' : job.jd_pdf_url ? 'border-primary-200 bg-primary-50/40' : 'border-primary-100 bg-primary-50/30'
-                }`}>
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                    opened.jd ? 'bg-emerald-100 text-emerald-600' : 'bg-white text-primary-500 border border-primary-100'
-                  }`}>
-                    <FileText className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-bold text-primary-900">Job Description PDF</p>
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200">PDF</span>
+                  {/* JD PDF actions — only when uploaded */}
+                  {hasJdPdf && (
+                    <div className={`flex items-center gap-3 p-3.5 rounded-xl border-2 mb-4 ${
+                      opened.jd ? 'border-emerald-300 bg-emerald-50' : 'border-primary-200 bg-primary-50/40'
+                    }`}>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                        opened.jd ? 'bg-emerald-100 text-emerald-600' : 'bg-white text-primary-500 border border-primary-100'
+                      }`}>
+                        <FileText className="w-5 h-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-bold text-primary-900">Job Description PDF</p>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200">PDF</span>
+                        </div>
+                        <p className="text-xs text-primary-500 mt-0.5">Full JD with roles, KPIs, eligibility &amp; responsibilities</p>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => { window.open(job.jd_pdf_url!, '_blank', 'noopener,noreferrer'); setOpened(p => ({ ...p, jd: true })); }}
+                          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-primary-900 text-white rounded-lg hover:bg-primary-800 transition-all"
+                        >
+                          <Download className="w-3.5 h-3.5" /> Download JD
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { window.open(job.jd_pdf_url!, '_blank', 'noopener,noreferrer'); setOpened(p => ({ ...p, jd: true })); }}
+                          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-primary-50 text-primary-700 rounded-lg border border-primary-200 hover:bg-primary-100 transition-all"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" /> View Online
+                        </button>
+                      </div>
                     </div>
-                    <p className="text-xs text-primary-500 mt-0.5">Full JD with roles, KPIs, eligibility & responsibilities</p>
-                  </div>
-                  {job.jd_pdf_url ? (
-                    <div className="flex gap-2 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => { window.open(job.jd_pdf_url!, '_blank', 'noopener,noreferrer'); setOpened(p => ({ ...p, jd: true })); }}
-                        className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-primary-900 text-white rounded-lg hover:bg-primary-800 transition-all"
-                      >
-                        <Download className="w-3.5 h-3.5" /> Download JD
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { window.open(job.jd_pdf_url!, '_blank', 'noopener,noreferrer'); setOpened(p => ({ ...p, jd: true })); }}
-                        className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-primary-50 text-primary-700 rounded-lg border border-primary-200 hover:bg-primary-100 transition-all"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" /> View Online
-                      </button>
-                    </div>
-                  ) : (
-                    <span className="shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary-50 text-primary-400 border border-primary-100">
-                      <Lock className="w-3 h-3" /> Available after HR upload
-                    </span>
                   )}
-                </div>
 
-                {/* Quick Job Snapshot removed — info available in sidebar */}
-
-                {/* Eligibility */}
-                {eligibility.length > 0 && (
-                  <div className="mb-3">
-                    <p className="text-[11px] font-bold text-primary-400 uppercase tracking-widest mb-2">Eligibility Criteria</p>
-                    <div className="grid sm:grid-cols-2 gap-1.5">
-                      {eligibility.map((c, i) => (
-                        <div key={i} className="flex items-start gap-2 p-2.5 rounded-lg bg-primary-50 border border-primary-100">
-                          <CheckCircle2 className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${c.required ? 'text-emerald-500' : 'text-primary-300'}`} />
-                          <div>
-                            <span className="text-xs font-medium text-primary-800">{c.label}</span>
-                            {c.required && <span className="ml-1.5 text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-px rounded-full">Required</span>}
+                  {/* Eligibility */}
+                  {hasEligibility && (
+                    <div className="mb-3">
+                      <p className="text-[11px] font-bold text-primary-400 uppercase tracking-widest mb-2">Eligibility Criteria</p>
+                      <div className="grid sm:grid-cols-2 gap-1.5">
+                        {eligibility.filter(c => c.label?.trim()).map((c, i) => (
+                          <div key={i} className="flex items-start gap-2 p-2.5 rounded-lg bg-primary-50 border border-primary-100">
+                            <CheckCircle2 className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${c.required ? 'text-emerald-500' : 'text-primary-300'}`} />
+                            <div>
+                              <span className="text-xs font-medium text-primary-800">{c.label}</span>
+                              {c.required && <span className="ml-1.5 text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-px rounded-full">Required</span>}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Required Documents */}
-                {documents.length > 0 && (
-                  <div className="mb-3">
-                    <p className="text-[11px] font-bold text-primary-400 uppercase tracking-widest mb-2">Documents Required</p>
-                    <div className="grid sm:grid-cols-2 gap-1.5">
-                      {documents.map((doc, i) => (
-                        <div key={i} className="flex items-start gap-2 p-2.5 rounded-lg bg-primary-50 border border-primary-100">
-                          <FileText className="w-3.5 h-3.5 text-primary-400 mt-0.5 shrink-0" />
-                          <div>
-                            <p className="text-xs font-semibold text-primary-800">{doc.label}</p>
-                            {doc.description && <p className="text-[11px] text-primary-500 mt-0.5">{doc.description}</p>}
+                  {/* Required Documents */}
+                  {hasDocuments && (
+                    <div className="mb-3">
+                      <p className="text-[11px] font-bold text-primary-400 uppercase tracking-widest mb-2">Documents Required</p>
+                      <div className="grid sm:grid-cols-2 gap-1.5">
+                        {documents.filter(doc => doc.label?.trim()).map((doc, i) => (
+                          <div key={i} className="flex items-start gap-2 p-2.5 rounded-lg bg-primary-50 border border-primary-100">
+                            <FileText className="w-3.5 h-3.5 text-primary-400 mt-0.5 shrink-0" />
+                            <div>
+                              <p className="text-xs font-semibold text-primary-800">{doc.label}</p>
+                              {doc.description && <p className="text-[11px] text-primary-500 mt-0.5">{doc.description}</p>}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Skills */}
-                {job.skills_required?.length > 0 && (
-                  <div>
-                    <p className="text-[11px] font-bold text-primary-400 uppercase tracking-widest mb-2">Skills Required</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {job.skills_required.map((s, i) => (
-                        <span key={i} className="text-xs font-medium px-2.5 py-1 bg-primary-50 text-primary-700 rounded-full border border-primary-100">{s}</span>
-                      ))}
+                  {/* Skills */}
+                  {hasSkills && (
+                    <div>
+                      <p className="text-[11px] font-bold text-primary-400 uppercase tracking-widest mb-2">Skills Required</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {job.skills_required.filter(s => s?.trim()).map((s, i) => (
+                          <span key={i} className="text-xs font-medium px-2.5 py-1 bg-primary-50 text-primary-700 rounded-full border border-primary-100">{s}</span>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </SectionCard>
+                  )}
+                </SectionCard>
+              )}
 
               {/* 4. RECRUITMENT PROCESS */}
               <SectionCard delay={0.1} icon={<ListChecks className="w-4 h-4" />} label="How to Get Hired" title="Recruitment Process">
@@ -774,11 +834,13 @@ export default function JobDetail() {
                 </div>
 
                 <div className="p-4 space-y-2.5">
-                  {/* Application Fee */}
-                  {job.application_fee_amount > 0 ? (
-                    <SidebarRow label="Application Fee" value={`₹${job.application_fee_amount.toLocaleString('en-IN')}`} accent="amber" icon={IndianRupee} />
-                  ) : (
-                    <SidebarRow label="Application Fee" value="Free of Cost" accent="green" icon={IndianRupee} />
+                  {/* Application Fee — always show valid value (Free / Paid) */}
+                  {job.application_fee_amount != null && (
+                    job.application_fee_amount > 0 ? (
+                      <SidebarRow label="Application Fee" value={`₹${job.application_fee_amount.toLocaleString('en-IN')}`} accent="amber" icon={IndianRupee} />
+                    ) : (
+                      <SidebarRow label="Application Fee" value="Free of Cost" accent="green" icon={IndianRupee} />
+                    )
                   )}
 
                   {/* Employment Type */}
@@ -786,15 +848,16 @@ export default function JobDetail() {
                     <SidebarRow label="Employment Type" value={EMPLOYMENT_TYPE_LABELS[job.employment_type]} icon={Briefcase} />
                   )}
 
-                  {/* Experience */}
-                  {job.experience_required && (
-                    <SidebarRow label="Experience Required" value={job.experience_required} icon={Clock} />
-                  )}
+                  {/* Experience — hide if empty, never show placeholder */}
+                  {job.experience_required?.trim() ? (
+                    <SidebarRow label="Experience Required" value={job.experience_required.trim()} icon={Clock} />
+                  ) : null}
 
-                  {/* Qualification */}
-                  {eligibility.length > 0 && (
-                    <SidebarRow label="Qualification" value={eligibility[0]?.label ?? 'As per JD'} icon={Info} />
-                  )}
+                  {/* Qualification — hide if empty, never show placeholder */}
+                  {(() => {
+                    const qual = eligibility[0]?.label?.trim();
+                    return qual ? <SidebarRow label="Qualification" value={qual} icon={Info} /> : null;
+                  })()}
 
                   {/* Age Criteria */}
                   {ageCriteria && (
@@ -807,12 +870,12 @@ export default function JobDetail() {
                   )}
 
                   {/* Vacancies Per District */}
-                  {job.vacancies_per_district != null && (
+                  {job.vacancies_per_district != null && job.vacancies_per_district > 0 && (
                     <SidebarRow label="Per District" value={job.vacancies_per_district.toLocaleString('en-IN') + ' Vacancies'} icon={MapPin} />
                   )}
 
                   {/* Vacancies Per Taluka */}
-                  {job.vacancies_per_taluka != null && (
+                  {job.vacancies_per_taluka != null && job.vacancies_per_taluka > 0 && (
                     <SidebarRow label="Per Taluka" value={job.vacancies_per_taluka.toLocaleString('en-IN') + (job.vacancies_per_taluka === 1 ? ' Vacancy' : ' Vacancies')} icon={MapPin} />
                   )}
 
@@ -822,11 +885,13 @@ export default function JobDetail() {
                   {/* Salary Package */}
                   {(() => { const sp = formatSalaryPackage(job); return sp && <SidebarRow label="Salary Package" value={sp} icon={Package} />; })()}
 
-                  {/* Recruitment Mode */}
-                  <SidebarRow label="Recruitment Mode" value={job.recruitment_mode ?? 'Online'} icon={Info} />
+                  {/* Recruitment Mode — hide if empty */}
+                  {job.recruitment_mode?.trim() ? (
+                    <SidebarRow label="Recruitment Mode" value={job.recruitment_mode.trim()} icon={Info} />
+                  ) : null}
 
                   {/* Onboarding fee */}
-                  {job.onboarding_fee_amount > 0 && (
+                  {job.onboarding_fee_amount != null && job.onboarding_fee_amount > 0 && (
                     <SidebarRow label={job.fee_label_onboarding || 'Onboarding Fee'} value={`₹${job.onboarding_fee_amount.toLocaleString('en-IN')}`} icon={IndianRupee} accent="amber" />
                   )}
 
@@ -1079,86 +1144,5 @@ function SidebarRow({
       </span>
       <span className={`text-right ${vClr}`}>{value}</span>
     </div>
-  );
-}
-
-function SnapshotItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <p className="text-[10px] font-bold text-primary-400 uppercase tracking-wide">{label}</p>
-      <p className="text-xs font-semibold text-primary-800 leading-snug">{value}</p>
-    </div>
-  );
-}
-
-function ResourceCard({
-  icon,
-  title,
-  subtitle,
-  badge,
-  badgeColor,
-  url,
-  opened,
-  onOpen,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  subtitle: string;
-  badge: string;
-  badgeColor: string;
-  url: string | null;
-  opened: boolean;
-  onOpen: () => void;
-}) {
-  const hasUrl = Boolean(url);
-  return (
-    <motion.div
-      whileHover={hasUrl && !opened ? { y: -2, boxShadow: '0 6px 20px rgba(0,0,0,0.08)' } : {}}
-      transition={{ duration: 0.15 }}
-      className={`relative flex flex-col p-4 rounded-2xl border-2 transition-all ${
-        opened
-          ? 'border-emerald-300 bg-emerald-50'
-          : hasUrl
-          ? 'border-primary-200 bg-white hover:border-primary-300'
-          : 'border-primary-100 bg-primary-50/40'
-      }`}
-    >
-      {opened && (
-        <div className="absolute top-3 right-3">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-        </div>
-      )}
-      <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-3 ${
-        opened ? 'bg-emerald-100 text-emerald-600' : 'bg-primary-50 text-primary-500 border border-primary-100'
-      }`}>
-        {icon}
-      </div>
-      <div className="flex items-center gap-1.5 mb-1">
-        <p className="text-sm font-bold text-primary-900 leading-snug">{title}</p>
-        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${badgeColor}`}>{badge}</span>
-      </div>
-      <p className="text-xs text-primary-500 mb-3 leading-snug flex-1">{subtitle}</p>
-
-      {hasUrl ? (
-        <button
-          type="button"
-          onClick={onOpen}
-          className={`w-full flex items-center justify-center gap-1.5 text-xs font-semibold py-2 px-3 rounded-lg border transition-all ${
-            opened
-              ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
-              : 'bg-primary-50 text-primary-600 border-primary-200 hover:bg-primary-100 hover:border-primary-300'
-          }`}
-        >
-          {opened
-            ? <><CheckCircle2 className="w-3.5 h-3.5" /> Reviewed</>
-            : <><ExternalLink className="w-3 h-3" /> Open &amp; Review</>
-          }
-        </button>
-      ) : (
-        <span className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold py-2 px-3 rounded-lg bg-primary-50 text-primary-400 border border-primary-100">
-          <Lock className="w-3 h-3" /> {url === null ? 'Available after HR upload' : 'Locked'}
-        </span>
-      )}
-    </motion.div>
   );
 }

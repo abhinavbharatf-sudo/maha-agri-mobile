@@ -76,6 +76,55 @@ export const MAHARASHTRA_DISTRICTS = [
 
 export type MaharashtraDistrict = typeof MAHARASHTRA_DISTRICTS[number];
 
+// ===== Smart Location Configuration =====
+export const JOB_LOCATION_TYPES = [
+  { value: 'State-wide', label: 'State-wide', desc: 'All 36 districts across Maharashtra' },
+  { value: 'Regional', label: 'Regional', desc: 'Specific administrative divisions / zones' },
+  { value: 'District-wise', label: 'District-wise', desc: 'Targeted district selection' },
+  { value: 'City-specific', label: 'City-specific', desc: 'Single city / HQ hub' },
+  { value: 'Multiple Locations', label: 'Multiple Locations', desc: 'Custom combination of locations' },
+  { value: 'Remote', label: 'Remote', desc: 'Work from Home / Virtual' },
+] as const;
+
+export interface MaharashtraRegionDef {
+  name: string;
+  division: string;
+  districts: string[];
+}
+
+export const MAHARASHTRA_REGIONS: MaharashtraRegionDef[] = [
+  {
+    name: 'Konkan Division',
+    division: 'Konkan',
+    districts: ['Mumbai City', 'Mumbai Suburban', 'Thane', 'Palghar', 'Raigad', 'Ratnagiri', 'Sindhudurg'],
+  },
+  {
+    name: 'Pune Division (Paschim Maharashtra)',
+    division: 'Pune',
+    districts: ['Pune', 'Satara', 'Sangli', 'Solapur', 'Kolhapur'],
+  },
+  {
+    name: 'Nashik Division (North Maharashtra / Khandesh)',
+    division: 'Nashik',
+    districts: ['Nashik', 'Dhule', 'Jalgaon', 'Nandurbar', 'Ahmednagar'],
+  },
+  {
+    name: 'Chhatrapati Sambhajinagar Division (Marathwada)',
+    division: 'Chhatrapati Sambhajinagar',
+    districts: ['Aurangabad', 'Jalna', 'Parbhani', 'Hingoli', 'Nanded', 'Beed', 'Latur', 'Osmanabad'],
+  },
+  {
+    name: 'Amravati Division (Western Vidarbha)',
+    division: 'Amravati',
+    districts: ['Amravati', 'Akola', 'Buldhana', 'Washim', 'Yavatmal'],
+  },
+  {
+    name: 'Nagpur Division (Eastern Vidarbha)',
+    division: 'Nagpur',
+    districts: ['Nagpur', 'Wardha', 'Bhandara', 'Gondia', 'Chandrapur', 'Gadchiroli'],
+  },
+];
+
 // ===== Notification Event Keys =====
 export const NOTIFICATION_EVENT_KEYS = [
   'application_submitted',

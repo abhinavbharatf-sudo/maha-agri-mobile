@@ -55,7 +55,13 @@ async function callWhatApiWebhook(payload: Record<string, any>) {
       console.log(`[OUTGOING WHATSAPP REQUEST] Template: ${payload.template}`);
       console.log(`[OUTGOING WHATSAPP REQUEST] Type: ${payload.type}`);
       console.log(`[OUTGOING WHATSAPP REQUEST] Phone: ${payload.phone || payload.number}`);
-      console.log(`[OUTGOING WHATSAPP REQUEST] Full Payload:`, JSON.stringify(payload));
+      const safeLogPayload: Record<string, unknown> = { ...payload };
+      if ("otp" in safeLogPayload) safeLogPayload.otp = "******";
+      if (safeLogPayload.template === "otp" && "var1" in safeLogPayload) safeLogPayload.var1 = "******";
+      if (safeLogPayload.data && typeof safeLogPayload.data === "object" && "otp" in (safeLogPayload.data as Record<string, unknown>)) {
+        safeLogPayload.data = { ...(safeLogPayload.data as Record<string, unknown>), otp: "******" };
+      }
+      console.log(`[OUTGOING WHATSAPP REQUEST] Payload:`, JSON.stringify(safeLogPayload));
 
       const response = await fetch(webhookUrl, {
         method: "POST",
@@ -145,11 +151,11 @@ Deno.serve(async (req: Request) => {
     // ==========================================
     if (payload.action === "generateOtp") {
       const phone = normalizeMobile(payload.phone);
+      const clientIp = (req.headers.get("cf-connecting-ip") || req.headers.get("x-real-ip") || "").trim();
       
-      console.log(`[generateOtp] Request received for phone: ${phone}`);
+      console.log(`[generateOtp] Request received for phone: ${phone} (IP: ${clientIp ? 'provided' : 'none'})`);
       
       const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-      console.log("[generateOtp] Generated OTP for testing:", otpCode);
       
       const encoder = new TextEncoder();
       const data = encoder.encode(otpCode);
@@ -157,19 +163,45 @@ Deno.serve(async (req: Request) => {
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       const hashedOtp = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
-      console.log(`[generateOtp] OTP generated and hashed.`);
-
       const supabase = createClient(supabaseUrl, supabaseKey);
 
-      const { error: dbError } = await supabase.from('whatsapp_otp').insert({
-        mobile_number: phone,
-        otp_code: hashedOtp,
-        expires_at: new Date(Date.now() + 5 * 60000).toISOString(),
+      // Concurrency-safe atomic RPC enforcing:
+      // 1. Cross-OTP temporary lockout (10 failed verification attempts in last 15m)
+      // 2. Minimum 30-second cooldown per mobile number
+      // 3. Maximum 15 OTP requests per rolling 24 hours per mobile number
+      // 4. IP burst limiter (60/hour)
+      const { data: requestResult, error: rpcError } = await supabase.rpc('whatsapp_request_otp_secure', {
+        p_mobile: phone,
+        p_otp_hash: hashedOtp,
+        p_ip: clientIp || null,
       });
 
-      if (dbError) {
-        console.error("[generateOtp] DB Insert Error:", JSON.stringify(dbError));
-        throw new Error("Failed to store OTP");
+      if (rpcError) {
+        console.error("[generateOtp] RPC Error:", JSON.stringify(rpcError));
+        return new Response(JSON.stringify({ success: false, error: "Failed to process OTP request" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (!requestResult.success) {
+        console.warn(`[generateOtp] Request blocked: Code=${requestResult.code}, Status=${requestResult.status}, Msg=${requestResult.message}`);
+        const responseHeaders: Record<string, string> = {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        };
+        if (requestResult.retry_after) {
+          responseHeaders["Retry-After"] = String(requestResult.retry_after);
+        }
+        return new Response(JSON.stringify({
+          success: false,
+          error: requestResult.message,
+          code: requestResult.code,
+          retryAfter: requestResult.retry_after,
+        }), {
+          status: requestResult.status || 429,
+          headers: responseHeaders,
+        });
       }
 
       const webhookPayload = {
@@ -191,7 +223,11 @@ Deno.serve(async (req: Request) => {
       const webhookResponse = await callWhatApiWebhook(webhookPayload);
       console.log(`[generateOtp] Webhook Response:`, JSON.stringify(webhookResponse));
 
-      return new Response(JSON.stringify({ success: true, webhookResponse }), {
+      return new Response(JSON.stringify({
+        success: true,
+        webhookResponse,
+        expiresAt: requestResult.expires_at,
+      }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -203,6 +239,7 @@ Deno.serve(async (req: Request) => {
     if (payload.action === "verifyOtp") {
       const phone = normalizeMobile(payload.phone);
       const token = payload.token;
+      const clientIp = (req.headers.get("cf-connecting-ip") || req.headers.get("x-real-ip") || "").trim();
 
       console.log(`[verifyOtp] Request received for phone: ${phone}`);
 
@@ -214,30 +251,47 @@ Deno.serve(async (req: Request) => {
 
       const supabase = createClient(supabaseUrl, supabaseKey);
 
-      const { data: otpData, error: otpError } = await supabase
-        .from('whatsapp_otp')
-        .select('*')
-        .eq('mobile_number', phone)
-        .eq('consumed', false)
-        .gt('expires_at', new Date().toISOString())
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+      // Concurrency-safe atomic verification RPC enforcing:
+      // 1. Cross-OTP temporary lockout (10 failed verification attempts in last 15m)
+      // 2. Row-level lock (SELECT ... FOR UPDATE) preventing concurrent race conditions
+      // 3. Strict 5-attempt limit per OTP record
+      const { data: verifyResult, error: rpcError } = await supabase.rpc('whatsapp_verify_otp_secure', {
+        p_mobile: phone,
+        p_otp_hash: hashedOtp,
+        p_ip: clientIp || null,
+      });
 
-      console.log(`[verifyOtp] OTP Hash Verification Result:`, otpData ? "MATCH" : "NO MATCH", otpError ? JSON.stringify(otpError) : "");
-
-      if (!otpData || otpData.otp_code !== hashedOtp) {
-        if (otpData) {
-          await supabase.from('whatsapp_otp').update({ attempts: otpData.attempts + 1 }).eq('id', otpData.id);
-          if (otpData.attempts + 1 >= otpData.max_attempts) {
-             await supabase.from('whatsapp_otp').update({ consumed: true }).eq('id', otpData.id);
-          }
-        }
-        return new Response(JSON.stringify({ error: "Invalid OTP" }), { status: 400, headers: corsHeaders });
+      if (rpcError) {
+        console.error("[verifyOtp] RPC Error:", JSON.stringify(rpcError));
+        return new Response(JSON.stringify({ success: false, error: "Verification system error" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
-      await supabase.from('whatsapp_otp').update({ consumed: true, verified: true }).eq('id', otpData.id);
+      console.log(`[verifyOtp] Verification RPC Result:`, JSON.stringify(verifyResult));
 
+      if (!verifyResult.success) {
+        const responseHeaders: Record<string, string> = {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        };
+        if (verifyResult.retry_after) {
+          responseHeaders["Retry-After"] = String(verifyResult.retry_after);
+        }
+        return new Response(JSON.stringify({
+          success: false,
+          error: verifyResult.message || "Invalid OTP",
+          code: verifyResult.code,
+          remaining: verifyResult.remaining,
+          retryAfter: verifyResult.retry_after,
+        }), {
+          status: verifyResult.status || 400,
+          headers: responseHeaders,
+        });
+      }
+
+      // Verification passed atomically in DB. Proceed with Auth session setup.
       const newSecurePassword = crypto.randomUUID();
       let existingUserId = null;
 
@@ -303,11 +357,92 @@ Deno.serve(async (req: Request) => {
       const phone = normalizeMobile(payload.phone);
       const template = payload.template;
       const variables = payload.variables || [];
-      
-      let webhookPayload: Record<string, any> = {};
+      const supabase = createClient(supabaseUrl, supabaseKey);
 
-      if (template === "welcome" || template === "welcome_recruitment" || template === "welcome_to_recruitment_portal") {
-        webhookPayload = {
+      const isWelcomeTemplate = (
+        template === "welcome" ||
+        template === "welcome_recruitment" ||
+        template === "welcome_to_recruitment_portal"
+      );
+
+      // ── 24-Hour Cooldown ONLY for Welcome Template ──────────────────────────
+      if (isWelcomeTemplate) {
+        // 1. Check if a Welcome message was already successfully sent within the last 24 hours
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const { data: recentSent, error: checkError } = await supabase
+          .from('whatsapp_message_logs')
+          .select('id, sent_at, status')
+          .eq('mobile_number', phone)
+          .in('template_name', ['welcome', 'welcome_recruitment', 'welcome_to_recruitment_portal'])
+          .eq('status', 'sent')
+          .gt('sent_at', twentyFourHoursAgo)
+          .order('sent_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (checkError) {
+          console.error('[sendTemplate:welcome] Error checking cooldown in DB:', JSON.stringify(checkError));
+        }
+
+        if (recentSent) {
+          console.log(`[sendTemplate:welcome] Cooldown active for ${phone}. Last sent at ${recentSent.sent_at}. Skipping send.`);
+          return new Response(JSON.stringify({
+            success: true,
+            skipped: true,
+            cooldownActive: true,
+            lastSentAt: recentSent.sent_at,
+            message: 'Welcome message already sent to this number within the previous 24 hours.'
+          }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // 2. Concurrency protection: Check if an in-flight request is already processing within the last 2 minutes
+        const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+        const { data: inFlight } = await supabase
+          .from('whatsapp_message_logs')
+          .select('id, created_at')
+          .eq('mobile_number', phone)
+          .in('template_name', ['welcome', 'welcome_recruitment', 'welcome_to_recruitment_portal'])
+          .eq('status', 'in_flight')
+          .gt('created_at', twoMinutesAgo)
+          .limit(1)
+          .maybeSingle();
+
+        if (inFlight) {
+          console.warn(`[sendTemplate:welcome] Concurrent in-flight request detected for ${phone}. Skipping duplicate.`);
+          return new Response(JSON.stringify({
+            success: true,
+            skipped: true,
+            concurrentRequest: true,
+            message: 'A welcome message is currently being dispatched to this number.'
+          }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // 3. Insert in-flight reservation lock before calling webhook
+        const { data: reservedLog, error: reserveError } = await supabase
+          .from('whatsapp_message_logs')
+          .insert({
+            mobile_number: phone,
+            template_name: 'welcome_to_recruitment_portal',
+            status: 'in_flight',
+            created_at: new Date().toISOString()
+          })
+          .select('id')
+          .single();
+
+        if (reserveError) {
+          console.error('[sendTemplate:welcome] Error reserving lock in DB:', JSON.stringify(reserveError));
+        }
+
+        const logId = reservedLog?.id;
+
+        // 4. Construct payload for WhatAPI webhook
+        const webhookPayload = {
           phone: phone,
           number: phone,
           template: "welcome_to_recruitment_portal",
@@ -320,17 +455,60 @@ Deno.serve(async (req: Request) => {
           type: "welcome_recruitment",
           action: "sendTemplate"
         };
-      } else {
-        const varsObj = variables.reduce((acc: any, val: any, i: number) => ({ ...acc, [`var${i+1}`]: val }), {});
-        webhookPayload = {
-          phone: phone,
-          number: phone,
-          template: template,
-          data: varsObj,
-          message: template,
-          ...varsObj
-        };
+
+        console.log(`[sendTemplate:welcome] Dispatching to webhook for ${phone}...`);
+        try {
+          const webhookResponse = await callWhatApiWebhook(webhookPayload);
+          console.log(`[sendTemplate:welcome] Webhook response:`, JSON.stringify(webhookResponse));
+
+          // 5. Provider accepted the request -> Mark as 'sent' with sent_at = now()
+          if (logId) {
+            await supabase
+              .from('whatsapp_message_logs')
+              .update({
+                status: 'sent',
+                sent_at: new Date().toISOString(),
+                api_response: webhookResponse || {},
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', logId);
+          }
+
+          return new Response(JSON.stringify({ success: true, webhookResponse, sent: true }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        } catch (webhookErr) {
+          // 6. Provider failed -> Mark as 'failed', DO NOT mark as 'sent'
+          const errMsg = webhookErr instanceof Error ? webhookErr.message : String(webhookErr);
+          console.error(`[sendTemplate:welcome] Webhook call failed for ${phone}:`, errMsg);
+
+          if (logId) {
+            await supabase
+              .from('whatsapp_message_logs')
+              .update({
+                status: 'failed',
+                failed: true,
+                error_message: errMsg,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', logId);
+          }
+
+          throw webhookErr;
+        }
       }
+
+      // ── Other Templates (completely unaffected by welcome cooldown) ─────────
+      const varsObj = variables.reduce((acc: any, val: any, i: number) => ({ ...acc, [`var${i+1}`]: val }), {});
+      const webhookPayload = {
+        phone: phone,
+        number: phone,
+        template: template,
+        data: varsObj,
+        message: template,
+        ...varsObj
+      };
 
       console.log(`[Path B] Final Webhook Payload:`, JSON.stringify(webhookPayload));
       const webhookResponse = await callWhatApiWebhook(webhookPayload);

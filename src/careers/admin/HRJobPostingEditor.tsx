@@ -8,11 +8,13 @@ import {
   UserCheck, Award, ArrowLeftCircle, Ban, Send, RotateCcw,
   CalendarClock, Radio, CheckSquare, ShieldAlert, Zap, Activity, Info,
   GraduationCap, HelpCircle, GitBranch, MapPin, IndianRupee, ExternalLink,
-  Save, CheckCircle2, ClipboardList, Mail, Settings,
+  Save, CheckCircle2, ClipboardList, Mail, Settings, Loader2,
+  Building2, Globe, Compass, Layers, Calculator, Sliders, Square, ChevronRight,
 } from 'lucide-react';
 import HRBadgeManager from './HRBadgeManager';
 import HRFlowManager from './HRFlowManager';
 import HRFaqManager from './HRFaqManager';
+import HRLocationAndVacancyManager from './components/HRLocationAndVacancyManager';
 import { supabase } from '../../lib/supabase/client';
 import {
   listAllJobs, upsertJob, listWorkflowTemplates, archiveJob, duplicateJob,
@@ -20,8 +22,18 @@ import {
   bulkJobStatus, bulkArchiveJobs, getJobStats, getJobAnalytics,
   getJobHealth, type JobHealthData,
 } from '../lib/api';
-import type { RmsJobPosting, RmsWorkflowTemplate, RmsWorkflowStage, RmsJobStats, RmsJobAnalytics } from '../lib/types';
-import { EMPLOYMENT_TYPE_LABELS, JOB_STATUS_OPTIONS, JOB_STATUS_CONFIG } from '../lib/constants';
+import type {
+  RmsJobPosting, RmsWorkflowTemplate, RmsWorkflowStage, RmsJobStats, RmsJobAnalytics,
+  JobLocationType, VacancyAllocationsConfig,
+} from '../lib/types';
+import {
+  EMPLOYMENT_TYPE_LABELS, JOB_STATUS_OPTIONS, JOB_STATUS_CONFIG,
+  JOB_LOCATION_TYPES, MAHARASHTRA_REGIONS, MAHARASHTRA_DISTRICTS,
+} from '../lib/constants';
+import {
+  calculateVacancies, generatePublicLocationString, validateVacancyAllocations,
+} from '../lib/vacancyCalculator';
+import { getTalukasForDistrict } from '../../data/maharashtraGeography';
 
 const EMPTY_JOB: Partial<RmsJobPosting> = {
   title: '', slug: '', department: '', location: '', employment_type: 'full_time',
@@ -49,6 +61,15 @@ const EMPTY_JOB: Partial<RmsJobPosting> = {
   never_close_applications: false,
   display_deadline_public: true,
   acknowledgement_text: '',
+  location_type: 'Multiple Locations',
+  location_regions: [],
+  location_districts: [],
+  location_talukas: [],
+  internal_location: '',
+  show_city_publicly: true,
+  city_name: '',
+  vacancy_allocations: {},
+  auto_calculate_vacancies: false,
 };
 
 // ─── Unified Form Tabs ────────────────────────────────────────────────────────
@@ -197,6 +218,19 @@ export default function HRJobPostingEditor() {
   // Expanded analytics
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
 
+  // Authentication status check
+  const [authWarning, setAuthWarning] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data.session?.user) {
+        setAuthWarning('You are currently viewing in read-only preview mode. Please sign in with an authorized admin account to modify or publish positions.');
+      } else {
+        setAuthWarning(null);
+      }
+    });
+  }, []);
+
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpenMenuId(null);
@@ -227,12 +261,25 @@ export default function HRJobPostingEditor() {
   };
 
   // ── Save ──────────────────────────────────────────────────────────────────
-  const handleSave = async (e?: React.FormEvent, closeAfter = false) => {
+  const handleSave = async (
+    e?: React.FormEvent,
+    mode: 'continue' | 'close' | 'stay' = 'continue',
+  ) => {
     if (e) e.preventDefault();
     if (!formData.title?.trim()) {
       setActiveTab('position');
       return setError('Job Title is required in Position Setup.');
     }
+
+    // Validate vacancy allocation consistency before publishing or on save & close
+    if (formData.status === 'published' || (formData.auto_calculate_vacancies && mode === 'close')) {
+      const validation = validateVacancyAllocations(formData);
+      if (!validation.isValid && validation.error) {
+        setActiveTab('position');
+        return setError(validation.error);
+      }
+    }
+
     setSaving(true);
     setError(null);
     const payload = { ...formData };
@@ -243,16 +290,22 @@ export default function HRJobPostingEditor() {
     }
     const { data: savedJob, error: err } = await upsertJob(payload);
     setSaving(false);
-    if (err) return setError(err.message);
+    if (err) return setError(err.message || 'Failed to save position. Please try again.');
 
-    showSuccess(payload.id ? 'Position updated successfully.' : 'Position created and saved successfully.');
+    showSuccess('Changes saved successfully.');
     if (savedJob) {
       setFormData(savedJob);
     }
     load();
-    if (closeAfter) {
+
+    if (mode === 'close') {
       setShowForm(false);
       setFormData(EMPTY_JOB);
+    } else if (mode === 'continue') {
+      const currentIdx = FORM_TABS.findIndex(t => t.id === activeTab);
+      if (currentIdx >= 0 && currentIdx < FORM_TABS.length - 1) {
+        setActiveTab(FORM_TABS[currentIdx + 1].id);
+      }
     }
   };
 
@@ -277,38 +330,83 @@ export default function HRJobPostingEditor() {
   // ── Quick Actions ──────────────────────────────────────────────────────────
   const handleAction = async (action: ActionKey, job: RmsJobPosting) => {
     setOpenMenuId(null);
+    setError(null);
     switch (action) {
       case 'edit':
-        setFormData({ ...job });
+        setFormData({
+          ...EMPTY_JOB,
+          ...job,
+          location_type: job.location_type || 'Multiple Locations',
+          location_districts: job.location_districts || [],
+          location_regions: job.location_regions || [],
+          location_talukas: job.location_talukas || [],
+          show_city_publicly: job.show_city_publicly !== false,
+          city_name: job.city_name || '',
+          internal_location: job.internal_location || '',
+          auto_calculate_vacancies: !!job.auto_calculate_vacancies,
+          vacancy_allocations: job.vacancy_allocations || {},
+        });
         setActiveTab('position');
         setShowForm(true);
         break;
       case 'preview':
         handlePreview(job);
         break;
-      case 'publish':
-        await setJobStatus(job.id, 'published'); showSuccess(`"${job.title}" published.`); load(); break;
-      case 'hide':
-        await setJobStatus(job.id, 'hidden'); showSuccess(`"${job.title}" hidden.`); load(); break;
-      case 'coming_soon':
-        await setJobStatus(job.id, 'coming_soon'); showSuccess(`"${job.title}" marked as Coming Soon.`); load(); break;
-      case 'close_apps':
-        await setJobStatus(job.id, 'applications_closed'); showSuccess(`Applications closed for "${job.title}".`); load(); break;
-      case 'mark_filled':
-        await setJobStatus(job.id, 'filled'); showSuccess(`"${job.title}" marked as Filled.`); load(); break;
+      case 'publish': {
+        const validation = validateVacancyAllocations(job);
+        if (!validation.isValid && validation.error) {
+          setError(validation.error);
+          break;
+        }
+        const { error: err } = await setJobStatus(job.id, 'published');
+        if (err) { setError(err); break; }
+        showSuccess(`"${job.title}" published.`); load(); break;
+      }
+      case 'hide': {
+        const { error: err } = await setJobStatus(job.id, 'hidden');
+        if (err) { setError(err); break; }
+        showSuccess(`"${job.title}" hidden.`); load(); break;
+      }
+      case 'coming_soon': {
+        const { error: err } = await setJobStatus(job.id, 'coming_soon');
+        if (err) { setError(err); break; }
+        showSuccess(`"${job.title}" marked as Coming Soon.`); load(); break;
+      }
+      case 'close_apps': {
+        const { error: err } = await setJobStatus(job.id, 'applications_closed');
+        if (err) { setError(err); break; }
+        showSuccess(`Applications closed for "${job.title}".`); load(); break;
+      }
+      case 'mark_filled': {
+        const { error: err } = await setJobStatus(job.id, 'filled');
+        if (err) { setError(err); break; }
+        showSuccess(`"${job.title}" marked as Filled.`); load(); break;
+      }
       case 'duplicate': {
         const { data, error: dupErr } = await duplicateJob(job.id);
         if (dupErr) { setError(dupErr); break; }
         showSuccess(`Duplicated "${job.title}" as "${data?.title}".`); load(); break;
       }
-      case 'feature':
-        await toggleJobFeatured(job.id, true); showSuccess(`"${job.title}" marked as Featured.`); load(); break;
-      case 'unfeature':
-        await toggleJobFeatured(job.id, false); showSuccess(`Removed Featured from "${job.title}".`); load(); break;
-      case 'urgent':
-        await toggleJobUrgent(job.id, true); showSuccess(`"${job.title}" marked as Urgent Hiring.`); load(); break;
-      case 'unurgent':
-        await toggleJobUrgent(job.id, false); showSuccess(`Removed Urgent from "${job.title}".`); load(); break;
+      case 'feature': {
+        const { error: err } = await toggleJobFeatured(job.id, true);
+        if (err) { setError(err); break; }
+        showSuccess(`"${job.title}" marked as Featured.`); load(); break;
+      }
+      case 'unfeature': {
+        const { error: err } = await toggleJobFeatured(job.id, false);
+        if (err) { setError(err); break; }
+        showSuccess(`Removed Featured from "${job.title}".`); load(); break;
+      }
+      case 'urgent': {
+        const { error: err } = await toggleJobUrgent(job.id, true);
+        if (err) { setError(err); break; }
+        showSuccess(`"${job.title}" marked as Urgent Hiring.`); load(); break;
+      }
+      case 'unurgent': {
+        const { error: err } = await toggleJobUrgent(job.id, false);
+        if (err) { setError(err); break; }
+        showSuccess(`Removed Urgent from "${job.title}".`); load(); break;
+      }
       case 'archive':
         setArchiveTarget(job); setArchiveError(null); break;
       case 'move_up':
@@ -325,7 +423,8 @@ export default function HRJobPostingEditor() {
         } else if (action === 'move_down' && idx < sorted.length - 1) {
           [sorted[idx], sorted[idx + 1]] = [sorted[idx + 1], sorted[idx]];
         }
-        await reorderJobs(sorted.map(j => j.id));
+        const { error: err } = await reorderJobs(sorted.map(j => j.id));
+        if (err) { setError(err); break; }
         showSuccess('Job order updated.');
         load(); break;
       }
@@ -498,6 +597,37 @@ export default function HRJobPostingEditor() {
         )}
       </AnimatePresence>
 
+      {/* Error notification for Quick Actions */}
+      <AnimatePresence>
+        {error && !showForm && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+            className="flex items-center justify-between p-3.5 bg-red-50 border border-red-200 rounded-xl text-sm text-red-800 font-medium shadow-sm"
+          >
+            <div className="flex items-center gap-2.5">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+              <span>{error}</span>
+            </div>
+            <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700 text-xs font-semibold ml-3">
+              Dismiss
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Unauthenticated session notice */}
+      {authWarning && (
+        <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs text-amber-800 shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>{authWarning}</span>
+          </div>
+          <Link to="/login" className="px-3 py-1 bg-amber-600 text-white rounded-lg font-bold hover:bg-amber-700 transition-colors shrink-0 ml-3">
+            Sign In
+          </Link>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -622,7 +752,7 @@ export default function HRJobPostingEditor() {
           </div>
 
           {/* Form Content */}
-          <form onSubmit={e => handleSave(e, false)} className="p-6 space-y-6">
+          <form onSubmit={e => handleSave(e, 'continue')} className="p-6 space-y-6">
 
             {/* ═════ TAB 1: POSITION SETUP ═════ */}
             {activeTab === 'position' && (
@@ -639,7 +769,6 @@ export default function HRJobPostingEditor() {
                     { label: 'Job Title *', key: 'title', placeholder: 'e.g. District Coordinator' },
                     { label: 'URL Slug *', key: 'slug', placeholder: 'auto-generated from title' },
                     { label: 'Department / Project', key: 'department', placeholder: 'e.g. MAHA-AGRI PROJECT / Operations' },
-                    { label: 'Location', key: 'location', placeholder: 'e.g. Maharashtra / Multiple Locations' },
                     { label: 'Experience Required', key: 'experience_required', placeholder: 'e.g. 2+ years' },
                   ].map(f => (
                     <div key={f.key}>
@@ -685,6 +814,13 @@ export default function HRJobPostingEditor() {
                   </div>
                 </div>
 
+                {/* Smart Location Configuration & Automatic Vacancy Calculator */}
+                <HRLocationAndVacancyManager
+                  formData={formData}
+                  set={set}
+                  setFormData={setFormData}
+                />
+
                 {/* Fees Grid */}
                 <div className="grid sm:grid-cols-2 gap-4 p-4 bg-amber-50/70 rounded-xl border border-amber-200">
                   <div>
@@ -698,29 +834,6 @@ export default function HRJobPostingEditor() {
                     <input type="number" min="0" step="1" value={formData.onboarding_fee_amount ?? 0}
                       onChange={e => set('onboarding_fee_amount', parseFloat(e.target.value) || 0)}
                       className="w-full border border-amber-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-amber-400 bg-white" />
-                  </div>
-                </div>
-
-                {/* Vacancies & Age Criteria */}
-                <div className="p-4 bg-primary-50/50 rounded-xl border border-primary-100 space-y-3">
-                  <p className="text-xs font-bold text-primary-700 uppercase tracking-wide">Vacancy Allocation &amp; Age Eligibility</p>
-                  <div className="grid sm:grid-cols-3 md:grid-cols-5 gap-3">
-                    {[
-                      { label: 'Total Vacancies', key: 'total_vacancies', placeholder: 'e.g. 72' },
-                      { label: 'Per District', key: 'vacancies_per_district', placeholder: 'e.g. 2' },
-                      { label: 'Per Taluka', key: 'vacancies_per_taluka', placeholder: 'e.g. 1' },
-                      { label: 'Min Age', key: 'min_age', placeholder: 'e.g. 21' },
-                      { label: 'Max Age', key: 'max_age', placeholder: 'e.g. 40' },
-                    ].map(f => (
-                      <div key={f.key}>
-                        <label className="block text-xs font-semibold text-primary-700 mb-1">{f.label}</label>
-                        <input type="number" min="0"
-                          value={(formData[f.key as keyof RmsJobPosting] as number | null) ?? ''}
-                          placeholder={f.placeholder}
-                          onChange={e => set(f.key as keyof RmsJobPosting, e.target.value === '' ? null : parseInt(e.target.value) || null)}
-                          className="w-full border border-primary-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:border-primary-500 bg-white" />
-                      </div>
-                    ))}
                   </div>
                 </div>
 
@@ -952,8 +1065,9 @@ export default function HRJobPostingEditor() {
                       <p className="text-xs text-blue-700 mt-0.5">
                         Please save this position once to generate its persistent ID. After saving, you can configure job badges and customized recruitment steps right here.
                       </p>
-                      <button type="button" onClick={() => handleSave(undefined, false)} disabled={saving || !formData.title}
-                        className="mt-2.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                      <button type="button" onClick={() => handleSave(undefined, 'stay')} disabled={saving || !formData.title?.trim()}
+                        className="mt-2.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5">
+                        {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                         {saving ? 'Saving...' : 'Save Position Now'}
                       </button>
                     </div>
@@ -996,8 +1110,9 @@ export default function HRJobPostingEditor() {
                       <p className="text-xs text-blue-700 mt-0.5">
                         Save this position first to enable adding custom FAQ entries specific to this role.
                       </p>
-                      <button type="button" onClick={() => handleSave(undefined, false)} disabled={saving || !formData.title}
-                        className="mt-2 px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                      <button type="button" onClick={() => handleSave(undefined, 'stay')} disabled={saving || !formData.title?.trim()}
+                        className="mt-2 px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5">
+                        {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                         {saving ? 'Saving...' : 'Save Position Now'}
                       </button>
                     </div>
@@ -1103,16 +1218,24 @@ export default function HRJobPostingEditor() {
               </div>
 
               <div className="flex items-center gap-2">
-                <button type="button" onClick={() => handleSave(undefined, false)} disabled={saving || !formData.title}
-                  className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-primary-900 text-primary-900 font-bold rounded-xl hover:bg-primary-50 disabled:opacity-50 text-xs transition-all">
-                  <Save className="w-3.5 h-3.5" />
-                  {saving ? 'Saving...' : 'Save &amp; Continue Editing'}
+                <button
+                  type="button"
+                  onClick={() => handleSave(undefined, 'continue')}
+                  disabled={saving || !formData.title?.trim()}
+                  className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-primary-900 text-primary-900 font-bold rounded-xl hover:bg-primary-50 disabled:opacity-50 text-xs transition-all"
+                >
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  {saving ? 'Saving...' : 'Save & Continue Editing'}
                 </button>
 
-                <button type="submit" disabled={saving || !formData.title}
-                  className="flex items-center gap-2 px-5 py-2 bg-primary-900 text-white font-bold rounded-xl hover:bg-primary-800 disabled:opacity-50 text-xs shadow-md transition-all">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  {saving ? 'Saving...' : 'Save &amp; Close'}
+                <button
+                  type="button"
+                  onClick={() => handleSave(undefined, 'close')}
+                  disabled={saving || !formData.title?.trim()}
+                  className="flex items-center gap-2 px-5 py-2 bg-primary-900 text-white font-bold rounded-xl hover:bg-primary-800 disabled:opacity-50 text-xs shadow-md transition-all"
+                >
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                  {saving ? 'Saving...' : 'Save & Close'}
                 </button>
               </div>
             </div>
@@ -1191,7 +1314,23 @@ export default function HRJobPostingEditor() {
                       <Eye className="w-4 h-4" />
                     </button>
                     {/* Edit button */}
-                    <button onClick={() => { setFormData({ ...job }); setActiveTab('position'); setShowForm(true); }} title="Edit"
+                    <button onClick={() => {
+                      setFormData({
+                        ...EMPTY_JOB,
+                        ...job,
+                        location_type: job.location_type || 'Multiple Locations',
+                        location_districts: job.location_districts || [],
+                        location_regions: job.location_regions || [],
+                        location_talukas: job.location_talukas || [],
+                        show_city_publicly: job.show_city_publicly !== false,
+                        city_name: job.city_name || '',
+                        internal_location: job.internal_location || '',
+                        auto_calculate_vacancies: !!job.auto_calculate_vacancies,
+                        vacancy_allocations: job.vacancy_allocations || {},
+                      });
+                      setActiveTab('position');
+                      setShowForm(true);
+                    }} title="Edit"
                       className="p-2 rounded-lg border border-primary-200 text-primary-500 hover:bg-primary-50 transition-all">
                       <Edit2 className="w-4 h-4" />
                     </button>

@@ -13,6 +13,11 @@ export interface DirectOtpResult {
   success: boolean;
   error?: string;
   configError?: boolean;
+  skipped?: boolean;
+  cooldownActive?: boolean;
+  concurrentRequest?: boolean;
+  lastSentAt?: string;
+  sent?: boolean;
 }
 
 /**
@@ -95,7 +100,14 @@ async function callEdgeFunction(phone: string, templateName: string, variables: 
     }
 
     console.log('[WhatsApp Service REAL DISPATCH SUCCESS]:', data);
-    return { success: true };
+    return {
+      success: true,
+      skipped: data?.skipped,
+      cooldownActive: data?.cooldownActive,
+      concurrentRequest: data?.concurrentRequest,
+      lastSentAt: data?.lastSentAt,
+      sent: data?.sent,
+    };
   } catch (err) {
     const errorDetail = err instanceof Error ? err.message : String(err);
     console.error('[WhatsApp Service NETWORK ERROR]:', errorDetail);
@@ -103,6 +115,39 @@ async function callEdgeFunction(phone: string, templateName: string, variables: 
       success: false,
       error: `WhatsApp Gateway Unreachable: ${errorDetail}`
     };
+  }
+}
+
+/**
+ * Checks server-side (Supabase) if the 24-hour cooldown is currently active
+ * for the given phone number for the Welcome message.
+ */
+export async function isWelcomeMessageInCooldown(phone: string): Promise<boolean> {
+  if (!phone?.trim()) return false;
+  const recipient = getWhatsAppFormattedPhone(phone);
+  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+  try {
+    const { data, error } = await supabase
+      .from('whatsapp_message_logs' as never)
+      .select('id, sent_at')
+      .eq('mobile_number', recipient)
+      .in('template_name', ['welcome', 'welcome_recruitment', 'welcome_to_recruitment_portal'])
+      .eq('status', 'sent')
+      .gt('sent_at', twentyFourHoursAgo)
+      .order('sent_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('[isWelcomeMessageInCooldown] Check error, falling back to server dispatch:', error.message);
+      return false;
+    }
+
+    return !!data;
+  } catch (err) {
+    console.warn('[isWelcomeMessageInCooldown] Exception checking cooldown:', err);
+    return false;
   }
 }
 
@@ -125,4 +170,36 @@ export async function sendWelcomeTemplate(phone: string): Promise<DirectOtpResul
 
   const recipient = getWhatsAppFormattedPhone(phone);
   return callEdgeFunction(recipient, 'welcome', []);
+}
+
+/**
+ * Send the application submitted confirmation template
+ */
+export async function sendApplicationSubmittedTemplate(
+  phone: string,
+  candidateName: string,
+  jobTitle: string,
+  applicationNumber: string,
+): Promise<DirectOtpResult> {
+  if (!phone?.trim()) return { success: false, error: 'Phone number is required.' };
+
+  const recipient = getWhatsAppFormattedPhone(phone);
+  return callEdgeFunction(recipient, 'application_received', [candidateName, jobTitle, applicationNumber]);
+}
+
+/**
+ * Send the interview confirmed confirmation template
+ */
+export async function sendInterviewConfirmedTemplate(
+  phone: string,
+  candidateName: string,
+  jobTitle: string,
+  date: string,
+  time: string,
+  venueOrLink: string,
+): Promise<DirectOtpResult> {
+  if (!phone?.trim()) return { success: false, error: 'Phone number is required.' };
+
+  const recipient = getWhatsAppFormattedPhone(phone);
+  return callEdgeFunction(recipient, 'interview_schedule', [candidateName, jobTitle, date, time, venueOrLink]);
 }

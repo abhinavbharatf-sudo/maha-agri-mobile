@@ -69,13 +69,22 @@ export default function ApplicationSuccess() {
           </div>
         </div>
 
-        <div className="flex gap-3">
-          <Link
-            to="/candidate/dashboard"
-            className="flex-1 flex items-center justify-center gap-2 py-3 bg-primary-900 text-white font-bold rounded-xl hover:bg-primary-800 transition-colors"
-          >
-            Go to Dashboard <ArrowRight className="w-4 h-4" />
-          </Link>
+        <div className="flex flex-col sm:flex-row gap-3">
+          {app && Number(app.job_posting?.application_fee_amount ?? 0) === 0 ? (
+            <Link
+              to="/candidate/interviews"
+              className="flex-1 flex items-center justify-center gap-2 py-3 bg-emerald-700 text-white font-bold rounded-xl hover:bg-emerald-800 transition-colors shadow-sm"
+            >
+              Select Interview Slot <ArrowRight className="w-4 h-4" />
+            </Link>
+          ) : (
+            <Link
+              to="/candidate/dashboard"
+              className="flex-1 flex items-center justify-center gap-2 py-3 bg-primary-900 text-white font-bold rounded-xl hover:bg-primary-800 transition-colors"
+            >
+              Go to Dashboard <ArrowRight className="w-4 h-4" />
+            </Link>
+          )}
           <Link
             to="/careers"
             className="flex-1 flex items-center justify-center gap-2 py-3 border-2 border-primary-200 text-primary-700 font-semibold rounded-xl hover:bg-primary-50 transition-colors"

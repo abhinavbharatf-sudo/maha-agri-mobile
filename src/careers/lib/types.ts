@@ -110,6 +110,36 @@ export interface RmsCampaign {
   updated_at: string;
 }
 
+// ===== Smart Location & Vacancy Calculator Types =====
+export type JobLocationType =
+  | 'State-wide'
+  | 'Regional'
+  | 'District-wise'
+  | 'City-specific'
+  | 'Multiple Locations'
+  | 'Remote';
+
+export interface TalukaAllocation {
+  included: boolean;
+  override_vacancies?: number | null;
+  vacancies?: number | null;
+}
+
+export interface DistrictAllocation {
+  included: boolean;
+  override_total?: number | null;
+  per_taluka?: number | null;
+  taluka_allocations?: Record<string, TalukaAllocation>;
+  calculated_district_total?: number;
+}
+
+export interface VacancyAllocationsConfig {
+  default_per_taluka?: number | null;
+  default_per_district?: number | null;
+  district_allocations?: Record<string, DistrictAllocation>;
+  calculated_grand_total?: number;
+}
+
 // ===== Job Posting =====
 export interface RmsJobPosting {
   id: string;
@@ -161,6 +191,16 @@ export interface RmsJobPosting {
   application_close_date: string | null;
   never_close_applications: boolean | null;
   display_deadline_public: boolean | null;
+  // Smart Location & Vacancy Calculator fields
+  location_type?: JobLocationType | null;
+  location_regions?: string[] | null;
+  location_districts?: string[] | null;
+  location_talukas?: string[] | null;
+  internal_location?: string | null;
+  show_city_publicly?: boolean | null;
+  city_name?: string | null;
+  vacancy_allocations?: VacancyAllocationsConfig | null;
+  auto_calculate_vacancies?: boolean | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -301,6 +341,12 @@ export interface RmsApplication {
   last_status_change_at: string;
   created_at: string;
   updated_at: string;
+  is_archived?: boolean;
+  archived_at?: string | null;
+  archived_by?: string | null;
+  is_trashed?: boolean;
+  trashed_at?: string | null;
+  trashed_by?: string | null;
 }
 
 export interface RmsApplicationWithDetails extends RmsApplication {

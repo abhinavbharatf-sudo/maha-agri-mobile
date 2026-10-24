@@ -6,6 +6,7 @@ import type { RmsCandidateProfile } from '../lib/types';
 import { getCandidateProfile } from '../lib/api';
 import { ensureLeadExists, hasSentWelcomeTemplate, logWhatsAppSent } from '../../crm/lib/api';
 import { sendOTP, verifyCustomOtp } from '../../services/whatapi';
+import { sendWelcomeTemplate, isWelcomeMessageInCooldown } from '../../services/whatsappService';
 
 interface CandidateAuthContextValue {
   session: Session | null;
@@ -117,6 +118,21 @@ export function CandidateAuthProvider({ children }: { children: ReactNode }) {
       await ensureLeadExists(phone, userId);
     } catch (err) {
       console.error('Error ensuring lead exists:', err);
+    }
+
+    // Trigger Welcome WhatsApp Message (Trigger 2: After successful OTP verification)
+    // Server-side 24-hour cooldown: Only dispatches if no welcome message was sent to this normalized mobile in the last 24h
+    try {
+      const inCooldown = await isWelcomeMessageInCooldown(phone);
+      if (!inCooldown) {
+        console.log(`[verifyOtp] Sending welcome template to ${phone} (server-side cooldown check passed)...`);
+        const sendRes = await sendWelcomeTemplate(phone);
+        console.log(`[verifyOtp] Welcome template response:`, sendRes);
+      } else {
+        console.log(`[verifyOtp] Welcome message cooldown active (< 24h) for ${phone}, skipping duplicate.`);
+      }
+    } catch (err) {
+      console.error('Failed to dispatch welcome WhatsApp message:', err);
     }
 
     const { data: existing } = await getCandidateProfile(userId);

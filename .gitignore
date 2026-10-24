@@ -25,3 +25,5 @@ dist-ssr
 !.env.example
 database/backups/
 backend/vault_storage/
+scratch/
+
