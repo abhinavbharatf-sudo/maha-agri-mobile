@@ -7,6 +7,7 @@ import CareersHome from './pages/CareersHome';
 import JobDetail from './pages/JobDetail';
 import Apply from './pages/Apply';
 import ApplicationSuccess from './pages/ApplicationSuccess';
+import CandidateApplyWizard from './portal/CandidateApplyWizard';
 
 // Candidate dashboard
 import CandidateDashboardLayout from './dashboard/CandidateDashboardLayout';
@@ -42,11 +43,7 @@ import HRJobTrash from './admin/HRJobTrash';
 const withLayout = (element: React.ReactNode) => <Layout>{element}</Layout>;
 
 function CareerModuleRoot() {
-  return (
-    <CandidateAuthProvider>
-      <Outlet />
-    </CandidateAuthProvider>
-  );
+  return <Outlet />;
 }
 
 export default function CareerRoutes() {
@@ -57,6 +54,8 @@ export default function CareerRoutes() {
       <Route path="/careers/jobs/:slug"                    element={withLayout(<JobDetail />)} />
       <Route path="/careers/apply/:jobId"                  element={<Apply />} />
       <Route path="/careers/apply/success/:applicationId"  element={<ApplicationSuccess />} />
+      {/* Isolated Candidate Portal Route */}
+      <Route path="/careers/portal/apply/:jobId"           element={withLayout(<CandidateApplyWizard />)} />
 
       {/* Candidate dashboard */}
       <Route path="/candidate" element={<CandidateDashboardLayout />}>

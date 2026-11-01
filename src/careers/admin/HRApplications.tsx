@@ -3,8 +3,9 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   Search, Filter, FileText, User, MapPin, Calendar, Briefcase,
   ChevronDown, X, Eye, Archive, Trash2, RotateCcw, AlertCircle,
-  CheckCircle, Loader2, AlertTriangle, ShieldAlert
+  CheckCircle, Loader2, AlertTriangle, ShieldAlert, Download, GraduationCap
 } from 'lucide-react';
+import { determineHighestQualificationIndex } from '../portal/types';
 import {
   listApplicationsForHR, listAllJobs, archiveApplication,
   restoreApplication, trashApplication, restoreTrashApplication,
@@ -184,6 +185,80 @@ export default function HRApplications() {
     }
   };
 
+  const handleExportCSV = () => {
+    if (!apps || apps.length === 0) return;
+
+    const headers = [
+      'Application Number',
+      'Candidate Name',
+      'Mobile',
+      'Job Title',
+      'Status',
+      'Submitted Date',
+      'Preferred District',
+      'Preferred Taluka',
+      'Highest Qualification',
+      'All Educational Qualifications',
+      'Total Experience'
+    ];
+
+    const rows = apps.map(app => {
+      const cand = Array.isArray(app.candidate) ? app.candidate[0] : app.candidate;
+      const appData = (app as any).application_data || {};
+      const jobSpec = appData.job_specific || appData.submission_snapshot?.job_specific || {};
+      const quals: any[] = Array.isArray(jobSpec.qualifications) && jobSpec.qualifications.length > 0
+        ? jobSpec.qualifications
+        : [];
+
+      let highestQualText = jobSpec.highestQualification || '—';
+      if (quals.length > 0) {
+        const highestIdx = determineHighestQualificationIndex(quals);
+        const hq = quals[highestIdx] || quals[0];
+        let hqCourse = hq.course || '';
+        if (hq.level === 'Other Equivalent Education') hqCourse = hq.customQualification || 'Other';
+        else if (hq.course === 'Other') hqCourse = hq.customCourse || 'Other';
+        highestQualText = `${hq.level}${hqCourse ? ` - ${hqCourse}` : ''} (${hq.passingYear || ''}) [${hq.marksValue || ''}${hq.gradingFormat === 'cgpa' ? ' CGPA' : '%'}]`;
+      }
+
+      const allQualsText = quals.length > 0
+        ? quals.map(q => {
+            let c = q.course || '';
+            if (q.level === 'Other Equivalent Education') c = q.customQualification || 'Other';
+            else if (q.course === 'Other') c = q.customCourse || 'Other';
+            return `${q.level}${c ? ` - ${c}` : ''} (${q.passingYear || ''}): ${q.marksValue || ''}${q.gradingFormat === 'cgpa' ? ' CGPA' : '%'}`;
+          }).join(' | ')
+        : highestQualText;
+
+      const expText = jobSpec.experienceYears
+        ? `${jobSpec.experienceYears}Y ${jobSpec.experienceMonths || '0'}M ${jobSpec.experienceDays ? `${jobSpec.experienceDays}D` : ''}`
+        : '0Y';
+
+      return [
+        `"${app.application_number || ''}"`,
+        `"${(cand?.full_name || '').replace(/"/g, '""')}"`,
+        `"${cand?.mobile || ''}"`,
+        `"${(app.job_posting?.title || '').replace(/"/g, '""')}"`,
+        `"${APPLICATION_STATUS_CONFIG[app.status]?.label || app.status}"`,
+        `"${app.submitted_at ? new Date(app.submitted_at).toLocaleDateString('en-IN') : ''}"`,
+        `"${app.preferred_district || ''}"`,
+        `"${app.preferred_taluka || ''}"`,
+        `"${highestQualText.replace(/"/g, '""')}"`,
+        `"${allQualsText.replace(/"/g, '""')}"`,
+        `"${expText}"`,
+      ].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `maha_agri_applications_${viewTab}_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="space-y-5">
       {/* Toast Alert */}
@@ -299,6 +374,17 @@ export default function HRApplications() {
             {viewTab === 'active' ? 'active' : viewTab} {apps.length === 1 ? 'application' : 'applications'}
           </span>
         </div>
+
+        <button
+          type="button"
+          onClick={handleExportCSV}
+          disabled={loading || apps.length === 0}
+          className="flex items-center gap-2 px-3.5 py-2 bg-white border border-primary-200 text-primary-700 hover:border-primary-400 hover:text-primary-900 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs"
+          title="Export applications to CSV with candidate qualifications and experience"
+        >
+          <Download className="w-4 h-4 text-primary-600" />
+          <span>Export (CSV)</span>
+        </button>
       </div>
 
       {/* Expanded filter row */}

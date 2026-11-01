@@ -4,13 +4,16 @@ import {
   X, User, Phone, MapPin, Briefcase, Calendar, FileText,
   CreditCard, Clock, MessageSquare, CheckCircle, XCircle,
   AlertTriangle, ChevronRight, ExternalLink, Download,
-  Send, Loader2, Shield, Archive, Trash2, RotateCcw, AlertCircle, ShieldAlert
+  Send, Loader2, Shield, Archive, Trash2, RotateCcw, AlertCircle, ShieldAlert,
+  GraduationCap, Award, Printer
 } from 'lucide-react';
+import { determineHighestQualificationIndex, type QualificationEntry } from '../portal/types';
 import {
   getApplicationForHR, updateApplicationStatus, addApplicationNote,
   verifyDocument, rejectDocument, requestDocumentCorrection,
   fetchCandidateCRMTimeline, archiveApplication, restoreApplication,
-  trashApplication, restoreTrashApplication, permanentlyDeleteApplication
+  trashApplication, restoreTrashApplication, permanentlyDeleteApplication,
+  permanentlyDeleteCandidate
 } from '../lib/api';
 import type { ApplicationStatus, RmsCandidateDocument } from '../lib/types';
 import ApplicationStatusBadge from '../components/ApplicationStatusBadge';
@@ -87,8 +90,9 @@ export default function HRCandidateProfile({ applicationId, onClose, onStatusCha
   
   const [crmTimeline, setCrmTimeline] = useState<any[]>([]);
 
-  // Confirm Archive / Trash / Restore / Delete modal
-  const [confirmAction, setConfirmAction] = useState<'archive' | 'restore' | 'trash' | 'restore_trash' | 'delete' | null>(null);
+  // Confirm Archive / Trash / Restore / Delete / Purge Candidate modal
+  const [confirmAction, setConfirmAction] = useState<'archive' | 'restore' | 'trash' | 'restore_trash' | 'delete' | 'purge_candidate' | null>(null);
+  const [purgeConfirmationInput, setPurgeConfirmationInput] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -129,6 +133,17 @@ export default function HRCandidateProfile({ applicationId, onClose, onStatusCha
         err = res.error;
       } else if (confirmAction === 'delete') {
         const res = await permanentlyDeleteApplication(applicationId);
+        err = res.error;
+        if (!err) {
+          setActionLoading(false);
+          onStatusChanged?.();
+          onClose();
+          return;
+        }
+      } else if (confirmAction === 'purge_candidate') {
+        const candId = (data?.candidate as any)?.id || data?.application?.candidate_id;
+        const candMobile = (data?.candidate as any)?.mobile || null;
+        const res = await permanentlyDeleteCandidate(candId, candMobile, purgeConfirmationInput);
         err = res.error;
         if (!err) {
           setActionLoading(false);
@@ -194,6 +209,15 @@ export default function HRCandidateProfile({ applicationId, onClose, onStatusCha
   const candidate = (Array.isArray(rawCandidate) ? rawCandidate[0] : rawCandidate) as Record<string, unknown> | undefined;
   const job = app?.job_posting;
 
+  // Application Data & Multi-Qualification extraction
+  const appData = (app as any)?.application_data || {};
+  const jobSpecific = appData?.job_specific || appData?.submission_snapshot?.job_specific || {};
+  const appQualifications: QualificationEntry[] = Array.isArray(jobSpecific?.qualifications) && jobSpecific.qualifications.length > 0
+    ? jobSpecific.qualifications
+    : [];
+  const highestQualIndex = appQualifications.length > 0 ? determineHighestQualificationIndex(appQualifications) : -1;
+  const candidateEducation = Array.isArray(candidate?.education) ? (candidate.education as Record<string, any>[]) : [];
+
   // Determine timeline step
   const currentStepIndex = app
     ? TIMELINE_STEPS.findIndex(s => s.statuses.includes(app.status as ApplicationStatus))
@@ -247,9 +271,37 @@ export default function HRCandidateProfile({ applicationId, onClose, onStatusCha
               </>
             )}
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-primary-100 text-primary-400 hover:text-primary-700 transition-colors">
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {!loading && (
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-primary-200 text-primary-700 hover:bg-primary-50 text-xs font-semibold rounded-xl transition-all"
+                title="Print Candidate Application / Save as PDF"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Print / PDF</span>
+              </button>
+            )}
+            {isSuperAdmin && !loading && candidate && (
+              <button
+                type="button"
+                onClick={() => {
+                  setActionError(null);
+                  setPurgeConfirmationInput('');
+                  setConfirmAction('purge_candidate');
+                }}
+                className="flex items-center gap-1.5 font-bold px-3 py-1.5 bg-red-700 hover:bg-red-800 text-white text-xs rounded-xl shadow-xs transition-all"
+                title="Super Admin: Permanently delete this candidate's entire data and auth account"
+              >
+                <ShieldAlert className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Purge Candidate</span>
+              </button>
+            )}
+            <button onClick={onClose} className="p-2 rounded-lg hover:bg-primary-100 text-primary-400 hover:text-primary-700 transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Archived Banner */}
@@ -297,13 +349,24 @@ export default function HRCandidateProfile({ applicationId, onClose, onStatusCha
                   <RotateCcw className="w-3 h-3" /> Restore
                 </button>
                 {isSuperAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => { setActionError(null); setConfirmAction('delete'); }}
-                    className="flex items-center gap-1 font-bold px-2.5 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                  >
-                    <Trash2 className="w-3 h-3" /> Delete Permanently
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => { setActionError(null); setConfirmAction('delete'); }}
+                      className="flex items-center gap-1 font-bold px-2.5 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                      title="Permanently delete this application"
+                    >
+                      <Trash2 className="w-3 h-3" /> Delete App
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setActionError(null); setPurgeConfirmationInput(''); setConfirmAction('purge_candidate'); }}
+                      className="flex items-center gap-1 font-bold px-2.5 py-1 bg-red-800 text-white rounded-lg hover:bg-red-900 transition-colors"
+                      title="Permanently purge candidate profile and auth account"
+                    >
+                      <ShieldAlert className="w-3 h-3" /> Purge Candidate
+                    </button>
+                  </>
                 )}
               </div>
             )}
@@ -415,13 +478,141 @@ export default function HRCandidateProfile({ applicationId, onClose, onStatusCha
                     </Grid2>
                   </Section>
 
-                  {Array.isArray(candidate.education) && (candidate.education as unknown[]).length > 0 && (
-                    <Section title="Education">
+                  {/* Educational Qualifications Section — Displays ALL records with Highest Qualification highlighted */}
+                  <Section title={`Educational Qualifications (${appQualifications.length > 0 ? appQualifications.length : (jobSpecific?.highestQualification ? 1 : candidateEducation.length)})`}>
+                    {appQualifications.length > 0 ? (
                       <div className="space-y-3">
-                        {(candidate.education as Record<string, string>[]).map((edu, i) => (
+                        {appQualifications.map((qual, idx) => {
+                          const isHighest = idx === highestQualIndex || Boolean(qual.isPrimary);
+                          let courseTitle = qual.course || '';
+                          if (qual.level === 'Other Equivalent Education') {
+                            courseTitle = qual.customQualification || 'Other Equivalent Education';
+                          } else if (qual.course === 'Other') {
+                            courseTitle = qual.customCourse ? `${qual.level} - ${qual.customCourse}` : 'Other';
+                          } else if (qual.level === 'SSC') {
+                            courseTitle = qual.course || 'Standard Board Curriculum';
+                          }
+
+                          const marksFormatted = qual.marksValue
+                            ? qual.gradingFormat === 'cgpa'
+                              ? `${qual.marksValue} / 10.0 CGPA`
+                              : `${qual.marksValue}%`
+                            : '—';
+
+                          return (
+                            <div
+                              key={qual.id || idx}
+                              className={`p-3.5 rounded-xl border transition-all ${
+                                isHighest
+                                  ? 'border-emerald-300 bg-emerald-50/40 shadow-xs ring-1 ring-emerald-400/30'
+                                  : 'border-primary-100 bg-primary-50/40'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
+                                <div className="flex items-center gap-2">
+                                  <GraduationCap className={`w-4 h-4 ${isHighest ? 'text-emerald-700' : 'text-primary-700'}`} />
+                                  <span className="font-bold text-primary-900 text-sm">
+                                    {qual.level || `Qualification #${idx + 1}`}
+                                  </span>
+                                </div>
+                                {isHighest && (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-600 text-white shadow-2xs">
+                                    <Award className="w-3.5 h-3.5 text-amber-300" />
+                                    Highest Qualification
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="text-xs text-primary-800 font-medium mb-2">
+                                <span className="text-primary-500">Course / Stream / Degree:</span>{' '}
+                                <strong className="text-primary-900">{courseTitle || '—'}</strong>
+                              </div>
+
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs pt-2 border-t border-primary-100/60">
+                                <div>
+                                  <span className="text-primary-500 block">Passing Year</span>
+                                  <span className="font-semibold text-primary-900">{qual.passingYear || '—'}</span>
+                                </div>
+                                <div>
+                                  <span className="text-primary-500 block">Grading & Score</span>
+                                  <span className="font-semibold text-primary-900">{marksFormatted}</span>
+                                </div>
+                                <div>
+                                  <span className="text-primary-500 block">Evaluation Status</span>
+                                  <span className={`font-semibold ${isHighest ? 'text-emerald-700' : 'text-slate-600'}`}>
+                                    {isHighest ? 'Highest Credential' : 'Verified Qualification'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : jobSpecific?.highestQualification ? (
+                      /* Backward compatibility for legacy applications with scalar qualification */
+                      <div className="p-3.5 rounded-xl border border-emerald-300 bg-emerald-50/40 text-xs space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <GraduationCap className="w-4 h-4 text-emerald-700" />
+                            <span className="font-bold text-primary-900 text-sm">
+                              {jobSpecific.highestQualification}
+                            </span>
+                          </div>
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-600 text-white shadow-2xs">
+                            <Award className="w-3.5 h-3.5 text-amber-300" />
+                            Highest Qualification
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-emerald-200">
+                          <div>
+                            <span className="text-primary-500 block">Passing Year</span>
+                            <span className="font-semibold text-primary-900">{jobSpecific.passingYear || '—'}</span>
+                          </div>
+                          <div>
+                            <span className="text-primary-500 block">Percentage / Marks</span>
+                            <span className="font-semibold text-primary-900">
+                              {jobSpecific.marksPercentage ? `${jobSpecific.marksPercentage}%` : '—'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : candidateEducation.length > 0 ? (
+                      /* Fallback for candidate profile table education entries */
+                      <div className="space-y-3">
+                        {candidateEducation.map((edu, i) => (
                           <div key={i} className="bg-primary-50 rounded-lg p-3 text-sm">
-                            <div className="font-semibold text-primary-900">{edu.degree}</div>
-                            <div className="text-primary-600">{edu.institution} — {edu.year} — {edu.percentage}%</div>
+                            <div className="font-semibold text-primary-900">{edu.degree || edu.level}</div>
+                            <div className="text-primary-600">
+                              {edu.institution || edu.course} — {edu.year || edu.passingYear} — {edu.percentage || edu.marks}%
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-primary-400 italic">No education records submitted.</p>
+                    )}
+                  </Section>
+
+                  {/* Work Experience Section */}
+                  {Array.isArray(jobSpecific?.experiences) && jobSpecific.experiences.length > 0 && (
+                    <Section title={`Work Experience (${jobSpecific.experienceYears || '0'}Y ${jobSpecific.experienceMonths || '0'}M ${jobSpecific.experienceDays ? `${jobSpecific.experienceDays}D` : ''})`}>
+                      <div className="space-y-2.5 text-xs">
+                        {jobSpecific.experiences.map((exp: any, i: number) => (
+                          <div key={exp.id || i} className="p-3 bg-white border border-primary-100 rounded-lg">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-bold text-primary-900">{exp.employer || 'Employer'}</span>
+                              {exp.isCurrent && (
+                                <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[10px] font-bold">
+                                  Currently Working
+                                </span>
+                              )}
+                            </div>
+                            {exp.designation && <p className="text-primary-700 font-medium mb-1">Role: {exp.designation}</p>}
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-primary-500 text-[11px] pt-1 border-t border-primary-100/60 mt-1">
+                              <div>Duration: <strong className="text-primary-800">{exp.years}Y {exp.months}M {exp.days ? `${exp.days}D` : ''}</strong></div>
+                              <div>Dates: <strong className="text-primary-800">{exp.startDate || '—'} to {exp.isCurrent ? 'Present' : exp.endDate || '—'}</strong></div>
+                              <div>Certificate: <strong className="text-primary-800">{exp.hasCertificate === 'yes' ? 'Available' : 'No'}</strong></div>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -721,6 +912,7 @@ export default function HRCandidateProfile({ applicationId, onClose, onStatusCha
 
                   <div className="flex-1 min-w-0">
                     <h3 className="text-base font-bold text-primary-900">
+                      {confirmAction === 'purge_candidate' && 'Super Admin: Permanent Candidate Purge'}
                       {confirmAction === 'archive' && 'Archive Application'}
                       {confirmAction === 'restore' && 'Restore Application'}
                       {confirmAction === 'trash' && 'Move to Trash'}
@@ -772,6 +964,41 @@ export default function HRCandidateProfile({ applicationId, onClose, onStatusCha
                       </p>
                     </div>
                   )}
+                  {confirmAction === 'purge_candidate' && (
+                    <div className="space-y-3">
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-xl space-y-2">
+                        <p className="text-red-900 font-bold text-xs flex items-center gap-1.5">
+                          <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
+                          SUPER ADMIN ACTION: Full Candidate Permanent Purge
+                        </p>
+                        <p className="text-xs text-red-700 leading-relaxed">
+                          This will completely and irreversibly erase this candidate from the platform:
+                        </p>
+                        <ul className="text-[11px] text-red-800 space-y-1 list-disc pl-4">
+                          <li>Candidate Profile & Demographics</li>
+                          <li>All Job Applications, Status Logs, and Workflow States</li>
+                          <li>Uploaded Documents & Cloud Storage binary files</li>
+                          <li>Interview Bookings (releasing slot capacity back to quota)</li>
+                          <li>CRM Lead records, call history, and communication logs</li>
+                          <li>WhatsApp OTPs, delivery logs, and 24h rate-limit counters</li>
+                          <li>Supabase Auth user account (allowing fresh sign-up)</li>
+                        </ul>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Type <span className="font-mono text-red-700 bg-red-50 px-1 py-0.5 rounded border border-red-200">PERMANENTLY DELETE</span> to confirm:
+                        </label>
+                        <input
+                          type="text"
+                          value={purgeConfirmationInput}
+                          onChange={e => setPurgeConfirmationInput(e.target.value)}
+                          placeholder="PERMANENTLY DELETE"
+                          className="w-full text-xs font-mono px-3 py-2 border border-slate-300 rounded-xl focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {actionError && (
@@ -793,10 +1020,12 @@ export default function HRCandidateProfile({ applicationId, onClose, onStatusCha
 
                   <button
                     type="button"
-                    disabled={actionLoading}
+                    disabled={actionLoading || (confirmAction === 'purge_candidate' && purgeConfirmationInput !== 'PERMANENTLY DELETE')}
                     onClick={handleExecuteArchiveTrash}
                     className={`flex items-center gap-1.5 px-4 py-2 font-bold rounded-xl text-xs text-white shadow-sm transition-all disabled:opacity-60 ${
-                      confirmAction === 'delete'
+                      confirmAction === 'purge_candidate'
+                        ? 'bg-red-800 hover:bg-red-900'
+                        : confirmAction === 'delete'
                         ? 'bg-red-600 hover:bg-red-700'
                         : confirmAction === 'archive'
                         ? 'bg-amber-600 hover:bg-amber-700'
@@ -811,6 +1040,7 @@ export default function HRCandidateProfile({ applicationId, onClose, onStatusCha
                     {confirmAction === 'trash' && (actionLoading ? 'Moving to Trash...' : 'Move to Trash')}
                     {confirmAction === 'restore_trash' && (actionLoading ? 'Restoring...' : 'Restore Application')}
                     {confirmAction === 'delete' && (actionLoading ? 'Deleting...' : 'Permanently Delete')}
+                    {confirmAction === 'purge_candidate' && (actionLoading ? 'Purging Candidate...' : 'Purge Complete Candidate Data')}
                   </button>
                 </div>
               </motion.div>

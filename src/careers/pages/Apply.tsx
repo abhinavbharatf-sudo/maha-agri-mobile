@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -16,7 +16,9 @@ import { useCandidateAuth } from '../lib/CandidateAuthContext';
 import OTPLoginModal from '../components/OTPLoginModal';
 import { submitApplicationWithOtp } from '../../crm/lib/api';
 import { MAHARASHTRA_DISTRICTS } from '../lib/constants';
+import { getTalukasForDistrict } from '../../data/maharashtraGeography';
 import { sendApplicationSubmittedTemplate } from '../../services/whatsappService';
+import { formatAadhaarDisplay } from '../portal/utils/verhoeff';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Step =
@@ -47,7 +49,7 @@ const LBL = 'block text-xs font-bold text-primary-600 uppercase tracking-wider m
 export default function Apply() {
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
-  const { user, loading: authLoading, refreshProfile } = useCandidateAuth();
+  const { user, verifiedMobile, loading: authLoading, refreshProfile } = useCandidateAuth();
 
   const [job, setJob] = useState<RmsJobPosting | null>(null);
   const [jobLoading, setJobLoading] = useState(true);
@@ -127,6 +129,21 @@ export default function Apply() {
       if ((data.experience as ExpEntry[] ?? []).length > 0) setExperience(data.experience as ExpEntry[]);
       setPrefDistrict(data.district ?? '');
       setStep(data.profile_complete ? 'preference' : 'personal');
+
+      // 2. CRM Integration: Track Application Started event
+      if (currentJobId && data.mobile) {
+        import('../../crm/lib/api').then(({ getLeadForUser, updateLeadStage }) => {
+          getLeadForUser(uid, data.mobile).then(lead => {
+            if (lead?.id) {
+              updateLeadStage(lead.id, currentJobId, 'Application Started', uid, 'Candidate').catch(err => {
+                console.warn('[Apply] Stage update warning:', err);
+              });
+            }
+          }).catch(err => {
+            console.warn('[Apply] Lead lookup warning:', err);
+          });
+        }).catch(() => {});
+      }
     } else {
       setStep('personal');
     }
@@ -145,8 +162,15 @@ export default function Apply() {
   }, [authLoading, user, step, loadCandidate, jobId]);
 
   // ── OTP Success ───────────────────────────────────────────────────────────
-  const handleOtpSuccess = () => {
+  const handleOtpSuccess = (_isNewUser?: boolean, mobile?: string) => {
     setShowOtp(false);
+    if (mobile && typeof window !== 'undefined') {
+      const clean = mobile.replace(/\D/g, '').slice(-10);
+      try {
+        sessionStorage.setItem('maha_candidate_verified_mobile', clean);
+        localStorage.setItem('maha_candidate_verified_mobile', clean);
+      } catch {}
+    }
     if (user && jobId) {
       loadCandidate(user.id, jobId);
     }
@@ -157,14 +181,29 @@ export default function Apply() {
   const saveProfile = async (extra: Record<string, unknown> = {}, nextStep: Step) => {
     if (!user) return;
     setError(null);
+
+    // Resolve authoritative 10-digit mobile number from verified mobile, profile, or auth session
+    const effectiveMobile = (
+      candidate?.mobile ||
+      verifiedMobile ||
+      user.phone ||
+      (user.user_metadata?.phone as string) ||
+      (user.user_metadata?.mobile as string) ||
+      ''
+    ).replace(/\D/g, '').slice(-10);
+
+    if (!effectiveMobile || effectiveMobile.length !== 10) {
+      setError('A valid 10-digit verified mobile number is required to save your profile.');
+      return;
+    }
+
     const profileData = {
       user_id: user.id,
-      mobile: user.phone?.replace('+91', '') ?? '',
+      mobile: effectiveMobile,
       full_name: fullName.trim(),
       date_of_birth: dob || null,
       gender: gender || null,
       father_name: fatherName.trim() || null,
-      aadhar_number: aadhaar.trim() || null,
       email: email.trim() || null,
       address_line1: addrLine1.trim() || null,
       city: city.trim() || null,
@@ -174,10 +213,18 @@ export default function Apply() {
       state: 'Maharashtra',
       education: education.filter(e => e.degree.trim()),
       experience: experience.filter(e => e.title.trim()),
+      ...(candidate?.candidate_id ? { candidate_id: candidate.candidate_id } : {}),
       ...extra,
     };
     const { data, error: err } = await upsertCandidateProfile(profileData as Parameters<typeof upsertCandidateProfile>[0]);
-    if (err) { setError('Failed to save profile. Please try again.'); return; }
+    if (err) {
+      console.error('[Apply] Failed to save candidate profile:', {
+        code: (err as { code?: string })?.code,
+        message: (err as { message?: string })?.message,
+      });
+      setError((err as { message?: string })?.message || 'Failed to save profile. Please try again.');
+      return;
+    }
     if (data) setCandidate(data);
     setStep(nextStep);
   };
@@ -207,8 +254,44 @@ export default function Apply() {
     await saveProfile({}, 'experience');
   };
 
+  // ── Smart Location & District Allocations ──────────────────────────────────
+  const allowedDistricts = useMemo<string[]>(() => {
+    if (Array.isArray(job?.location_districts) && job.location_districts.length > 0) {
+      return job.location_districts.filter(Boolean);
+    }
+    return [...MAHARASHTRA_DISTRICTS];
+  }, [job?.location_districts]);
+
+  const isDistrictLevel = useMemo(() => {
+    return (
+      job?.vacancy_level === 'district' ||
+      job?.vacancy_allocations?.vacancy_level === 'district'
+    );
+  }, [job?.vacancy_level, job?.vacancy_allocations]);
+
+  const availableTalukas = useMemo<string[]>(() => {
+    if (!prefDistrict) return [];
+    const distAlloc = job?.vacancy_allocations?.district_allocations?.[prefDistrict];
+    if (distAlloc?.taluka_allocations && Object.keys(distAlloc.taluka_allocations).length > 0) {
+      const talukas: string[] = [];
+      Object.entries(distAlloc.taluka_allocations).forEach(([tName, tConfig]: [string, any]) => {
+        if (tConfig && tConfig.included !== false) {
+          talukas.push(tName);
+        }
+      });
+      if (talukas.length > 0) return talukas;
+    }
+    return getTalukasForDistrict(prefDistrict);
+  }, [prefDistrict, job?.vacancy_allocations]);
+
   const validatePreference = () => {
     if (!prefDistrict) return setError('Preferred district is required.');
+    if (allowedDistricts.length > 0 && !allowedDistricts.includes(prefDistrict)) {
+      return setError(`The selected district (${prefDistrict}) is not eligible for this position.`);
+    }
+    if (!isDistrictLevel && prefTaluka && availableTalukas.length > 0 && !availableTalukas.includes(prefTaluka)) {
+      return setError(`The selected taluka (${prefTaluka}) has no allocated vacancies in ${prefDistrict}.`);
+    }
     setError(null);
     setStep('declaration');
   };
@@ -224,13 +307,63 @@ export default function Apply() {
     setSubmitting(true);
     setError(null);
 
+    const effectiveMobile = (
+      candidate.mobile ||
+      verifiedMobile ||
+      user.phone ||
+      ''
+    ).replace(/\D/g, '').slice(-10);
+
     // Ensure profile_complete is set
     await upsertCandidateProfile({
       user_id: user.id,
-      mobile: candidate.mobile,
+      mobile: effectiveMobile || candidate.mobile,
       full_name: candidate.full_name,
+      ...(candidate.candidate_id ? { candidate_id: candidate.candidate_id } : {}),
       profile_complete: true,
     } as Parameters<typeof upsertCandidateProfile>[0]);
+
+    // Construct immutable audit snapshot of submission details
+    const submissionSnapshot = {
+      submitted_at: new Date().toISOString(),
+      candidate: {
+        id: candidate.id,
+        candidate_id: candidate.candidate_id,
+        full_name: candidate.full_name,
+        mobile: candidate.mobile,
+        email: candidate.email,
+        aadhar_number: aadhaar.trim() || null,
+        date_of_birth: candidate.date_of_birth,
+        gender: candidate.gender,
+        father_name: candidate.father_name,
+        address_line1: candidate.address_line1,
+        city: candidate.city,
+        district: candidate.district,
+        taluka: candidate.taluka,
+        state: candidate.state,
+        pincode: candidate.pincode,
+        education_entries: candidate.education_entries,
+        experience_entries: candidate.experience_entries,
+      },
+      preferences: {
+        preferred_district: prefDistrict,
+        preferred_taluka: prefTaluka || null,
+      },
+      job: {
+        id: job.id,
+        title: job.title,
+        slug: job.slug,
+        application_fee_amount: Number(job.application_fee_amount ?? 0),
+        vacancy_level: job.vacancy_level,
+      },
+      declaration: {
+        accepted: declared,
+        declared_at: new Date().toISOString(),
+      },
+    };
+
+    const isFreeJob = Number(job.application_fee_amount ?? 0) === 0;
+    const targetStatus = isFreeJob ? 'submitted' : 'payment_pending';
 
     const { data, error: err } = await createApplication({
       candidate_id: candidate.id,
@@ -238,27 +371,43 @@ export default function Apply() {
       preferred_district: prefDistrict,
       preferred_location: prefTaluka || undefined,
       preferred_taluka: prefTaluka || null,
-      application_data: { preferred_taluka: prefTaluka },
+      status: targetStatus,
+      application_data: {
+        preferred_taluka: prefTaluka || null,
+        submission_snapshot: submissionSnapshot,
+      },
     });
 
     if (err || !data) {
       setSubmitting(false);
       console.error('[Apply] Application submission failed:', err);
-      if ((err as { code?: string })?.code === '23505')
+      const errCode = (err as { code?: string })?.code;
+      const errMsg = (err as { message?: string })?.message;
+
+      if (errCode === '23505') {
         return setError('You have already applied for this position.');
+      }
+      if (errCode === 'INVALID_DISTRICT') {
+        return setError(errMsg || `The selected district (${prefDistrict}) is not eligible for this position.`);
+      }
+      if (errCode === 'INVALID_TALUKA') {
+        return setError(errMsg || `The selected taluka (${prefTaluka}) has no allocated vacancies in this district.`);
+      }
       if (
-        (err as { code?: string })?.code === 'APPLICATIONS_CLOSED' ||
-        (err as { code?: string })?.code === '23514' ||
-        (err as { message?: string })?.message?.includes('closed')
-      )
-        return setError('Applications are closed for this position.');
-      return setError('Failed to submit. Please try again.');
+        errCode === 'APPLICATIONS_CLOSED' ||
+        errCode === '23514' ||
+        errMsg?.includes('closed')
+      ) {
+        return setError(errMsg || 'Applications are closed for this position.');
+      }
+      return setError(errMsg || 'Failed to submit application. Please try again.');
     }
 
-    await updateApplicationStatus(data.id, 'submitted');
+    // Set authoritative status based on whether fee payment is required
+    await updateApplicationStatus(data.id, targetStatus);
 
-    // WhatsApp Notification: Dispatch application confirmation for free jobs
-    const isFreeJob = Number(job.application_fee_amount ?? 0) === 0;
+    // WhatsApp Notification: Dispatch application confirmation ONLY for free jobs upon direct submission
+    // For paid jobs, WhatsApp confirmation is sent upon payment completion in /candidate/payments
     if (isFreeJob && candidate.mobile) {
       try {
         await sendApplicationSubmittedTemplate(
@@ -272,11 +421,14 @@ export default function Apply() {
       }
     }
 
-    // CRM Integration: Track Application Submitted
+    // CRM Integration: Track Application Submitted (reusing authoritative application number)
     try {
-      await submitApplicationWithOtp(user.id, job.id, user.id, candidate);
-    } catch (err) {
-      console.error('Failed to log application via CRM API:', err);
+      await submitApplicationWithOtp(user.id, job.id, user.id, {
+        ...candidate,
+        application_id: data.application_number,
+      }, data.application_number);
+    } catch (crmErr) {
+      console.error('Failed to log application via CRM API:', crmErr);
     }
 
     navigate('/careers/apply/success/' + data.id);
@@ -410,7 +562,14 @@ export default function Apply() {
   }
 
   // ─── Progress bar ──────────────────────────────────────────────────────────
-  const formSteps = STEP_LABELS;
+  const isMasterProfileComplete = Boolean(candidate?.profile_complete);
+  const formSteps = isMasterProfileComplete
+    ? [
+        { key: 'preference' as Step,  label: 'Job Preference',  icon: MapPin },
+        { key: 'declaration' as Step, label: 'Declaration', icon: Shield },
+        { key: 'preview' as Step,     label: 'Preview',     icon: Eye },
+      ]
+    : STEP_LABELS;
   const currentIdx = formSteps.findIndex(s => s.key === step);
 
   return (
@@ -505,9 +664,9 @@ export default function Apply() {
                   </div>
                   <div className="sm:col-span-2">
                     <label className={LBL}>Aadhaar Number</label>
-                    <input className={IC} value={aadhaar}
+                    <input className={IC} value={formatAadhaarDisplay(aadhaar)}
                       onChange={e => setAadhaar(e.target.value.replace(/\D/g,'').slice(0,12))}
-                      placeholder="12-digit Aadhaar number" inputMode="numeric" maxLength={12} />
+                      placeholder="1234-5678-9012" inputMode="numeric" maxLength={14} />
                     <p className="mt-1 text-xs text-primary-400">Used for duplicate application prevention. Must be unique.</p>
                   </div>
                 </div>
@@ -525,14 +684,30 @@ export default function Apply() {
                   </div>
                   <div>
                     <label className={LBL}>District *</label>
-                    <select className={IC} value={district} onChange={e => setDistrict(e.target.value)}>
+                    <select
+                      className={IC}
+                      value={district}
+                      onChange={e => {
+                        setDistrict(e.target.value);
+                        setTaluka('');
+                      }}
+                    >
                       <option value="">Select district</option>
                       {MAHARASHTRA_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className={LBL}>Taluka</label>
-                    <input className={IC} value={taluka} onChange={e => setTaluka(e.target.value)} placeholder="Taluka name" />
+                    {district && getTalukasForDistrict(district).length > 0 ? (
+                      <select className={IC} value={taluka} onChange={e => setTaluka(e.target.value)}>
+                        <option value="">Select taluka</option>
+                        {getTalukasForDistrict(district).map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input className={IC} value={taluka} onChange={e => setTaluka(e.target.value)} placeholder="Taluka name" />
+                    )}
                   </div>
                   <div>
                     <label className={LBL}>City / Village *</label>
@@ -658,18 +833,118 @@ export default function Apply() {
             {/* ── PREFERENCE ────────────────────────────────────────────── */}
             {step === 'preference' && (
               <StepShell title="Location Preference" subtitle="Select your preferred posting location"
-                onBack={() => setStep('experience')} onNext={validatePreference}>
+                onBack={() => isMasterProfileComplete ? navigate(`/careers/jobs/${job.slug}`) : setStep('experience')} 
+                onNext={validatePreference}>
                 <div className="space-y-4">
+                  {/* Master Profile Summary Card for Complete Profiles */}
+                  {isMasterProfileComplete && (
+                    <div className="p-4 bg-primary-50/70 rounded-xl border border-primary-200/80 mb-2">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          <span className="text-xs font-bold text-primary-900 uppercase tracking-wider">
+                            Verified Candidate Profile
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/candidate/profile?redirect=/careers/apply/${job.id}`)}
+                          className="text-xs font-semibold text-primary-700 hover:text-primary-950 underline underline-offset-2 flex items-center gap-1"
+                        >
+                          Edit in My Profile
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <span className="text-primary-400 font-medium">Candidate Name: </span>
+                          <span className="font-bold text-primary-900">{candidate?.full_name || fullName}</span>
+                        </div>
+                        <div>
+                          <span className="text-primary-400 font-medium">Mobile (Verified): </span>
+                          <span className="font-bold text-primary-900">{candidate?.mobile || user?.phone || '—'}</span>
+                        </div>
+                        {email && (
+                          <div>
+                            <span className="text-primary-400 font-medium">Email: </span>
+                            <span className="font-bold text-primary-900">{email}</span>
+                          </div>
+                        )}
+                        <div>
+                          <span className="text-primary-400 font-medium">Home District / Taluka: </span>
+                          <span className="font-bold text-primary-900">{district ? `${district}${taluka ? `, ${taluka}` : ''}` : '—'}</span>
+                        </div>
+                        {education.length > 0 && education[0].degree && (
+                          <div className="sm:col-span-2">
+                            <span className="text-primary-400 font-medium">Highest Qualification: </span>
+                            <span className="font-bold text-primary-900">
+                              {education[0].degree}{education[0].percentage ? ` (${education[0].percentage})` : ''}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {isDistrictLevel && (
+                    <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-800 flex items-start gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-semibold text-emerald-900">District-Level Opening</p>
+                        <p className="text-emerald-700 mt-0.5">
+                          This vacancy is open district-wide. Candidates residing in any taluka within the selected district are eligible to apply.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <label className={LBL}>Preferred District *</label>
-                    <select className={IC} value={prefDistrict} onChange={e => setPrefDistrict(e.target.value)}>
+                    <select
+                      className={IC}
+                      value={prefDistrict}
+                      onChange={e => {
+                        setPrefDistrict(e.target.value);
+                        setPrefTaluka('');
+                      }}
+                    >
                       <option value="">Select preferred district</option>
-                      {MAHARASHTRA_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+                      {allowedDistricts.map(d => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
                     </select>
                   </div>
                   <div>
-                    <label className={LBL}>Preferred Taluka</label>
-                    <input className={IC} value={prefTaluka} onChange={e => setPrefTaluka(e.target.value)} placeholder="Optional — taluka preference" />
+                    <label className={LBL}>
+                      Preferred Taluka {isDistrictLevel ? '(Optional — District-wide)' : ''}
+                    </label>
+                    {availableTalukas.length > 0 ? (
+                      <select
+                        className={IC}
+                        value={prefTaluka}
+                        onChange={e => setPrefTaluka(e.target.value)}
+                        disabled={!prefDistrict}
+                      >
+                        <option value="">
+                          {isDistrictLevel ? 'All Talukas (District-wide Quota)' : 'Select preferred taluka'}
+                        </option>
+                        {availableTalukas.map(t => {
+                          const distAlloc = job?.vacancy_allocations?.district_allocations?.[prefDistrict];
+                          const vacCount = distAlloc?.taluka_allocations?.[t]?.vacancies;
+                          return (
+                            <option key={t} value={t}>
+                              {t}{vacCount !== undefined && vacCount !== null ? ` (${vacCount} ${vacCount === 1 ? 'vacancy' : 'vacancies'})` : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    ) : (
+                      <input
+                        className={IC}
+                        value={prefTaluka}
+                        onChange={e => setPrefTaluka(e.target.value)}
+                        placeholder={!prefDistrict ? 'Select a district first' : 'Enter preferred taluka'}
+                        disabled={!prefDistrict}
+                      />
+                    )}
                   </div>
                   <div className="p-3 bg-blue-50 rounded-xl border border-blue-100 text-xs text-blue-700">
                     <p className="font-semibold mb-1">Note:</p>
@@ -758,7 +1033,9 @@ export default function Apply() {
                     className="flex-1 flex items-center justify-center gap-2 py-3 bg-primary-900 text-white font-bold rounded-xl hover:bg-primary-800 disabled:opacity-70 transition-all">
                     {submitting
                       ? <><Loader2 className="w-5 h-5 animate-spin" /> Submitting Application...</>
-                      : <><CheckCircle2 className="w-5 h-5" /> Submit Application</>}
+                      : (job.application_fee_amount ?? 0) > 0
+                        ? <><CheckCircle2 className="w-5 h-5" /> Submit & Proceed to Fee Payment</>
+                        : <><CheckCircle2 className="w-5 h-5" /> Submit Application</>}
                   </button>
                 </div>
               </div>
