@@ -59,11 +59,18 @@ export interface RmsCandidateProfile {
   district: string | null;
   state: string;
   pincode: string | null;
+  // Permanent Address
+  permanent_same_as_current?: boolean;
+  permanent_address_line1?: string | null;
+  permanent_district?: string | null;
+  permanent_taluka?: string | null;
+  permanent_pincode?: string | null;
   education: EducationEntry[];
   experience: ExperienceEntry[];
   skills: string[];
   email: string | null;
   aadhar_number: string | null;
+  aadhaar_hash?: string | null;
   whatsapp: string | null;
   emergency_name: string | null;
   emergency_mobile: string | null;
@@ -111,6 +118,16 @@ export interface RmsCampaign {
 }
 
 // ===== Smart Location & Vacancy Calculator Types =====
+export type VacancyLevel = 'taluka' | 'district';
+export type PostingLevel = 'District-wise' | 'Taluka-wise';
+
+export interface JobLocationQuestion {
+  id: string;
+  questionText: string;
+  enabled: boolean;
+  required: boolean;
+}
+
 export type JobLocationType =
   | 'State-wide'
   | 'Regional'
@@ -134,10 +151,71 @@ export interface DistrictAllocation {
 }
 
 export interface VacancyAllocationsConfig {
+  vacancy_level?: VacancyLevel | null;
+  posting_level?: PostingLevel | null;
+  location_questions?: JobLocationQuestion[] | null;
   default_per_taluka?: number | null;
   default_per_district?: number | null;
   district_allocations?: Record<string, DistrictAllocation>;
   calculated_grand_total?: number;
+  experience_details?: string | null;
+  jd_pdf_enabled?: boolean | null;
+  [key: string]: any;
+}
+
+// ===== Job-Specific Questionnaire Models =====
+export type QuestionType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'select' | 'boolean';
+
+export interface QuestionOption {
+  label: string;
+  value: string;
+}
+
+export interface QuestionCondition {
+  dependsOnQuestionId: string;
+  expectedValue: string | boolean | number;
+}
+
+export interface JobQuestion {
+  id: string;
+  sectionTitle?: string;
+  questionText: string;
+  helpText?: string;
+  placeholder?: string;
+  type: QuestionType;
+  required: boolean;
+  isVisible?: boolean;
+  options?: QuestionOption[];
+  condition?: QuestionCondition;
+}
+
+export interface QuestionnaireSection {
+  id: string;
+  title: string;
+  description?: string;
+}
+
+export interface QuestionnaireVersionSnapshot {
+  version: string;
+  publishedAt: string;
+  title?: string;
+  description?: string;
+  isVisibleToCandidates?: boolean;
+  questions: JobQuestion[];
+  sections?: QuestionnaireSection[];
+}
+
+export interface JobQuestionnaire {
+  version: string;
+  title?: string;
+  description?: string;
+  status?: 'draft' | 'published';
+  publishedAt?: string | null;
+  isVisibleToCandidates?: boolean;
+  sections?: QuestionnaireSection[];
+  questions: JobQuestion[];
+  previousVersions?: QuestionnaireVersionSnapshot[];
+  lastPublishedSnapshot?: QuestionnaireVersionSnapshot | null;
 }
 
 // ===== Job Posting =====
@@ -149,6 +227,7 @@ export interface RmsJobPosting {
   location: string | null;
   employment_type: EmploymentType;
   experience_required: string | null;
+  experience_details?: string | null;
   description: string | null;
   eligibility_criteria: EligibilityCriterion[];
   required_documents: RequiredDocument[];
@@ -181,6 +260,7 @@ export interface RmsJobPosting {
   acknowledgement_text: string | null;
   project_pdf_enabled: boolean | null;
   project_video_enabled: boolean | null;
+  jd_pdf_enabled?: boolean | null;
   is_trashed: boolean | null;
   trashed_at: string | null;
   is_featured: boolean | null;
@@ -192,6 +272,9 @@ export interface RmsJobPosting {
   never_close_applications: boolean | null;
   display_deadline_public: boolean | null;
   // Smart Location & Vacancy Calculator fields
+  vacancy_level?: VacancyLevel | null;
+  posting_level?: PostingLevel | null;
+  location_questions?: JobLocationQuestion[] | null;
   location_type?: JobLocationType | null;
   location_regions?: string[] | null;
   location_districts?: string[] | null;
@@ -200,6 +283,7 @@ export interface RmsJobPosting {
   show_city_publicly?: boolean | null;
   city_name?: string | null;
   vacancy_allocations?: VacancyAllocationsConfig | null;
+  questionnaire?: JobQuestionnaire | null;
   auto_calculate_vacancies?: boolean | null;
   created_by: string | null;
   created_at: string;

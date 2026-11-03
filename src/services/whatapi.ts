@@ -189,7 +189,8 @@ export async function sendTemplateMessage(
     const idKey = options?.idempotencyKey ?? `send:${mobileNumber}:${templateName}:${JSON.stringify(variables)}`;
     const data = await dedupe(idKey, () =>
       callEdgeFunction({
-        action: 'send',
+        action: 'sendTemplate',
+        phone: mobileNumber,
         mobile: mobileNumber,
         template: templateName,
         variables,
@@ -198,11 +199,14 @@ export async function sendTemplateMessage(
       }),
     );
 
+    const webhookResp = (data.webhookResponse || data.api_response || {}) as Record<string, any>;
+    const messageId = (data.messageId || webhookResp?.messageId || webhookResp?.id || null) as string | null;
+
     return {
       success: true,
-      messageId: data.messageId as string | null | undefined,
-      logId: data.logId as string | undefined,
-      status: data.status as string | undefined,
+      messageId,
+      logId: (data.logId || webhookResp?.logId) as string | undefined,
+      status: (data.status || webhookResp?.status || 'Sent') as string | undefined,
       deduplicated: data.deduplicated as boolean | undefined,
     };
   } catch (err) {
@@ -337,7 +341,7 @@ export async function sendOTP(
 export async function verifyCustomOtp(
   phone: string,
   token: string,
-): Promise<{ success: boolean; password?: string; error?: string; isNewUser?: boolean }> {
+): Promise<{ success: boolean; password?: string; error?: string; isNewUser?: boolean; leadId?: string | null; internalCandidateId?: string | null }> {
   try {
     if (!phone?.trim()) return { success: false, error: 'Phone number is required.' };
     if (!token?.trim()) return { success: false, error: 'OTP code is required.' };
@@ -352,6 +356,8 @@ export async function verifyCustomOtp(
       success: true,
       password: data.password as string | undefined,
       isNewUser: data.isNewUser as boolean | undefined,
+      leadId: (data.leadId as string | null | undefined) ?? null,
+      internalCandidateId: (data.internalCandidateId as string | null | undefined) ?? null,
     };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Failed to verify OTP.' };

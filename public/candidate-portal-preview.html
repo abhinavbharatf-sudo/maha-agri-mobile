@@ -1,0 +1,1814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MAHA-AGRI Recruitment Portal — Candidate Journey Prototype</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+    .font-mono { font-family: 'JetBrains Mono', monospace, Courier; }
+    .hidden { display: none !important; }
+    .screen-view:not(.hidden) { display: block; }
+    .dash-tab-content:not(.hidden) { display: block; }
+  </style>
+</head>
+<body class="bg-[#f0f4f8] text-[#102a43] antialiased min-h-screen flex flex-col">
+
+  <!-- ========================================================================= -->
+  <!-- AUTHENTIC WEBSITE HEADER (MATCHING EXISTING ABHINAV BHARAT / MAHA-AGRI)   -->
+  <!-- ========================================================================= -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-xs">
+    <!-- Top utility & prototype indicator strip -->
+    <div class="bg-[#102a43] text-white px-4 py-1.5 text-xs">
+      <div class="max-w-[1400px] mx-auto flex items-center justify-between flex-wrap gap-2">
+        <div class="flex items-center gap-2">
+          <span class="bg-amber-500/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded font-mono font-bold text-[10px]">
+            ARCHITECTURAL PROTOTYPE
+          </span>
+          <span class="text-slate-300 text-[11px] hidden sm:inline">
+            Non-production visual specification • Uses authentic MAHA-AGRI website design system
+          </span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-slate-300 text-[11px]">Preview Screen:</span>
+          <select id="screenSelect" onchange="switchScreen(this.value)" class="bg-[#243b53] text-white font-bold border border-slate-600 rounded-md px-2 py-0.5 text-xs focus:outline-none cursor-pointer">
+            <option value="screen-job">1. Job Details (Authentic Layout)</option>
+            <option value="screen-otp">2. WhatsApp OTP Verification</option>
+            <option value="screen-profile">3. Candidate Master Profile (6 Essential Fields)</option>
+            <option value="screen-application">4. Job Application (Tier 2 Qualifications & Cluster)</option>
+            <option value="screen-review">5. Review & Submit (Immutable Snapshot Notice)</option>
+            <option value="screen-success">6. Application Submitted Confirmation</option>
+            <option value="screen-dashboard">7. Candidate Dashboard (All 10 Capabilities)</option>
+            <option value="screen-candidate-correction">8. Candidate Correction Request Form</option>
+            <option value="screen-correction">9. Admin Correction Approval & Audit Trail</option>
+            <option value="screen-tier3-docs">10. Tier 3 Post-Selection Document Upload</option>
+            <option value="screen-edge-cases">11. Error States & Edge Cases Showcase</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Navigation Bar matching Header.tsx -->
+    <div class="max-w-[1400px] mx-auto px-4 sm:px-6 py-3 flex items-center justify-between flex-wrap gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 bg-gradient-to-br from-[#334e68] via-[#243b53] to-[#102a43] rounded-lg flex items-center justify-center shadow-sm text-white text-lg">
+          <i class="fa-solid fa-landmark"></i>
+        </div>
+        <div>
+          <div class="text-[#102a43] font-extrabold text-sm sm:text-base tracking-tight leading-tight">
+            ABHINAV BHARAT FOUNDATION
+          </div>
+          <div class="text-[11px] text-[#627d98] font-medium leading-tight">
+            MAHA-AGRI Digital Operations Platform • Recruitment & Careers Portal
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation Links matching existing website -->
+      <nav class="hidden lg:flex items-center gap-6 text-xs font-semibold text-[#486581]">
+        <span class="hover:text-[#102a43] cursor-pointer">Home</span>
+        <span class="hover:text-[#102a43] cursor-pointer">Programmes</span>
+        <span class="hover:text-[#102a43] cursor-pointer">Services</span>
+        <span class="text-[#102a43] font-bold border-b-2 border-emerald-600 pb-0.5 cursor-pointer">Careers</span>
+        <span class="hover:text-[#102a43] cursor-pointer">Transparency</span>
+        <span class="hover:text-[#102a43] cursor-pointer">Contact</span>
+      </nav>
+
+      <!-- Candidate Account Button -->
+      <div class="flex items-center gap-2">
+        <button onclick="switchScreen('screen-otp')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-[#102a43] border border-slate-300 hover:bg-slate-50 transition-colors shadow-2xs">
+          <i class="fa-solid fa-user text-emerald-600"></i>
+          <span>Candidate Login</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Prototype Watermark Sub-Banner -->
+  <div class="bg-blue-50/80 border-b border-blue-200 px-4 py-1.5 text-center text-xs font-medium text-blue-900 flex items-center justify-center gap-2">
+    <i class="fa-solid fa-circle-info text-blue-600"></i>
+    <span>PREVIEW SPECIFICATION: Visual prototype aligned with existing MAHA-AGRI website design language. All values and IDs are mock demonstration records.</span>
+  </div>
+
+  <!-- Main Viewport Container -->
+  <main class="flex-1 w-full max-w-[1400px] mx-auto p-4 sm:p-6">
+
+    <!-- ========================================================================= -->
+    <!-- SCREEN 1: JOB DETAILS (PRESERVING AUTHENTIC CAREERS JOB DETAIL LAYOUT)    -->
+    <!-- ========================================================================= -->
+    <section id="screen-job" class="screen-view space-y-4">
+      
+      <!-- Breadcrumb Bar matching JobDetail.tsx -->
+      <div class="bg-white border border-slate-200 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-[#627d98] shadow-2xs">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="hover:underline cursor-pointer text-[#486581]">Careers</span>
+          <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
+          <span class="text-[#486581]">Department of Agriculture</span>
+          <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
+          <span class="font-bold text-[#102a43]">Taluka Agriculture Officer (TAO)</span>
+        </div>
+        <span class="text-[11px] font-mono text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+          Status: Published
+        </span>
+      </div>
+
+      <!-- Hero Header Section matching JobDetail.tsx (bg-[#102a43] / primary-900) -->
+      <div class="bg-[#102a43] text-white rounded-2xl p-6 sm:p-8 shadow-sm">
+        <div class="flex items-center gap-2 text-xs text-slate-300 mb-2 cursor-pointer hover:text-white">
+          <i class="fa-solid fa-arrow-left text-[10px]"></i> All Openings
+        </div>
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div class="space-y-2">
+            <p class="text-xs font-bold text-slate-300 uppercase tracking-widest">
+              Department of Agriculture
+            </p>
+            <h1 class="text-2xl sm:text-3xl font-extrabold text-white leading-tight">
+              Taluka Agriculture Officer (TAO)
+            </h1>
+            <div class="flex flex-wrap items-center gap-4 text-xs text-slate-200 pt-1">
+              <span class="flex items-center gap-1.5"><i class="fa-solid fa-location-dot text-rose-400"></i> Maharashtra (District/Taluka Level)</span>
+              <span>•</span>
+              <span class="flex items-center gap-1.5"><i class="fa-solid fa-briefcase text-emerald-400"></i> Full-time (Contract)</span>
+              <span>•</span>
+              <span class="flex items-center gap-1.5"><i class="fa-solid fa-clock text-amber-400"></i> 1-2 Years Experience</span>
+            </div>
+            <!-- Dynamic Badges -->
+            <div class="flex items-center gap-2 pt-1 flex-wrap">
+              <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500 text-white">Open</span>
+              <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-400 text-amber-950">Urgent Requirement</span>
+              <span class="text-[11px] font-mono text-slate-300 bg-white/10 px-2 py-0.5 rounded border border-white/20">Post Code: RMS-2026-TAO</span>
+            </div>
+          </div>
+          <div class="shrink-0">
+            <button onclick="switchScreen('screen-otp')" class="w-full sm:w-auto px-6 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm shadow-md transition-all flex items-center justify-center gap-2">
+              <span>Apply Now</span>
+              <i class="fa-solid fa-arrow-right text-xs"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Body: 2-Column Grid (Main Content 2 cols, Right Panel 1 col) -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start pt-2">
+        
+        <!-- ================= LEFT COLUMN (2 Cols) ================= -->
+        <div class="lg:col-span-2 space-y-5">
+          
+          <!-- Section 1: Position Summary / Role Overview -->
+          <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h2 class="text-sm font-bold text-[#102a43] uppercase tracking-wider flex items-center gap-2">
+                <i class="fa-solid fa-briefcase text-emerald-600"></i> Position Summary & Role Overview
+              </h2>
+              <span class="text-[11px] font-mono text-slate-400">rms_job_postings.description</span>
+            </div>
+            
+            <!-- Summary Items Grid matching JobDetail.tsx -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
+              <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+                <span class="text-[10px] text-slate-400 block uppercase font-bold">Location</span>
+                <span class="font-semibold text-slate-800">Maharashtra (District/Taluka)</span>
+              </div>
+              <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+                <span class="text-[10px] text-slate-400 block uppercase font-bold">Employment Type</span>
+                <span class="font-semibold text-slate-800">Full-time (Contract)</span>
+              </div>
+              <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+                <span class="text-[10px] text-slate-400 block uppercase font-bold">Experience Required</span>
+                <span class="font-semibold text-slate-800">1 to 2 Years</span>
+              </div>
+              <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+                <span class="text-[10px] text-slate-400 block uppercase font-bold">Qualification</span>
+                <span class="font-semibold text-slate-800">B.Sc. Agriculture / Horti</span>
+              </div>
+              <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+                <span class="text-[10px] text-slate-400 block uppercase font-bold">Age Criteria</span>
+                <span class="font-semibold text-slate-800">21 - 38 Years</span>
+              </div>
+              <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+                <span class="text-[10px] text-slate-400 block uppercase font-bold">Recruitment Mode</span>
+                <span class="font-semibold text-slate-800">Online & Panel Interview</span>
+              </div>
+              <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg col-span-2 sm:col-span-1">
+                <span class="text-[10px] text-slate-400 block uppercase font-bold">Salary / Honorarium</span>
+                <span class="font-bold text-emerald-700">₹35,000 / Month</span>
+              </div>
+              <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg col-span-2">
+                <span class="text-[10px] text-slate-400 block uppercase font-bold">Salary Package Terms</span>
+                <span class="font-semibold text-slate-800">Salary Includes Incentive, T.A. & D.A.</span>
+              </div>
+            </div>
+
+            <!-- Role Description Narrative -->
+            <div class="pt-2 text-xs text-slate-700 leading-relaxed space-y-2">
+              <p>The Taluka Agriculture Officer (TAO) serves as the primary technical coordinator for Maharashtra state digital agricultural transformation programs. Key responsibilities include digital crop monitoring, farmer cluster management, e-Pik Pahani digital surveys, and PM-KISAN verification across assigned talukas.</p>
+            </div>
+
+            <!-- Project Overview Callout matching JobDetail.tsx -->
+            <div class="p-4 bg-blue-50/80 border border-blue-200 rounded-xl space-y-1">
+              <span class="font-bold text-blue-900 block text-xs"><i class="fa-solid fa-seedling mr-1 text-emerald-600"></i> Project Overview & Duration:</span>
+              <p class="text-blue-950 text-xs leading-relaxed">
+                Mahatma Phule Krishi Sanjeevani Digital Outreach Project. Direct contract tenure of <strong>11 Months</strong> (Renewable based on annual cluster performance review).
+              </p>
+            </div>
+
+            <!-- Eligible Districts & Vacancy Allocations -->
+            <div class="pt-2 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <i class="fa-solid fa-map-location-dot text-emerald-600"></i> Eligible Posting Districts & Vacancies (120 Posts)
+                </span>
+                <span class="text-[10px] font-mono text-slate-400">rms_job_postings.vacancy_allocations</span>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 font-medium text-xs">
+                <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex justify-between items-center">
+                  <span>Jalna District</span>
+                  <span class="bg-emerald-100 text-emerald-800 font-mono text-[10px] px-1.5 py-0.5 rounded font-bold">14 Posts</span>
+                </div>
+                <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex justify-between items-center">
+                  <span>Pune District</span>
+                  <span class="bg-emerald-100 text-emerald-800 font-mono text-[10px] px-1.5 py-0.5 rounded font-bold">22 Posts</span>
+                </div>
+                <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex justify-between items-center">
+                  <span>Chh. Sambhajinagar</span>
+                  <span class="bg-emerald-100 text-emerald-800 font-mono text-[10px] px-1.5 py-0.5 rounded font-bold">18 Posts</span>
+                </div>
+                <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex justify-between items-center">
+                  <span>Nashik District</span>
+                  <span class="bg-emerald-100 text-emerald-800 font-mono text-[10px] px-1.5 py-0.5 rounded font-bold">16 Posts</span>
+                </div>
+                <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex justify-between items-center">
+                  <span>Ahmednagar</span>
+                  <span class="bg-emerald-100 text-emerald-800 font-mono text-[10px] px-1.5 py-0.5 rounded font-bold">20 Posts</span>
+                </div>
+                <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex justify-between items-center">
+                  <span>Satara District</span>
+                  <span class="bg-emerald-100 text-emerald-800 font-mono text-[10px] px-1.5 py-0.5 rounded font-bold">30 Posts</span>
+                </div>
+              </div>
+              <p class="text-[11px] text-slate-500">Candidates select their preferred district and taluka cluster during application. Final posting location is determined based on merit and cluster quota.</p>
+            </div>
+          </div>
+
+          <!-- Section 2: Project Resources (PDF & Video) -->
+          <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-3">
+            <h2 class="text-sm font-bold text-[#102a43] uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
+              <i class="fa-solid fa-download text-emerald-600"></i> Project Resources & Official Documents
+            </h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                  <i class="fa-solid fa-file-pdf text-rose-600 text-xl"></i>
+                  <div>
+                    <span class="font-bold text-slate-900 block">Job Description (JD) PDF</span>
+                    <span class="text-[10px] text-slate-500">Roles, KPIs & Responsibilities</span>
+                  </div>
+                </div>
+                <button type="button" class="px-2.5 py-1 bg-white border border-slate-300 text-slate-700 font-semibold rounded-lg text-xs hover:bg-slate-50">
+                  Download
+                </button>
+              </div>
+              <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                  <i class="fa-solid fa-circle-play text-blue-600 text-xl"></i>
+                  <div>
+                    <span class="font-bold text-slate-900 block">Project Brief Video</span>
+                    <span class="text-[10px] text-slate-500">Official walkthrough by Director</span>
+                  </div>
+                </div>
+                <button type="button" class="px-2.5 py-1 bg-white border border-slate-300 text-slate-700 font-semibold rounded-lg text-xs hover:bg-slate-50">
+                  Watch
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 3: Qualifications, Eligibility & Required Documents -->
+          <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-4">
+            <h2 class="text-sm font-bold text-[#102a43] uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
+              <i class="fa-solid fa-graduation-cap text-emerald-600"></i> Qualifications, Eligibility & Required Documents
+            </h2>
+            <div class="space-y-3 text-xs">
+              <h3 class="font-bold text-slate-800 text-[11px] uppercase tracking-wider">Mandatory Eligibility Criteria</h3>
+              <ul class="space-y-1.5 list-disc list-inside bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-slate-700">
+                <li>4-Year Bachelor's degree in Agriculture (B.Sc. Agri / Horti) from an ICAR recognized SAU.</li>
+                <li>Knowledge of Marathi (speaking, reading, and writing) is mandatory.</li>
+                <li>Age between 21 and 38 years as on 01 January 2026.</li>
+                <li>Valid 2-wheeler or 4-wheeler driving licence with personal vehicle availability for field transit.</li>
+              </ul>
+
+              <h3 class="font-bold text-slate-800 text-[11px] uppercase tracking-wider pt-2">Documents Required for Verification (Post-Selection)</h3>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div class="p-2 bg-slate-50 border border-slate-200 rounded-lg flex items-center gap-2">
+                  <i class="fa-solid fa-id-card text-emerald-600"></i>
+                  <span>Aadhaar Card (Govt Photo ID)</span>
+                </div>
+                <div class="p-2 bg-slate-50 border border-slate-200 rounded-lg flex items-center gap-2">
+                  <i class="fa-solid fa-certificate text-emerald-600"></i>
+                  <span>Graduation Degree Certificate / Marksheet</span>
+                </div>
+                <div class="p-2 bg-slate-50 border border-slate-200 rounded-lg flex items-center gap-2">
+                  <i class="fa-solid fa-house-user text-emerald-600"></i>
+                  <span>Maharashtra Domicile Certificate</span>
+                </div>
+                <div class="p-2 bg-slate-50 border border-slate-200 rounded-lg flex items-center gap-2">
+                  <i class="fa-solid fa-stamp text-emerald-600"></i>
+                  <span>Caste Certificate & Valid NCL (if applicable)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 4: Selection & Recruitment Journey -->
+          <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-3">
+            <h2 class="text-sm font-bold text-[#102a43] uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
+              <i class="fa-solid fa-list-check text-emerald-600"></i> Selection & Recruitment Stages
+            </h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex items-start gap-2.5">
+                <span class="w-5 h-5 rounded-full bg-[#102a43] text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">1</span>
+                <div><strong class="text-slate-900">Online Application:</strong> Submit profile and cluster choice.</div>
+              </div>
+              <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex items-start gap-2.5">
+                <span class="w-5 h-5 rounded-full bg-[#102a43] text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">2</span>
+                <div><strong class="text-slate-900">Eligibility Screening:</strong> Automated qualification score check.</div>
+              </div>
+              <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex items-start gap-2.5">
+                <span class="w-5 h-5 rounded-full bg-[#102a43] text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">3</span>
+                <div><strong class="text-slate-900">Interview Slot Booking:</strong> Pick date/time for panel interview.</div>
+              </div>
+              <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex items-start gap-2.5">
+                <span class="w-5 h-5 rounded-full bg-[#102a43] text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">4</span>
+                <div><strong class="text-slate-900">Panel Interview:</strong> Online video call or district center.</div>
+              </div>
+              <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex items-start gap-2.5">
+                <span class="w-5 h-5 rounded-full bg-[#102a43] text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">5</span>
+                <div><strong class="text-slate-900">Document Verification:</strong> Tier 3 original record scrutiny.</div>
+              </div>
+              <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex items-start gap-2.5">
+                <span class="w-5 h-5 rounded-full bg-[#102a43] text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">6</span>
+                <div><strong class="text-slate-900">Appointment Order:</strong> Formal appointment & cluster deployment.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 5: Job FAQs -->
+          <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-3">
+            <h2 class="text-sm font-bold text-[#102a43] uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
+              <i class="fa-solid fa-circle-question text-blue-600"></i> Frequently Asked Questions (FAQs)
+            </h2>
+            <div class="space-y-2 text-xs">
+              <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                <span class="font-bold text-[#102a43] block">Q: What is the application fee for this position?</span>
+                <p class="text-slate-600">There is no application fee for the Taluka Agriculture Officer post. Applying is completely free of cost.</p>
+              </div>
+              <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                <span class="font-bold text-[#102a43] block">Q: Can I apply for multiple positions simultaneously?</span>
+                <p class="text-slate-600">Yes. You may apply for multiple positions. Each application maintains its own record under your permanent Master Lead.</p>
+              </div>
+              <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                <span class="font-bold text-[#102a43] block">Q: How is the interview conducted?</span>
+                <p class="text-slate-600">Interviews are conducted either via online video panel or in person at the respective District Superintending Agriculture Office.</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ================= RIGHT COLUMN (1 Col: Sticky Panel) ================= -->
+        <div class="space-y-4">
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3.5 text-xs sticky top-24">
+            <h3 class="font-bold text-[#102a43] uppercase tracking-wider text-xs border-b border-slate-100 pb-2 flex items-center justify-between">
+              <span>Recruitment Snapshot</span>
+              <span class="text-[9px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-bold border border-emerald-200">Open</span>
+            </h3>
+            <div class="flex justify-between border-b border-slate-100 pb-2">
+              <span class="text-slate-500">Total Vacancies</span>
+              <span class="font-bold text-slate-800">120 Posts</span>
+            </div>
+            <div class="flex justify-between border-b border-slate-100 pb-2">
+              <span class="text-slate-500">Application Fee</span>
+              <span class="font-bold text-emerald-700">₹0 (Free / Waived)</span>
+            </div>
+            <div class="flex justify-between border-b border-slate-100 pb-2">
+              <span class="text-slate-500">Salary / Honorarium</span>
+              <span class="font-bold text-slate-900">₹35,000 / Month</span>
+            </div>
+            <div class="flex justify-between border-b border-slate-100 pb-2">
+              <span class="text-slate-500">Closing Deadline (IST)</span>
+              <span class="font-bold text-rose-600 font-mono">30 Nov 2026, 23:59 IST</span>
+            </div>
+            <div class="flex justify-between border-b border-slate-100 pb-2">
+              <span class="text-slate-500">Post Code</span>
+              <span class="font-mono text-slate-700 font-semibold">RMS-2026-TAO</span>
+            </div>
+            <div class="flex justify-between border-b border-slate-100 pb-2">
+              <span class="text-slate-500">Age Bracket</span>
+              <span class="font-semibold text-slate-800">21 - 38 Years</span>
+            </div>
+            <div class="flex justify-between border-b border-slate-100 pb-2">
+              <span class="text-slate-500">Project Tenure</span>
+              <span class="font-semibold text-slate-800">11 Months (Renewable)</span>
+            </div>
+
+            <!-- Mandatory Acknowledgement Checkbox matching JobDetail.tsx -->
+            <div class="pt-2 space-y-3">
+              <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                <label class="flex items-start gap-2 cursor-pointer">
+                  <input type="checkbox" checked class="mt-0.5 rounded text-emerald-600 focus:ring-0">
+                  <span class="text-[11px] text-slate-700 leading-tight">
+                    <strong>Candidate Undertaking:</strong> I confirm that I have reviewed all project documents, eligibility criteria, recruitment process, responsibilities and terms before submitting my application.
+                  </span>
+                </label>
+              </div>
+              <button onclick="switchScreen('screen-otp')" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-sm transition-all flex items-center justify-center gap-2">
+                <span>Proceed to Apply</span>
+                <i class="fa-solid fa-arrow-right text-[10px]"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- SCREEN 2: WHATSAPP OTP VERIFICATION (NO SMS, CLEAN WHITE CARD)            -->
+    <!-- ========================================================================= -->
+    <section id="screen-otp" class="screen-view hidden space-y-6">
+      <div class="max-w-md mx-auto bg-white rounded-2xl border border-slate-200 p-8 shadow-md text-center space-y-5">
+        <div class="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto text-2xl border border-emerald-100">
+          <i class="fa-brands fa-whatsapp"></i>
+        </div>
+        <div>
+          <h2 class="text-lg font-bold text-[#102a43]">WhatsApp OTP Verification</h2>
+          <p class="text-xs text-slate-500 mt-1">Enter your active 10-digit mobile number. We will send a secure 6-digit one-time password to your WhatsApp.</p>
+        </div>
+
+        <div class="space-y-3 text-left">
+          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider">Mobile Number</label>
+          <div class="flex rounded-xl border border-slate-300 overflow-hidden focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-100">
+            <span class="bg-slate-100 px-3 py-2.5 text-xs font-bold text-slate-600 border-r border-slate-300 flex items-center">+91</span>
+            <input type="tel" value="98908 68644" readonly class="w-full px-3 py-2.5 text-sm font-semibold text-slate-900 focus:outline-none bg-slate-50">
+          </div>
+        </div>
+
+        <div class="space-y-2 text-left">
+          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider">Enter 6-Digit OTP</label>
+          <div class="flex justify-between gap-2 font-mono">
+            <input type="text" maxlength="1" value="4" class="w-11 h-12 text-center text-lg font-bold border border-slate-300 rounded-lg bg-emerald-50/50 text-emerald-900">
+            <input type="text" maxlength="1" value="8" class="w-11 h-12 text-center text-lg font-bold border border-slate-300 rounded-lg bg-emerald-50/50 text-emerald-900">
+            <input type="text" maxlength="1" value="2" class="w-11 h-12 text-center text-lg font-bold border border-slate-300 rounded-lg bg-emerald-50/50 text-emerald-900">
+            <input type="text" maxlength="1" value="9" class="w-11 h-12 text-center text-lg font-bold border border-slate-300 rounded-lg bg-emerald-50/50 text-emerald-900">
+            <input type="text" maxlength="1" value="1" class="w-11 h-12 text-center text-lg font-bold border border-slate-300 rounded-lg bg-emerald-50/50 text-emerald-900">
+            <input type="text" maxlength="1" value="5" class="w-11 h-12 text-center text-lg font-bold border border-slate-300 rounded-lg bg-emerald-50/50 text-emerald-900">
+          </div>
+          <div class="flex items-center justify-between pt-1">
+            <span class="text-[11px] text-slate-400">Resend OTP in <span class="font-mono font-bold text-slate-600">24s</span></span>
+            <button type="button" onclick="toggleOtpRateLimit()" class="text-[11px] text-rose-600 hover:underline font-semibold">Simulate Rate Limit (429)</button>
+          </div>
+        </div>
+
+        <!-- Simulated Rate Limit Alert (Toggled) -->
+        <div id="otp-rate-limit-box" class="hidden p-3 bg-rose-50 border border-rose-300 rounded-xl text-left text-xs text-rose-900 space-y-1">
+          <div class="flex items-center gap-1.5 font-bold text-rose-800">
+            <i class="fa-solid fa-clock-rotate-left"></i> Security Cooldown Active (HTTP 429)
+          </div>
+          <p class="text-[11px] leading-relaxed">
+            Too many OTP requests from this mobile number. To protect system security, please wait <strong class="font-mono">45 seconds</strong> before requesting a new OTP.
+          </p>
+        </div>
+
+        <div class="p-3 bg-blue-50 border border-blue-200 rounded-xl text-left text-xs text-blue-900 space-y-1">
+          <div class="flex items-center gap-1.5 font-bold text-blue-800">
+            <i class="fa-solid fa-circle-info"></i> Master Lead & Identity Rule
+          </div>
+          <p class="text-[11px] leading-relaxed">Your mobile number is your permanent Master ID (<code class="font-mono bg-blue-100 px-1 rounded">ABF-CAND-000016</code>). Returning candidates reuse their existing profile without duplicate lead creation.</p>
+        </div>
+
+        <button onclick="switchScreen('screen-profile')" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm shadow-sm transition-all">
+          Verify & Continue to Profile
+        </button>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- SCREEN 3: CANDIDATE MASTER PROFILE (STRICTLY 6 ESSENTIAL FIELDS)          -->
+    <!-- ========================================================================= -->
+    <section id="screen-profile" class="screen-view hidden space-y-5">
+      <!-- Stepper Indicator -->
+      <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex items-center justify-between text-xs">
+        <div class="flex items-center gap-2 font-bold text-emerald-700">
+          <span class="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[11px]">1</span>
+          <span>Master Profile</span>
+        </div>
+        <div class="h-0.5 w-12 bg-slate-200"></div>
+        <div class="flex items-center gap-2 font-medium text-slate-400">
+          <span class="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-[11px]">2</span>
+          <span>Job Application</span>
+        </div>
+        <div class="h-0.5 w-12 bg-slate-200"></div>
+        <div class="flex items-center gap-2 font-medium text-slate-400">
+          <span class="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-[11px]">3</span>
+          <span>Review & Submit</span>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-lg font-bold text-[#102a43]">Candidate Master Profile (Tier 1)</h2>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                Strict 6 Essential Fields
+              </span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">Essential basic demographics are completed once and automatically reused across all future applications.</p>
+          </div>
+          <div class="bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl text-right">
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Profile Completion</span>
+            <span class="font-bold text-emerald-700 text-sm">100% Essential (6/6 Fields)</span>
+          </div>
+        </div>
+
+        <!-- The Exactly 6 Essential Demographic Fields -->
+        <div class="space-y-4">
+          <h3 class="text-xs font-bold text-[#102a43] uppercase tracking-wider pb-1 border-b border-slate-100 flex items-center justify-between">
+            <span class="flex items-center gap-2"><i class="fa-solid fa-id-card text-emerald-600"></i> Essential Personal & Residential Demographics</span>
+            <span class="text-[11px] font-mono text-slate-400">Schema: rms_candidate_profiles</span>
+          </h3>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+            <!-- 1. Full Legal Name -->
+            <div class="space-y-1">
+              <label class="block font-bold text-slate-700">1. Full Legal Name <span class="text-rose-600">*</span></label>
+              <input type="text" value="ANURAG KUMAR SINGH" class="w-full border border-slate-300 rounded-lg p-2.5 uppercase font-medium bg-slate-50 focus:bg-white focus:border-emerald-600 focus:outline-none">
+              <span class="text-[10px] text-slate-400">As per official Aadhaar / SSC certificate</span>
+            </div>
+
+            <!-- 2. Date of Birth -->
+            <div class="space-y-1">
+              <label class="block font-bold text-slate-700">2. Date of Birth <span class="text-rose-600">*</span></label>
+              <div class="flex gap-2">
+                <input type="date" value="1998-05-14" class="w-full border border-slate-300 rounded-lg p-2.5 font-medium focus:border-emerald-600 focus:outline-none">
+                <span class="px-2.5 py-2 bg-slate-100 border border-slate-200 rounded-lg font-mono text-slate-700 font-bold whitespace-nowrap">28 Yrs</span>
+              </div>
+              <span class="text-[10px] text-slate-400">Age calculated as of cutoff date</span>
+            </div>
+
+            <!-- 3. Gender -->
+            <div class="space-y-1">
+              <label class="block font-bold text-slate-700">3. Gender <span class="text-rose-600">*</span></label>
+              <select class="w-full border border-slate-300 rounded-lg p-2.5 font-medium focus:border-emerald-600 focus:outline-none">
+                <option selected>MALE</option>
+                <option>FEMALE</option>
+                <option>OTHER / TRANSGENDER</option>
+              </select>
+              <span class="text-[10px] text-slate-400">Official gender declaration</span>
+            </div>
+
+            <!-- 4. Primary WhatsApp Mobile -->
+            <div class="space-y-1">
+              <label class="block font-bold text-slate-700">4. Primary WhatsApp Mobile <span class="text-rose-600">*</span></label>
+              <div class="relative">
+                <input type="text" value="+91 98908 68644" readonly class="w-full border border-slate-200 rounded-lg p-2.5 font-mono font-bold bg-slate-100 text-slate-700">
+                <span class="absolute right-2.5 top-2.5 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded flex items-center gap-1">
+                  <i class="fa-solid fa-check"></i> Verified
+                </span>
+              </div>
+              <span class="text-[10px] text-slate-400">Primary legal identifier (OTP verified)</span>
+            </div>
+
+            <!-- 5. Home District -->
+            <div class="space-y-1">
+              <label class="block font-bold text-slate-700">5. Home District <span class="text-rose-600">*</span></label>
+              <select class="w-full border border-slate-300 rounded-lg p-2.5 font-bold text-slate-800 focus:border-emerald-600 focus:outline-none">
+                <option selected>Jalna</option>
+                <option>Pune</option>
+                <option>Chhatrapati Sambhajinagar</option>
+                <option>Nashik</option>
+                <option>Ahmednagar</option>
+              </select>
+              <span class="text-[10px] text-slate-400">Permanent residential district</span>
+            </div>
+
+            <!-- 6. Home Taluka -->
+            <div class="space-y-1">
+              <label class="block font-bold text-slate-700">6. Home Taluka <span class="text-rose-600">*</span></label>
+              <select class="w-full border border-slate-300 rounded-lg p-2.5 font-medium focus:border-emerald-600 focus:outline-none">
+                <option selected>Ghansawangi</option>
+                <option>Ambad</option>
+                <option>Partur</option>
+                <option>Jafrabad</option>
+                <option>Badnapur</option>
+              </select>
+              <span class="text-[10px] text-slate-400">Permanent residential taluka</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Navigation Buttons -->
+        <div class="flex items-center justify-between pt-4 border-t border-slate-200">
+          <button onclick="switchScreen('screen-job')" class="px-4 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50">
+            ← Back to Job Details
+          </button>
+          <div class="flex items-center gap-2">
+            <button type="button" class="px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs font-bold">
+              Save Draft
+            </button>
+            <button onclick="switchScreen('screen-application')" class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-sm flex items-center gap-1.5">
+              <span>Save & Continue to Job Application</span>
+              <i class="fa-solid fa-arrow-right text-[10px]"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- SCREEN 4: JOB-SPECIFIC APPLICATION (TIER 2: ROLE QUALIFICATIONS)          -->
+    <!-- ========================================================================= -->
+    <section id="screen-application" class="screen-view hidden space-y-5">
+      <!-- Stepper Indicator -->
+      <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex items-center justify-between text-xs">
+        <div class="flex items-center gap-2 font-bold text-emerald-700">
+          <span class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-[11px]"><i class="fa-solid fa-check"></i></span>
+          <span>Master Profile</span>
+        </div>
+        <div class="h-0.5 w-12 bg-emerald-600"></div>
+        <div class="flex items-center gap-2 font-bold text-emerald-700">
+          <span class="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[11px]">2</span>
+          <span>Job Application</span>
+        </div>
+        <div class="h-0.5 w-12 bg-slate-200"></div>
+        <div class="flex items-center gap-2 font-medium text-slate-400">
+          <span class="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-[11px]">3</span>
+          <span>Review & Submit</span>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div>
+            <h2 class="text-lg font-bold text-[#102a43]">Tier 2: Job-Specific Application Details</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Position: <strong class="text-slate-800">Taluka Agriculture Officer (TAO)</strong> • Post Code: <span class="font-mono">RMS-2026-TAO</span></p>
+          </div>
+          <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200 self-start">
+            Draft in Progress
+          </span>
+        </div>
+
+        <!-- Section A: Educational Qualifications -->
+        <div class="space-y-4">
+          <div class="flex items-center justify-between pb-1 border-b border-slate-100">
+            <h3 class="text-xs font-bold text-[#102a43] uppercase tracking-wider flex items-center gap-2">
+              <i class="fa-solid fa-graduation-cap text-emerald-600"></i> A. Position-Required Educational Qualifications
+            </h3>
+            <span class="text-[10px] font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+              Mandatory for TAO Post
+            </span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Qualifying Degree <span class="text-rose-600">*</span></label>
+              <select class="w-full border border-slate-300 rounded-lg p-2 font-medium">
+                <option selected>B.Sc. Agriculture (4-Year)</option>
+                <option>B.Sc. Horticulture</option>
+                <option>B.Tech Agricultural Engineering</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">University / Board <span class="text-rose-600">*</span></label>
+              <input type="text" value="VNMKV Parbhani" class="w-full border border-slate-300 rounded-lg p-2 font-medium">
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Passing Year <span class="text-rose-600">*</span></label>
+              <input type="number" value="2021" class="w-full border border-slate-300 rounded-lg p-2 font-mono font-medium">
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Percentage / CGPA <span class="text-rose-600">*</span></label>
+              <input type="text" value="78.50%" class="w-full border border-slate-300 rounded-lg p-2 font-mono font-bold text-emerald-700">
+            </div>
+          </div>
+        </div>
+
+        <!-- Section B: Specialised Licences & Relevant Experience -->
+        <div class="space-y-4 pt-2">
+          <h3 class="text-xs font-bold text-[#102a43] uppercase tracking-wider pb-1 border-b border-slate-100 flex items-center gap-2">
+            <i class="fa-solid fa-id-badge text-emerald-600"></i> B. Field Licences & Experience Declarations
+          </h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Driving Licence (2W/4W) <span class="text-rose-600">*</span></label>
+              <select class="w-full border border-slate-300 rounded-lg p-2 font-medium">
+                <option selected>Valid 2-Wheeler with Gear (MCWG)</option>
+                <option>Valid 4-Wheeler LMV</option>
+                <option>Both 2W and 4W</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Licence Number</label>
+              <input type="text" value="MH-21-2020-004812" class="w-full border border-slate-300 rounded-lg p-2 font-mono uppercase">
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Relevant Agricultural Experience</label>
+              <select class="w-full border border-slate-300 rounded-lg p-2 font-medium">
+                <option selected>1 to 2 Years (Farmer Outreach / Field Staff)</option>
+                <option>Less than 1 Year / Fresher</option>
+                <option>3+ Years</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section C: Posting Location Preferences -->
+        <div class="space-y-4 pt-2">
+          <h3 class="text-xs font-bold text-[#102a43] uppercase tracking-wider pb-1 border-b border-slate-100 flex items-center gap-2">
+            <i class="fa-solid fa-location-crosshairs text-emerald-600"></i> C. Posting Location Preference (Independent of Home Address)
+          </h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Preferred Posting District <span class="text-rose-600">*</span></label>
+              <select class="w-full border border-slate-300 rounded-lg p-2.5 font-bold text-slate-900 bg-white">
+                <option selected>Jalna (14 Vacancies)</option>
+                <option>Pune (22 Vacancies)</option>
+                <option>Aurangabad / Chhatrapati Sambhajinagar (18 Vacancies)</option>
+              </select>
+              <p class="text-[11px] text-slate-500 mt-1">Candidates may select a posting district independent from their home district.</p>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Preferred Taluka / Posting Cluster <span class="text-rose-600">*</span></label>
+              <select class="w-full border border-slate-300 rounded-lg p-2.5 font-medium bg-white">
+                <option selected>Ghansawangi Cluster (2 Vacancies)</option>
+                <option>Ambad Cluster (2 Vacancies)</option>
+                <option>All Talukas (District-wide Open Allocation)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section D: Role-Specific Declarations -->
+        <div class="space-y-3 text-xs pt-2">
+          <h3 class="text-xs font-bold text-[#102a43] uppercase tracking-wider pb-1 border-b border-slate-100 flex items-center gap-2">
+            <i class="fa-solid fa-clipboard-check text-emerald-600"></i> D. Mandatory Declarations
+          </h3>
+          <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-3">
+            <input type="checkbox" checked class="mt-0.5 rounded text-emerald-600 focus:ring-0">
+            <div>
+              <span class="font-bold text-slate-900">Are you proficient in reading, writing, and speaking Marathi?</span>
+              <p class="text-[11px] text-slate-500">Required for official communication and farmer advisory.</p>
+            </div>
+          </div>
+          <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-3">
+            <input type="checkbox" checked class="mt-0.5 rounded text-emerald-600 focus:ring-0">
+            <div>
+              <span class="font-bold text-slate-900">I declare all furnished qualifications and licence details are accurate.</span>
+              <p class="text-[11px] text-slate-500">False statements will lead to disqualification under service rules.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Navigation Buttons -->
+        <div class="flex items-center justify-between pt-4 border-t border-slate-200">
+          <button onclick="switchScreen('screen-profile')" class="px-4 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50">
+            ← Back to Master Profile
+          </button>
+          <div class="flex items-center gap-2">
+            <button type="button" class="px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs font-bold">
+              Save Draft
+            </button>
+            <button onclick="switchScreen('screen-review')" class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-sm flex items-center gap-1.5">
+              <span>Review Application</span>
+              <i class="fa-solid fa-arrow-right text-[10px]"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- SCREEN 5: REVIEW & SUBMIT (IMMUTABLE SNAPSHOT NOTICE)                     -->
+    <!-- ========================================================================= -->
+    <section id="screen-review" class="screen-view hidden space-y-5">
+      <!-- Stepper Indicator -->
+      <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex items-center justify-between text-xs">
+        <div class="flex items-center gap-2 font-bold text-emerald-700">
+          <span class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-[11px]"><i class="fa-solid fa-check"></i></span>
+          <span>Master Profile</span>
+        </div>
+        <div class="h-0.5 w-12 bg-emerald-600"></div>
+        <div class="flex items-center gap-2 font-bold text-emerald-700">
+          <span class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-[11px]"><i class="fa-solid fa-check"></i></span>
+          <span>Job Application</span>
+        </div>
+        <div class="h-0.5 w-12 bg-emerald-600"></div>
+        <div class="flex items-center gap-2 font-bold text-emerald-700">
+          <span class="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[11px]">3</span>
+          <span>Review & Submit</span>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-6">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div>
+            <h2 class="text-lg font-bold text-[#102a43]">Pre-Submission Verification Summary</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Carefully review all details before final locking. An authoritative Application Number will be generated upon submission.</p>
+          </div>
+          <span class="text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 flex items-center gap-1.5">
+            <i class="fa-solid fa-shield-check"></i> All Checks Passed
+          </span>
+        </div>
+
+        <!-- Group 1: Candidate Master Profile Summary (6 Essential Fields) -->
+        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+            <span class="font-bold text-[#102a43] uppercase tracking-wider text-[11px]">1. Candidate Master Demographics (Tier 1)</span>
+            <button onclick="switchScreen('screen-profile')" class="text-blue-600 font-bold hover:underline">Edit</button>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div>
+              <span class="text-slate-400 text-[10px] block font-bold uppercase">1. Legal Name</span>
+              <span class="font-bold text-slate-900">ANURAG KUMAR SINGH</span>
+            </div>
+            <div>
+              <span class="text-slate-400 text-[10px] block font-bold uppercase">2. Date of Birth & Age</span>
+              <span class="font-medium text-slate-800">14 May 1998 (28 Yrs)</span>
+            </div>
+            <div>
+              <span class="text-slate-400 text-[10px] block font-bold uppercase">3. Gender</span>
+              <span class="font-medium text-slate-800">MALE</span>
+            </div>
+            <div>
+              <span class="text-slate-400 text-[10px] block font-bold uppercase">4. WhatsApp Mobile</span>
+              <span class="font-mono font-semibold text-slate-900">+91 98908 68644</span>
+            </div>
+            <div>
+              <span class="text-slate-400 text-[10px] block font-bold uppercase">5. Home District</span>
+              <span class="font-medium text-slate-800">Jalna</span>
+            </div>
+            <div>
+              <span class="text-slate-400 text-[10px] block font-bold uppercase">6. Home Taluka</span>
+              <span class="font-medium text-slate-800">Ghansawangi</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Group 2: Job-Specific Application Summary (Tier 2) -->
+        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+            <span class="font-bold text-[#102a43] uppercase tracking-wider text-[11px]">2. Position, Qualifications & Posting Selection (Tier 2)</span>
+            <button onclick="switchScreen('screen-application')" class="text-blue-600 font-bold hover:underline">Edit</button>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div>
+              <span class="text-slate-400 text-[10px] block font-bold uppercase">Target Position</span>
+              <span class="font-bold text-slate-900">Taluka Agriculture Officer</span>
+            </div>
+            <div>
+              <span class="text-slate-400 text-[10px] block font-bold uppercase">Selected Posting District</span>
+              <span class="font-bold text-emerald-800">Jalna</span>
+            </div>
+            <div>
+              <span class="text-slate-400 text-[10px] block font-bold uppercase">Selected Taluka Cluster</span>
+              <span class="font-medium text-slate-800">Ghansawangi Cluster</span>
+            </div>
+            <div>
+              <span class="text-slate-400 text-[10px] block font-bold uppercase">Qualifying Degree</span>
+              <span class="font-medium text-slate-800">B.Sc. Agri (78.50%)</span>
+            </div>
+            <div>
+              <span class="text-slate-400 text-[10px] block font-bold uppercase">University</span>
+              <span class="font-medium text-slate-800">VNMKV Parbhani</span>
+            </div>
+            <div>
+              <span class="text-slate-400 text-[10px] block font-bold uppercase">Driving Licence</span>
+              <span class="font-mono text-slate-800">MH-21-2020-004812</span>
+            </div>
+            <div>
+              <span class="text-slate-400 text-[10px] block font-bold uppercase">Marathi Proficiency</span>
+              <span class="text-emerald-700 font-bold">Yes (Fluent)</span>
+            </div>
+            <div>
+              <span class="text-slate-400 text-[10px] block font-bold uppercase">Application Fee</span>
+              <span class="font-bold text-emerald-700">₹0 (Waived)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Proposed Implementation Safeguard Banner: Immutable Legal Snapshot -->
+        <div class="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-2">
+          <div class="flex items-start gap-3">
+            <i class="fa-solid fa-lock text-amber-700 mt-0.5 text-base"></i>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-slate-900">Irreversible Application Locking & Immutable Legal Snapshot</span>
+                <span class="text-[10px] font-mono font-bold bg-amber-200/80 text-amber-900 px-1.5 py-0.5 rounded">PROPOSED SAFEGUARD</span>
+              </div>
+              <p class="text-[11px] mt-1 leading-relaxed">
+                Once submitted, this application generates an immutable legal snapshot of your candidate details inside <code class="font-mono bg-amber-100 px-1 rounded">rms_applications.application_data->'candidate_snapshot'</code>. Future updates to your Candidate Master Profile will <strong>not</strong> retroactively alter this submitted application. Normal candidate editing will be permanently disabled upon submission.
+              </p>
+            </div>
+          </div>
+          <div class="p-2 bg-white/80 rounded-lg border border-amber-200 text-[10px] text-amber-800 flex items-center justify-between">
+            <span><i class="fa-solid fa-shield-halved mr-1 text-emerald-600"></i> Post-Submission Correction Policy:</span>
+            <span class="font-semibold">Requires Candidate Correction Form & Independent HR Checker Authorization</span>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center justify-between pt-4 border-t border-slate-200">
+          <button onclick="switchScreen('screen-application')" class="px-4 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50">
+            ← Modify Application
+          </button>
+          <button onclick="switchScreen('screen-success')" class="px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-sm shadow-md transition-all flex items-center gap-2">
+            <i class="fa-solid fa-circle-check"></i>
+            <span>Confirm & Submit Application</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- SCREEN 6: SUBMISSION SUCCESS & NEXT STEPS (MATCHING ApplicationSuccess)   -->
+    <!-- ========================================================================= -->
+    <section id="screen-success" class="screen-view hidden space-y-6">
+      <div class="max-w-lg mx-auto bg-white rounded-2xl border border-slate-200 p-8 shadow-md text-center space-y-5">
+        <div class="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto text-3xl">
+          <i class="fa-solid fa-circle-check"></i>
+        </div>
+        
+        <div>
+          <h2 class="text-2xl font-extrabold text-[#102a43]">Application Submitted!</h2>
+          <p class="text-xs text-slate-500 mt-1">Your application has been received successfully and logged in the official MAHA-AGRI recruitment database.</p>
+        </div>
+
+        <!-- Authoritative Application Reference Card -->
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs space-y-2 text-left">
+          <div class="flex justify-between border-b border-slate-200 pb-1.5">
+            <span class="text-slate-500">Application Number</span>
+            <span class="font-mono font-bold text-emerald-800 text-sm">ABF-APP-2026-000042</span>
+          </div>
+          <div class="flex justify-between border-b border-slate-200 pb-1.5">
+            <span class="text-slate-500">Position Applied</span>
+            <span class="font-bold text-slate-800">Taluka Agriculture Officer</span>
+          </div>
+          <div class="flex justify-between border-b border-slate-200 pb-1.5">
+            <span class="text-slate-500">Applied Taluka & District</span>
+            <span class="font-medium text-slate-800">Ghansawangi, Jalna</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">Submitted Timestamp (IST)</span>
+            <span class="font-mono text-slate-700">28 Oct 2026, 09:35 AM IST</span>
+          </div>
+        </div>
+
+        <!-- Next Step Notice -->
+        <div class="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 text-left flex items-start gap-2.5">
+          <i class="fa-solid fa-bell text-blue-600 mt-0.5"></i>
+          <div>
+            <span class="font-bold">Next Operational Step:</span>
+            <p class="text-[11px] mt-0.5 leading-relaxed">Your application is in <strong class="text-blue-800">Eligibility Review</strong>. You will receive an interview slot booking link on WhatsApp once initial screening is completed.</p>
+          </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-2 pt-2">
+          <button onclick="switchScreen('screen-dashboard')" class="flex-1 py-3 bg-[#102a43] hover:bg-[#243b53] text-white font-bold rounded-xl text-xs transition-all shadow-sm">
+            Go to Candidate Dashboard
+          </button>
+          <button onclick="switchScreen('screen-job')" class="flex-1 py-3 border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs transition-all">
+            Browse More Positions
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- SCREEN 7: CANDIDATE DASHBOARD (ALL 10 PRESERVED CAPABILITIES)             -->
+    <!-- ========================================================================= -->
+    <section id="screen-dashboard" class="screen-view hidden space-y-6">
+      <!-- Profile Header Summary matching CandidateDashboardLayout.tsx -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div class="flex items-center gap-3.5">
+          <div class="w-12 h-12 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-extrabold text-lg">
+            A
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-base font-bold text-[#102a43]">ANURAG KUMAR SINGH</h2>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">Profile Complete (100% Essential)</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5 font-mono">
+              Candidate ID: ABF-CAND-000016 • Mobile: +91 98908 68644
+            </p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="switchScreen('screen-profile')" class="px-3.5 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold transition-all">
+            <i class="fa-solid fa-pen-to-square mr-1"></i> Edit Master Profile
+          </button>
+          <button onclick="switchScreen('screen-job')" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs">
+            + Browse Jobs
+          </button>
+        </div>
+      </div>
+
+      <!-- Capability Tabs Bar (Preserving All 10 Existing Modules) -->
+      <div class="bg-white border border-slate-200 rounded-xl p-1.5 flex gap-1 overflow-x-auto text-xs shadow-2xs">
+        <button onclick="switchDashTab('tab-apps')" id="btn-tab-apps" class="dash-tab-btn px-3 py-2 rounded-lg font-bold bg-[#102a43] text-white whitespace-nowrap flex items-center gap-1.5">
+          <i class="fa-solid fa-file-signature"></i> Applications & Drafts
+        </button>
+        <button onclick="switchDashTab('tab-interviews')" id="btn-tab-interviews" class="dash-tab-btn px-3 py-2 rounded-lg font-semibold text-slate-600 hover:bg-slate-100 whitespace-nowrap flex items-center gap-1.5">
+          <i class="fa-solid fa-calendar-check text-blue-600"></i> Interview Schedule
+        </button>
+        <button onclick="switchDashTab('tab-payments')" id="btn-tab-payments" class="dash-tab-btn px-3 py-2 rounded-lg font-semibold text-slate-600 hover:bg-slate-100 whitespace-nowrap flex items-center gap-1.5">
+          <i class="fa-solid fa-credit-card text-emerald-600"></i> Payments
+        </button>
+        <button onclick="switchDashTab('tab-training')" id="btn-tab-training" class="dash-tab-btn px-3 py-2 rounded-lg font-semibold text-slate-600 hover:bg-slate-100 whitespace-nowrap flex items-center gap-1.5">
+          <i class="fa-solid fa-graduation-cap text-purple-600"></i> Training
+        </button>
+        <button onclick="switchDashTab('tab-letters')" id="btn-tab-letters" class="dash-tab-btn px-3 py-2 rounded-lg font-semibold text-slate-600 hover:bg-slate-100 whitespace-nowrap flex items-center gap-1.5">
+          <i class="fa-solid fa-award text-amber-600"></i> Appointment Letters
+        </button>
+        <button onclick="switchDashTab('tab-settings')" id="btn-tab-settings" class="dash-tab-btn px-3 py-2 rounded-lg font-semibold text-slate-600 hover:bg-slate-100 whitespace-nowrap flex items-center gap-1.5">
+          <i class="fa-solid fa-gear text-slate-600"></i> Settings & Alerts
+        </button>
+      </div>
+
+      <!-- TAB 1: APPLICATIONS & DRAFTS OVERVIEW -->
+      <div id="tab-apps" class="dash-tab-content space-y-4">
+        <!-- Action Required Alert: Interview Slot Reselection -->
+        <div class="p-4 bg-amber-50 border-2 border-amber-400 rounded-2xl shadow-sm text-xs space-y-3 text-amber-950">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex items-start gap-3">
+              <div class="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center text-sm flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-calendar-xmark"></i>
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="font-extrabold text-sm text-amber-900">Action Required: Re-select Interview Slot</span>
+                  <span class="px-2 py-0.5 bg-amber-200 text-amber-900 text-[10px] font-bold rounded">Urgent Action</span>
+                </div>
+                <p class="text-[11px] mt-1 leading-relaxed text-amber-900">
+                  Your approved correction request (<code class="font-mono font-bold bg-amber-100 px-1 rounded">#CR-2026-018</code>) amended your preferred posting cluster from <strong>Ghansawangi Cluster</strong> to <strong>Ambad Cluster</strong>. As required by cluster panel allocation, your previous interview slot has been released. Please re-select your interview slot for the Ambad panel.
+                </p>
+              </div>
+            </div>
+            <button onclick="openRescheduleModal()" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs shadow transition-colors whitespace-nowrap flex items-center gap-1.5">
+              <i class="fa-solid fa-calendar-check text-xs"></i>
+              <span>Select New Slot →</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <!-- Card 1: Submitted Application (Locked + Rescheduling Pending) -->
+          <div class="bg-white rounded-xl border-2 border-indigo-200 p-4 shadow-2xs space-y-3">
+            <div class="flex items-start justify-between">
+              <div>
+                <span class="text-[10px] font-mono text-slate-400">ABF-APP-2026-000042</span>
+                <h4 class="font-bold text-slate-900 text-sm mt-0.5">Taluka Agriculture Officer</h4>
+                <p class="text-xs text-slate-500"><i class="fa-solid fa-location-dot text-rose-500 mr-1"></i> Ambad Cluster (Updated), Jalna</p>
+              </div>
+              <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                Slot Pending
+              </span>
+            </div>
+
+            <div class="p-2.5 bg-slate-50 rounded-lg text-[11px] text-slate-600 space-y-1">
+              <div class="flex justify-between">
+                <span>Submitted On:</span>
+                <span class="font-semibold text-slate-800">28 Oct 2026, 09:35 AM IST</span>
+              </div>
+              <div class="flex justify-between">
+                <span>Current Stage:</span>
+                <span class="font-bold text-indigo-700">Interview Slot Pending</span>
+              </div>
+              <div class="flex justify-between text-slate-500 pt-0.5">
+                <span>Editing:</span>
+                <span class="font-semibold flex items-center gap-1 text-slate-600"><i class="fa-solid fa-lock text-[10px]"></i> Locked</span>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-1 gap-2">
+              <button onclick="switchScreen('screen-candidate-correction')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors">
+                <i class="fa-solid fa-pen-nib text-[10px]"></i>
+                <span>Correction Request</span>
+              </button>
+              <button onclick="switchScreen('screen-tier3-docs')" class="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors">
+                <i class="fa-solid fa-file-arrow-up text-[10px]"></i>
+                <span>Tier 3 Docs</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Card 2: Saved Draft Application (Active - Closes in 12 days) -->
+          <div class="bg-white rounded-xl border border-amber-200 p-4 shadow-2xs space-y-3 bg-amber-50/20">
+            <div class="flex items-start justify-between">
+              <div>
+                <span class="text-[10px] font-mono text-amber-600 font-bold">DRAFT IN PROGRESS</span>
+                <h4 class="font-bold text-slate-900 text-sm mt-0.5">Krishi Sakhi Field Coordinator</h4>
+                <p class="text-xs text-slate-500"><i class="fa-solid fa-location-dot text-rose-500 mr-1"></i> Ambad, Jalna</p>
+              </div>
+              <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                Draft Saved
+              </span>
+            </div>
+
+            <div class="p-2.5 bg-white rounded-lg text-[11px] text-slate-600 border border-amber-100 space-y-1">
+              <div class="flex justify-between">
+                <span>Last Updated:</span>
+                <span class="font-semibold text-slate-800">27 Oct 2026, 04:15 PM IST</span>
+              </div>
+              <div class="flex justify-between">
+                <span>Closing Deadline:</span>
+                <span class="font-bold text-amber-700">30 Nov 2026, 11:59 PM IST</span>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-1">
+              <span class="text-[11px] text-emerald-700 font-semibold"><i class="fa-solid fa-clock text-xs mr-1"></i>12 days left</span>
+              <button onclick="switchScreen('screen-application')" class="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-xs">
+                Resume Application →
+              </button>
+            </div>
+          </div>
+
+          <!-- Card 3: Expired Draft Application (Enforced by Trigger Safeguard) -->
+          <div class="bg-slate-50 rounded-xl border border-slate-300 p-4 shadow-2xs space-y-3 opacity-90">
+            <div class="flex items-start justify-between">
+              <div>
+                <span class="text-[10px] font-mono text-rose-600 font-bold">DRAFT EXPIRED</span>
+                <h4 class="font-bold text-slate-700 text-sm mt-0.5">FPO Business Associate</h4>
+                <p class="text-xs text-slate-500"><i class="fa-solid fa-location-dot text-slate-400 mr-1"></i> Chhatrapati Sambhajinagar</p>
+              </div>
+              <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                Expired
+              </span>
+            </div>
+
+            <div class="p-2.5 bg-white rounded-lg text-[11px] text-slate-600 border border-slate-200 space-y-1">
+              <div class="flex justify-between">
+                <span>Last Saved:</span>
+                <span class="font-medium text-slate-600">20 Oct 2026, 02:15 PM IST</span>
+              </div>
+              <div class="flex justify-between text-rose-700 font-bold">
+                <span>Closing Deadline:</span>
+                <span>25 Oct 2026, 11:59 PM IST</span>
+              </div>
+            </div>
+
+            <div class="pt-1 space-y-2">
+              <div class="p-2 bg-rose-50 border border-rose-200 rounded-lg text-[10px] text-rose-900 leading-tight">
+                <i class="fa-solid fa-ban text-rose-600 mr-1"></i>
+                Deadline passed. Under API and DB trigger enforcement, this expired draft cannot be resumed or submitted.
+              </div>
+              <button disabled class="w-full py-1.5 px-3 bg-slate-200 text-slate-400 font-bold rounded-lg text-xs cursor-not-allowed flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-lock text-[10px]"></i>
+                <span>Submission Locked</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: INTERVIEW SCHEDULE -->
+      <div id="tab-interviews" class="dash-tab-content hidden space-y-4">
+        <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-4">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+            <h3 class="text-sm font-bold text-[#102a43] uppercase tracking-wider flex items-center gap-2">
+              <i class="fa-solid fa-calendar-check text-blue-600"></i> Scheduled & Pending Interviews
+            </h3>
+            <span class="text-xs text-slate-400">Linked to <code class="font-mono text-slate-700">rms_interview_bookings</code></span>
+          </div>
+
+          <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="space-y-1">
+              <span class="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">Upcoming Panel</span>
+              <h4 class="font-bold text-slate-900 text-sm mt-1">Taluka Agriculture Officer — Ambad Interview Panel</h4>
+              <p class="text-xs text-slate-600"><i class="fa-solid fa-clock text-slate-400 mr-1"></i> Suggested Date: <strong>04 Nov 2026, 10:30 AM IST</strong> (Online Video Call)</p>
+              <p class="text-[11px] text-slate-500">Panel: District Joint Agriculture Director Office, Jalna Division</p>
+            </div>
+            <button onclick="openRescheduleModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-xs transition-colors shrink-0">
+              Confirm / Re-select Slot
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: PAYMENTS -->
+      <div id="tab-payments" class="dash-tab-content hidden space-y-4">
+        <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-4">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+            <h3 class="text-sm font-bold text-[#102a43] uppercase tracking-wider flex items-center gap-2">
+              <i class="fa-solid fa-credit-card text-emerald-600"></i> Fee Payment Records
+            </h3>
+            <span class="text-xs text-slate-400">Razorpay / Govt Treasury Integration</span>
+          </div>
+
+          <div class="border border-slate-200 rounded-xl overflow-hidden text-xs">
+            <table class="w-full text-left">
+              <thead class="bg-slate-100 text-slate-600 font-bold border-b border-slate-200 text-[11px]">
+                <tr>
+                  <th class="p-3">Application Ref</th>
+                  <th class="p-3">Fee Type</th>
+                  <th class="p-3">Amount</th>
+                  <th class="p-3">Status</th>
+                  <th class="p-3">Receipt</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 bg-white">
+                <tr>
+                  <td class="p-3 font-mono text-slate-800">ABF-APP-2026-000042</td>
+                  <td class="p-3 font-semibold text-slate-700">Application Fee</td>
+                  <td class="p-3 font-bold text-emerald-700">₹0 (Waived)</td>
+                  <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">Exempted</span></td>
+                  <td class="p-3 text-slate-400">N/A (Free Post)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 4: TRAINING & INDUCTION -->
+      <div id="tab-training" class="dash-tab-content hidden space-y-4">
+        <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-4">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+            <h3 class="text-sm font-bold text-[#102a43] uppercase tracking-wider flex items-center gap-2">
+              <i class="fa-solid fa-graduation-cap text-purple-600"></i> Post-Selection Induction & Field Training
+            </h3>
+            <span class="text-xs text-slate-400">Triggered at <code class="font-mono text-slate-700">training_pending</code></span>
+          </div>
+
+          <div class="p-4 bg-purple-50/50 border border-purple-200 rounded-xl space-y-2">
+            <span class="text-[10px] font-bold text-purple-800 bg-purple-100 px-2 py-0.5 rounded">Batch Scheduled on Final Selection</span>
+            <h4 class="font-bold text-slate-900 text-sm">Cluster Officer Digital Agriculture Induction Program</h4>
+            <p class="text-xs text-slate-600">Venue: VAMNICOM Pune / RAMETI Chhatrapati Sambhajinagar. Covers e-Pik Pahani app, spatial survey protocols, and farmer grievance redressal.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 5: APPOINTMENT LETTERS -->
+      <div id="tab-letters" class="dash-tab-content hidden space-y-4">
+        <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-4">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+            <h3 class="text-sm font-bold text-[#102a43] uppercase tracking-wider flex items-center gap-2">
+              <i class="fa-solid fa-award text-amber-600"></i> Official Appointment Orders
+            </h3>
+            <span class="text-xs text-slate-400">Generated at <code class="font-mono text-slate-700">appointment_issued</code></span>
+          </div>
+
+          <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl text-center space-y-2">
+            <i class="fa-solid fa-stamp text-3xl text-slate-400"></i>
+            <h4 class="font-bold text-slate-800 text-sm">No Appointment Orders Issued Yet</h4>
+            <p class="text-xs text-slate-500 max-w-md mx-auto">Official provisional and final appointment letters will be downloadable here once interview screening and Tier 3 document verification are completed.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 6: SETTINGS & NOTIFICATIONS -->
+      <div id="tab-settings" class="dash-tab-content hidden space-y-4">
+        <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-4">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+            <h3 class="text-sm font-bold text-[#102a43] uppercase tracking-wider flex items-center gap-2">
+              <i class="fa-solid fa-gear text-slate-600"></i> Account Settings & Notification Preferences
+            </h3>
+            <span class="text-xs text-slate-400 font-mono">ID: ABF-CAND-000016</span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+              <span class="font-bold text-slate-800">Primary WhatsApp Mobile</span>
+              <p class="font-mono text-slate-600">+91 98908 68644 (Immutable Primary Lead)</p>
+            </div>
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+              <span class="font-bold text-slate-800">WhatsApp Notification Alerts</span>
+              <p class="text-emerald-700 font-bold"><i class="fa-solid fa-check mr-1"></i> Active (Interview invites & status transitions)</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- SCREEN 8: CANDIDATE CORRECTION REQUEST FORM                               -->
+    <!-- ========================================================================= -->
+    <section id="screen-candidate-correction" class="screen-view hidden space-y-6">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+          <div>
+            <div class="flex items-center gap-2 mb-1">
+              <span class="px-2.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                Candidate Self-Service
+              </span>
+              <span class="px-2.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                Ticket #CR-2026-018
+              </span>
+            </div>
+            <h2 class="text-xl font-bold text-[#102a43]">Request Application Correction</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Submitted applications are locked against direct editing. You may request an amendment for review by the independent HR Super Admin panel.</p>
+          </div>
+          <button onclick="switchScreen('screen-dashboard')" class="px-4 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 self-start">
+            ← Back to Dashboard
+          </button>
+        </div>
+
+        <!-- Application Reference Banner -->
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div>
+            <span class="text-slate-400 text-[10px] block font-bold uppercase">Application Reference</span>
+            <span class="font-mono font-bold text-slate-900 text-sm">ABF-APP-2026-000042</span>
+          </div>
+          <div>
+            <span class="text-slate-400 text-[10px] block font-bold uppercase">Position</span>
+            <span class="font-bold text-slate-800">Taluka Agriculture Officer</span>
+          </div>
+          <div>
+            <span class="text-slate-400 text-[10px] block font-bold uppercase">Original Submission</span>
+            <span class="font-semibold text-slate-800">28 Oct 2026, 09:35 AM IST</span>
+          </div>
+          <div>
+            <span class="text-slate-400 text-[10px] block font-bold uppercase">Request Status</span>
+            <span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded text-[11px] inline-block">Approved by HR</span>
+          </div>
+        </div>
+
+        <!-- Correction Request Form -->
+        <div class="space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            <!-- Eligible Field Selection -->
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Select Field to Amend <span class="text-rose-600">*</span></label>
+              <select class="w-full border border-slate-300 rounded-lg p-2.5 font-bold text-slate-900 bg-white focus:border-emerald-600 focus:outline-none">
+                <option value="preferred_taluka" selected>Preferred Taluka Cluster (Permissible - Triggers Slot Rescheduling)</option>
+                <option value="preferred_district">Preferred Posting District (Permissible)</option>
+                <option value="degree_percentage">Degree Percentage / Marks (Requires Marksheet Proof)</option>
+                <option value="driving_licence">Driving Licence Number (Requires Licence Upload)</option>
+                <option disabled value="primary_mobile" class="text-slate-400">Primary Mobile Number (STRICTLY PROHIBITED)</option>
+                <option disabled value="aadhar_number" class="text-slate-400">Aadhaar Number (STRICTLY PROHIBITED)</option>
+              </select>
+              <span class="text-[10px] text-slate-500 mt-1 block">Note: Core legal identity fields cannot be modified post-submission.</span>
+            </div>
+
+            <!-- Current Value vs New Requested Value -->
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Current Value</label>
+                <input type="text" value="Ghansawangi Cluster" readonly class="w-full border border-slate-200 rounded-lg p-2.5 font-medium bg-slate-100 text-slate-600">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">New Requested Value <span class="text-rose-600">*</span></label>
+                <input type="text" value="Ambad Cluster" class="w-full border border-emerald-500 rounded-lg p-2.5 font-bold text-emerald-800 bg-white">
+              </div>
+            </div>
+          </div>
+
+          <!-- Mandatory Reason / Justification -->
+          <div class="text-xs space-y-1">
+            <label class="block font-bold text-slate-700">Mandatory Justification / Reason for Amendment <span class="text-rose-600">*</span></label>
+            <textarea rows="3" class="w-full border border-slate-300 rounded-lg p-2.5 text-slate-800 focus:border-emerald-600 focus:outline-none leading-relaxed" placeholder="Provide detailed legal justification for this change...">Candidate relocated residence closer to Ambad cluster prior to deployment. Requesting deployment cluster update to reduce daily travel.</textarea>
+            <span class="text-[10px] text-slate-400">Minimum 20 characters required. Reviewed by Independent HR Checker.</span>
+          </div>
+
+          <!-- Supporting Document Upload Placeholder -->
+          <div class="text-xs space-y-1">
+            <label class="block font-bold text-slate-700">Supporting Documentary Proof <span class="text-slate-400 font-normal">(PDF, JPG, PNG - Max 2MB)</span></label>
+            <div class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center hover:border-emerald-500 bg-slate-50 transition-colors">
+              <i class="fa-solid fa-file-arrow-up text-2xl text-slate-400 mb-1"></i>
+              <p class="font-semibold text-slate-700">Residential_Proof_Ambad.pdf <span class="text-[10px] text-emerald-700 font-bold bg-emerald-100 px-1 rounded ml-1">Attached (1.2 MB)</span></p>
+              <p class="text-[10px] text-slate-400 mt-0.5">Electricity bill / Taluka domicile document uploaded.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Maker-Checker SLA & Policy Notice -->
+        <div class="p-3.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-950 space-y-1">
+          <div class="flex items-center gap-1.5 font-bold text-blue-900">
+            <i class="fa-solid fa-user-shield text-blue-700"></i> Independent HR Checker Approval Enforced
+          </div>
+          <p class="text-[11px] leading-relaxed">
+            Your request will be assigned to an independent HR Super Admin (Maker ≠ Checker). Review turnaround SLA is <strong>24 to 48 hours</strong>. If approved, interview bookings associated with the old location cluster are automatically released.
+          </p>
+        </div>
+
+        <div class="flex items-center justify-between pt-2 border-t border-slate-200">
+          <button onclick="switchScreen('screen-dashboard')" class="px-4 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50">
+            Cancel
+          </button>
+          <div class="flex items-center gap-2">
+            <button onclick="switchScreen('screen-correction')" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-sm flex items-center gap-1.5">
+              <span>View Admin Audit Trail →</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- SCREEN 9: ADMIN CORRECTION APPROVAL & AUDIT TRAIL                          -->
+    <!-- ========================================================================= -->
+    <section id="screen-correction" class="screen-view hidden space-y-6">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-5 border-b border-slate-100">
+          <div>
+            <div class="flex items-center gap-2 mb-1">
+              <span class="px-2.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                Governance: Maker-Checker Segregation
+              </span>
+              <span class="px-2.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                Original Legal Timestamps Preserved
+              </span>
+            </div>
+            <h2 class="text-xl font-bold text-[#102a43]">Admin Correction Approval & Audit History</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Submitted applications remain locked against normal candidate editing. Corrections require administrative authorization and generate an immutable audit trail.</p>
+          </div>
+          <button onclick="switchScreen('screen-dashboard')" class="px-4 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 self-start">
+            ← Back to Dashboard
+          </button>
+        </div>
+
+        <!-- Master Application Metadata Card -->
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div>
+            <span class="text-slate-400 text-[10px] block font-bold uppercase">Application Reference</span>
+            <span class="font-mono font-bold text-emerald-800 text-sm">ABF-APP-2026-000042</span>
+            <span class="text-[9px] text-emerald-600 block font-semibold">Immutable Reference</span>
+          </div>
+          <div>
+            <span class="text-slate-400 text-[10px] block font-bold uppercase">Position</span>
+            <span class="font-bold text-slate-800">Taluka Agriculture Officer</span>
+          </div>
+          <div>
+            <span class="text-slate-400 text-[10px] block font-bold uppercase">Original Legal Submission</span>
+            <span class="font-semibold text-slate-800">28 Oct 2026, 09:35 AM IST</span>
+            <span class="text-[9px] text-emerald-600 block font-semibold">Timestamp Preserved</span>
+          </div>
+          <div>
+            <span class="text-slate-400 text-[10px] block font-bold uppercase">Permissible Window</span>
+            <span class="font-bold text-emerald-700 block">Pre-Interview Screening</span>
+            <span class="text-[9px] text-slate-400 block">Locked post-interview</span>
+          </div>
+        </div>
+
+        <!-- Four-Eyes Principle / Maker-Checker Banner -->
+        <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2 text-xs">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <span class="font-bold text-emerald-900 text-sm flex items-center gap-1.5">
+              <i class="fa-solid fa-users-viewfinder text-emerald-700"></i>
+              Four-Eyes Principle Enforced (Segregation of Duties: Maker ≠ Checker)
+            </span>
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-200/80 text-emerald-900">
+              State: Approved & Applied to Master
+            </span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-[11px] text-emerald-900">
+            <div class="bg-white/80 p-2 rounded-lg border border-emerald-200">
+              <span class="text-slate-500 block text-[10px] uppercase font-bold">1. Correction Maker / Requester</span>
+              <span class="font-bold text-slate-900">Anurag Kumar Singh (Candidate)</span>
+              <span class="text-slate-500 block text-[10px]">Via Portal Ticket #CR-2026-018 • 28 Oct 2026, 10:40 AM IST</span>
+            </div>
+            <div class="bg-white/80 p-2 rounded-lg border border-emerald-200">
+              <span class="text-slate-500 block text-[10px] uppercase font-bold">2. Independent Admin Checker / Approver</span>
+              <span class="font-bold text-slate-900">Priya Sharma (HR Super Admin ID: ABF-HR-004)</span>
+              <span class="text-slate-500 block text-[10px]">Authorized & Cryptographically Signed • 28 Oct 2026, 11:15 AM IST</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Field-Level Change Diff Table with Verification Rules -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xs font-bold text-[#102a43] uppercase tracking-wider">Field-Specific Audit Trail & Verification</h3>
+            <span class="text-[11px] text-slate-400">Permissible Stages: <code class="font-mono text-slate-700">submitted</code>, <code class="font-mono text-slate-700">under_review</code></span>
+          </div>
+          <div class="border border-slate-200 rounded-xl overflow-hidden text-xs">
+            <table class="w-full text-left">
+              <thead class="bg-slate-100 text-slate-600 font-bold border-b border-slate-200 text-[11px]">
+                <tr>
+                  <th class="p-3">Field Name</th>
+                  <th class="p-3">Original Submitted Value</th>
+                  <th class="p-3">Amended Authorized Value</th>
+                  <th class="p-3">Candidate Reason & Verification Rule</th>
+                  <th class="p-3">Audit Envelope Hash</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 bg-white">
+                <tr>
+                  <td class="p-3 font-mono font-semibold text-slate-900">preferred_taluka</td>
+                  <td class="p-3"><span class="bg-rose-50 text-rose-700 px-2 py-0.5 rounded font-medium border border-rose-200">Ghansawangi Cluster</span></td>
+                  <td class="p-3"><span class="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-bold border border-emerald-200">Ambad Cluster</span></td>
+                  <td class="p-3 text-slate-600 max-w-xs space-y-0.5">
+                    <p>Candidate relocated residence closer to Ambad cluster prior to deployment.</p>
+                    <span class="inline-block text-[10px] text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded font-semibold border border-blue-200">
+                      Rule: Cluster Vacancy Quota Re-checked
+                    </span>
+                  </td>
+                  <td class="p-3 font-mono text-[10px] text-slate-500">
+                    <span class="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 block truncate w-32">AUD-CORR-2026-8812</span>
+                    <span class="text-emerald-600 text-[9px] font-bold">SHA-256 Verified</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Interview Impact Handling Callout -->
+        <div class="p-4 bg-indigo-50 border border-indigo-200 rounded-xl text-xs space-y-1.5 text-indigo-900">
+          <div class="flex items-center gap-1.5 font-bold text-indigo-950 text-sm">
+            <i class="fa-solid fa-calendar-xmark text-indigo-700"></i>
+            Interview-Impact Handling Execution
+          </div>
+          <p class="leading-relaxed text-[11px]">
+            <strong>Automatic Slot Rescheduling:</strong> Because the candidate's preferred location cluster was amended from <em>Ghansawangi Cluster</em> to <em>Ambad Cluster</em>, the previous interview slot booked for Ghansawangi was automatically invalidated and returned to the cluster pool. The application status was transitioned to <code>interview_slot_pending</code>, and an action banner was added to the candidate dashboard.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- SCREEN 10: TIER 3 POST-SELECTION DOCUMENT UPLOAD WORKFLOW                 -->
+    <!-- ========================================================================= -->
+    <section id="screen-tier3-docs" class="screen-view hidden space-y-6">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+          <div>
+            <div class="flex items-center gap-2 mb-1">
+              <span class="px-2.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                Tier 3: Statutory Verification
+              </span>
+              <span class="px-2.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                Application: ABF-APP-2026-000042
+              </span>
+            </div>
+            <h2 class="text-xl font-bold text-[#102a43]">Post-Selection Document Upload</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Congratulations on reaching the statutory verification stage for <strong class="text-slate-800">Taluka Agriculture Officer</strong>. Please upload legible digital scans of your original documents.</p>
+          </div>
+          <button onclick="switchScreen('screen-dashboard')" class="px-4 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 self-start">
+            ← Back to Dashboard
+          </button>
+        </div>
+
+        <!-- Document Upload Cards Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          <!-- Doc 1: Aadhaar Card -->
+          <div class="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
+            <div class="flex items-start justify-between">
+              <div>
+                <span class="text-[10px] font-bold text-slate-400 uppercase">1. Government Photo ID</span>
+                <h4 class="font-bold text-slate-900 text-sm mt-0.5">Aadhaar Card (Front & Back) <span class="text-rose-600">*</span></h4>
+                <p class="text-[11px] text-slate-500">Government identity and age verification.</p>
+              </div>
+              <span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px] border border-emerald-300 flex items-center gap-1">
+                <i class="fa-solid fa-check"></i> Verified
+              </span>
+            </div>
+            <div class="p-2 bg-white rounded-lg border border-slate-200 flex items-center justify-between font-mono text-[11px]">
+              <span class="truncate"><i class="fa-solid fa-file-pdf text-rose-500 mr-1.5"></i> Aadhaar_Card_Verified.pdf</span>
+              <span class="text-slate-400 text-[10px]">850 KB</span>
+            </div>
+          </div>
+
+          <!-- Doc 2: Degree Certificate -->
+          <div class="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
+            <div class="flex items-start justify-between">
+              <div>
+                <span class="text-[10px] font-bold text-slate-400 uppercase">2. Academic Record</span>
+                <h4 class="font-bold text-slate-900 text-sm mt-0.5">Degree Certificate / Marksheet <span class="text-rose-600">*</span></h4>
+                <p class="text-[11px] text-slate-500">B.Sc. Agriculture / ICAR graduation proof.</p>
+              </div>
+              <span class="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[10px] border border-amber-300 flex items-center gap-1">
+                <i class="fa-solid fa-clock"></i> Under Review
+              </span>
+            </div>
+            <div class="p-2 bg-white rounded-lg border border-slate-200 flex items-center justify-between font-mono text-[11px]">
+              <span class="truncate"><i class="fa-solid fa-file-pdf text-rose-500 mr-1.5"></i> VNMKV_Degree_BSc_Agri.pdf</span>
+              <span class="text-slate-400 text-[10px]">1.4 MB</span>
+            </div>
+          </div>
+
+          <!-- Doc 3: Domicile Certificate -->
+          <div class="border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-xl p-4 bg-white space-y-3 transition-colors">
+            <div class="flex items-start justify-between">
+              <div>
+                <span class="text-[10px] font-bold text-slate-400 uppercase">3. Residence Proof</span>
+                <h4 class="font-bold text-slate-900 text-sm mt-0.5">Maharashtra Domicile Certificate <span class="text-rose-600">*</span></h4>
+                <p class="text-[11px] text-slate-500">Issued by competent revenue authority.</p>
+              </div>
+              <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold text-[10px] border border-slate-300">
+                Action Required
+              </span>
+            </div>
+            <div class="p-3 bg-slate-50 rounded-lg border border-slate-200 text-center cursor-pointer hover:bg-emerald-50/50">
+              <i class="fa-solid fa-cloud-arrow-up text-lg text-slate-400"></i>
+              <p class="font-bold text-emerald-800 text-[11px] mt-1">Click to browse or drag file here</p>
+              <p class="text-[10px] text-slate-400">PDF, JPG up to 2MB</p>
+            </div>
+          </div>
+
+          <!-- Doc 4: Caste & NCL Validity -->
+          <div class="border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-xl p-4 bg-white space-y-3 transition-colors">
+            <div class="flex items-start justify-between">
+              <div>
+                <span class="text-[10px] font-bold text-slate-400 uppercase">4. Category Proof</span>
+                <h4 class="font-bold text-slate-900 text-sm mt-0.5">Caste & Non-Creamy Layer Validity <span class="text-slate-400 font-normal">(If Applicable)</span></h4>
+                <p class="text-[11px] text-slate-500">Required for reserved category benefits.</p>
+              </div>
+              <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold text-[10px] border border-slate-300">
+                Pending
+              </span>
+            </div>
+            <div class="p-3 bg-slate-50 rounded-lg border border-slate-200 text-center cursor-pointer hover:bg-emerald-50/50">
+              <i class="fa-solid fa-cloud-arrow-up text-lg text-slate-400"></i>
+              <p class="font-bold text-emerald-800 text-[11px] mt-1">Click to browse or drag file here</p>
+              <p class="text-[10px] text-slate-400">PDF, JPG up to 2MB</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between pt-2 border-t border-slate-200">
+          <button onclick="switchScreen('screen-dashboard')" class="px-4 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50">
+            ← Return to Dashboard
+          </button>
+          <button type="button" class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-sm flex items-center gap-1.5">
+            <i class="fa-solid fa-paper-plane text-[10px]"></i>
+            <span>Submit Documents for Scrutiny</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- SCREEN 11: ERROR STATES & EDGE CASES SHOWCASE                             -->
+    <!-- ========================================================================= -->
+    <section id="screen-edge-cases" class="screen-view hidden space-y-6">
+      <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+          <div>
+            <h2 class="text-xl font-bold text-[#102a43]">System Error States & Edge Cases Showcase</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Architectural review of user-facing error boundaries, rate limiting, and network fault tolerance.</p>
+          </div>
+          <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-200 self-start">
+            Fault Tolerance Specs
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          <!-- Case 1: OTP Rate Limiting (429 Cooldown) -->
+          <div class="border border-rose-200 rounded-xl p-4 bg-rose-50/40 space-y-2.5">
+            <div class="flex items-center gap-2 text-rose-900 font-bold">
+              <i class="fa-solid fa-hourglass-half text-rose-600"></i>
+              <span>1. OTP Rate Limiting & Cooldown (HTTP 429)</span>
+            </div>
+            <p class="text-[11px] text-slate-600 leading-relaxed">
+              Triggered when a candidate requests more than 3 OTPs within a 10-minute sliding window via WhatsApp Edge Function.
+            </p>
+            <div class="p-3 bg-white border border-rose-200 rounded-lg text-rose-900 space-y-1">
+              <span class="font-bold text-[11px] flex items-center gap-1"><i class="fa-solid fa-circle-exclamation text-rose-600"></i> Rate Limit Exceeded:</span>
+              <p class="text-[10px] text-slate-600">Too many requests. Please wait <strong class="text-rose-700 font-mono">42 seconds</strong> before requesting another OTP.</p>
+              <button disabled class="mt-2 w-full py-1 bg-slate-100 text-slate-400 font-bold rounded text-[11px] cursor-not-allowed">Resend Disabled (Cooldown Active)</button>
+            </div>
+          </div>
+
+          <!-- Case 2: File Upload Failures -->
+          <div class="border border-amber-200 rounded-xl p-4 bg-amber-50/40 space-y-2.5">
+            <div class="flex items-center gap-2 text-amber-900 font-bold">
+              <i class="fa-solid fa-cloud-arrow-down text-amber-600"></i>
+              <span>2. File Upload Validation Failure</span>
+            </div>
+            <p class="text-[11px] text-slate-600 leading-relaxed">
+              Enforces strict 2MB client-side and Supabase Storage bucket policy. Rejects executable or oversized files immediately.
+            </p>
+            <div class="p-3 bg-white border border-amber-200 rounded-lg text-amber-900 space-y-1">
+              <span class="font-bold text-[11px] flex items-center gap-1"><i class="fa-solid fa-triangle-exclamation text-amber-600"></i> File Size Exceeded:</span>
+              <p class="text-[10px] text-slate-600">Selected file <code class="font-mono bg-slate-100 px-1">Degree_Scan.pdf</code> is 4.8 MB. Maximum permitted size is 2.0 MB.</p>
+              <button class="mt-2 text-blue-700 font-bold text-[10px] hover:underline flex items-center gap-1"><i class="fa-solid fa-rotate-left"></i> Select a smaller file</button>
+            </div>
+          </div>
+
+          <!-- Case 3: Interview-Slot Conflict / Race Condition -->
+          <div class="border border-indigo-200 rounded-xl p-4 bg-indigo-50/40 space-y-2.5">
+            <div class="flex items-center gap-2 text-indigo-900 font-bold">
+              <i class="fa-solid fa-people-arrows text-indigo-600"></i>
+              <span>3. Interview Slot Race Condition Conflict</span>
+            </div>
+            <p class="text-[11px] text-slate-600 leading-relaxed">
+              Occurs when two candidates attempt to book the final available slot simultaneously. Handled via row-level PostgreSQL locking (<code class="font-mono">FOR UPDATE</code>).
+            </p>
+            <div class="p-3 bg-white border border-indigo-200 rounded-lg text-indigo-900 space-y-1">
+              <span class="font-bold text-[11px] flex items-center gap-1"><i class="fa-solid fa-calendar-xmark text-indigo-600"></i> Slot Just Booked:</span>
+              <p class="text-[10px] text-slate-600">The 10:30 AM slot on 05 Nov 2026 was just filled by another candidate. Please select another slot.</p>
+              <button class="mt-2 px-3 py-1 bg-indigo-700 text-white font-bold rounded text-[10px] hover:bg-indigo-800">Refresh Available Slots</button>
+            </div>
+          </div>
+
+          <!-- Case 4: Network Disconnection / Offline Error -->
+          <div class="border border-slate-300 rounded-xl p-4 bg-slate-100/60 space-y-2.5">
+            <div class="flex items-center gap-2 text-slate-900 font-bold">
+              <i class="fa-solid fa-wifi text-slate-600"></i>
+              <span>4. Network Disconnection / Connection Timeout</span>
+            </div>
+            <p class="text-[11px] text-slate-600 leading-relaxed">
+              Handles dropped cellular connectivity in rural Maharashtra talukas without data loss using localStorage draft caching.
+            </p>
+            <div class="p-3 bg-white border border-slate-200 rounded-lg text-slate-800 space-y-1">
+              <span class="font-bold text-[11px] flex items-center gap-1"><i class="fa-solid fa-plug-circle-xmark text-rose-600"></i> Connection Interrupted:</span>
+              <p class="text-[10px] text-slate-600">Your draft was safely cached locally. We will automatically re-synchronize when connection is restored.</p>
+              <button class="mt-2 px-3 py-1 bg-[#102a43] text-white font-bold rounded text-[10px] hover:bg-slate-800 flex items-center gap-1"><i class="fa-solid fa-arrow-rotate-right"></i> Retry Connection Now</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs flex items-center justify-between">
+          <span class="text-slate-600 font-medium">All error boundaries use graceful UI feedback without unhandled JavaScript crashes or blank screens.</span>
+          <button onclick="switchScreen('screen-job')" class="px-4 py-1.5 bg-[#102a43] hover:bg-slate-800 text-white font-bold rounded-lg text-xs">
+            Return to Screen 1
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Interactive Switcher Script -->
+  <script>
+    function switchScreen(screenId) {
+      document.querySelectorAll('.screen-view').forEach(function(el) {
+        el.classList.add('hidden');
+        el.style.display = 'none';
+      });
+      var target = document.getElementById(screenId);
+      if (target) {
+        target.classList.remove('hidden');
+        target.style.display = 'block';
+        var select = document.getElementById('screenSelect');
+        if (select) select.value = screenId;
+        try {
+          if (history.replaceState) {
+            history.replaceState(null, null, '#' + screenId);
+          }
+        } catch (e) {}
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+
+    function switchDashTab(tabId) {
+      document.querySelectorAll('.dash-tab-content').forEach(function(el) {
+        el.classList.add('hidden');
+        el.style.display = 'none';
+      });
+      document.querySelectorAll('.dash-tab-btn').forEach(function(btn) {
+        btn.classList.remove('bg-[#102a43]', 'text-white');
+        btn.classList.add('text-slate-600', 'hover:bg-slate-100');
+      });
+      var activeTab = document.getElementById(tabId);
+      if (activeTab) {
+        activeTab.classList.remove('hidden');
+        activeTab.style.display = 'block';
+      }
+      var activeBtn = document.getElementById('btn-' + tabId);
+      if (activeBtn) {
+        activeBtn.classList.remove('text-slate-600', 'hover:bg-slate-100');
+        activeBtn.classList.add('bg-[#102a43]', 'text-white');
+      }
+    }
+
+    function toggleOtpRateLimit() {
+      var box = document.getElementById('otp-rate-limit-box');
+      if (box) {
+        if (box.classList.contains('hidden')) {
+          box.classList.remove('hidden');
+          box.style.display = 'block';
+        } else {
+          box.classList.add('hidden');
+          box.style.display = 'none';
+        }
+      }
+    }
+
+    function openRescheduleModal() {
+      alert("Opening Ambad Panel Interview Slot Selector:\n\nAvailable Dates:\n• 03 Nov 2026 (10:00 AM - 01:00 PM)\n• 04 Nov 2026 (02:00 PM - 05:00 PM)\n• 05 Nov 2026 (10:00 AM - 01:00 PM)\n\nSelecting a slot will confirm the booking and dispatch a confirmation WhatsApp message.");
+    }
+
+    // Auto-initialize on page load
+    (function init() {
+      var hash = window.location.hash.replace('#', '');
+      if (hash && document.getElementById(hash)) {
+        switchScreen(hash);
+      } else {
+        switchScreen('screen-job');
+      }
+      window.addEventListener('hashchange', function() {
+        var h = window.location.hash.replace('#', '');
+        if (h && document.getElementById(h)) {
+          switchScreen(h);
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

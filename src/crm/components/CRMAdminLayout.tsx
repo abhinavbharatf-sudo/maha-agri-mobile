@@ -1,8 +1,17 @@
 import { useState, useEffect } from 'react';
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Users, Settings, Menu, X, ChevronRight, Phone } from 'lucide-react';
+import { LayoutDashboard, Users, UserCheck, Clock, Settings, Menu, X, ChevronRight, Phone, ShieldAlert, LogIn, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../lib/auth/AuthContext';
+import type { RoleKey } from '../../types/database';
+
+export const CRM_AUTHORIZED_ROLES: RoleKey[] = [
+  'telecaller',
+  'team_leader',
+  'crm_manager',
+  'admin',
+  'super_admin',
+];
 
 const navGroups = [
   {
@@ -14,7 +23,9 @@ const navGroups = [
   {
     label: 'Lead Management',
     items: [
-      { path: '/crm/leads', label: 'All Leads', icon: Users },
+      { path: '/crm/leads', label: 'All Leads', icon: Users, exact: true },
+      { path: '/crm/visitors', label: 'Visitor — OTP Verified', icon: UserCheck },
+      { path: '/crm/followups', label: 'Follow-ups', icon: Clock },
     ],
   },
   {
@@ -26,16 +37,73 @@ const navGroups = [
 ];
 
 export default function CRMAdminLayout() {
-  const { roleKey } = useAuth();
+  const { user, roleKey, loading, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => { setSidebarOpen(false); }, [location.pathname]);
 
-  const currentLabel = navGroups
+  const currentItem = navGroups
     .flatMap(g => g.items)
-    .find(i => location.pathname.startsWith(i.path))?.label ?? 'CRM Panel';
+    .find(i => location.pathname === i.path || (i.path !== '/crm/leads' && location.pathname.startsWith(i.path)));
+  const currentLabel = currentItem?.label ?? (location.pathname.startsWith('/crm/leads/') ? 'Lead Details' : 'CRM Workspace');
+
+  // 1. Loading state while authentication and role profile are resolving
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
+        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-slate-300 font-medium text-sm">Verifying CRM Authorization...</p>
+      </div>
+    );
+  }
+
+  // 2. Unauthenticated check: redirect to existing login page with return target
+  if (!user) {
+    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+  }
+
+  // 3. Authenticated but unauthorized role check
+  const isAuthorized = roleKey && CRM_AUTHORIZED_ROLES.includes(roleKey);
+  if (!isAuthorized) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-white">
+        <div className="max-w-md w-full bg-slate-800/90 border border-slate-700 rounded-2xl p-6 sm:p-8 text-center shadow-2xl backdrop-blur-sm">
+          <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto mb-5 text-red-400">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+          <h2 className="text-xl sm:text-2xl font-bold text-white mb-2">Access Denied</h2>
+          <p className="text-slate-300 text-sm mb-4 leading-relaxed">
+            CRM Workspace access is restricted to authorized personnel. Your current role (<span className="font-mono text-amber-300">{roleKey || 'unassigned'}</span>) does not have permission to view or manage recruitment leads.
+          </p>
+          <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-700/60 text-xs text-slate-400 mb-6 text-left">
+            <span className="font-semibold text-slate-300 block mb-1">Authorized Roles:</span>
+            Telecaller, Team Leader, CRM Manager, Administrator, Super Admin.
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              type="button"
+              onClick={async () => {
+                await signOut();
+                navigate('/login', { replace: true });
+              }}
+              className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl text-sm transition-colors shadow-sm"
+            >
+              <LogIn className="w-4 h-4" /> Switch Account
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded-xl text-sm transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" /> Return Home
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex font-sans">

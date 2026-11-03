@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   ShieldCheck, ArrowLeft, Send, CheckCircle2,
-  User, MapPin, GraduationCap, Briefcase, AlertCircle, Lock, Award
+  User, MapPin, GraduationCap, Briefcase, AlertCircle, Lock, Award, ClipboardList
 } from 'lucide-react';
 import type { RmsJobPosting } from '../../lib/types';
-import type { MasterProfileFormData, JobSpecificFormData } from '../types';
+import type { MasterProfileFormData, JobSpecificFormData, JobQuestionnaire, JobQuestion } from '../types';
 import { calculateAge, maskAadhaar } from '../utils/verhoeff';
 
 interface Step3ReviewSubmitProps {
@@ -14,6 +14,7 @@ interface Step3ReviewSubmitProps {
   submitting: boolean;
   onBack: () => void;
   onSubmit: () => void;
+  onEditQuestionnaire?: () => void;
 }
 
 const STANDARD_DECLARATION =
@@ -26,9 +27,26 @@ export default function Step3ReviewSubmit({
   submitting,
   onBack,
   onSubmit,
+  onEditQuestionnaire,
 }: Step3ReviewSubmitProps) {
   const [acknowledged, setAcknowledged] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  const questionnaire: JobQuestionnaire | null = useMemo(() => {
+    const q = (job as any)?.questionnaire || (job?.vacancy_allocations as any)?.questionnaire;
+    if (
+      q &&
+      q.status !== 'draft' &&
+      q.isVisibleToCandidates !== false &&
+      Array.isArray(q.questions) &&
+      q.questions.some((item: any) => item.isVisible !== false)
+    ) {
+      return q;
+    }
+    return null;
+  }, [job]);
+
+  const hasQuestionnaire = Boolean(questionnaire);
 
   // Administrative or fallback declaration text
   const declarationText = job.acknowledgement_text?.trim() || STANDARD_DECLARATION;
@@ -51,7 +69,9 @@ export default function Step3ReviewSubmit({
           <ShieldCheck className="w-5 h-5" />
         </div>
         <div>
-          <h2 className="text-base font-bold text-[#102a43]">Step 4: Review Application &amp; Declaration</h2>
+          <h2 className="text-base font-bold text-[#102a43]">
+            {hasQuestionnaire ? 'Step 5: Review Application & Declaration' : 'Step 4: Review Application & Declaration'}
+          </h2>
           <p className="text-xs text-[#627d98]">
             Carefully verify all details below before proceeding to final submission.
           </p>
@@ -192,14 +212,23 @@ export default function Step3ReviewSubmit({
           </div>
 
           <div>
+            <span className="text-[#627d98] block mb-0.5">Posting Level</span>
+            <span className="font-semibold text-[#102a43]">
+              {job.posting_level || (job.vacancy_level === 'district' || job.vacancy_allocations?.vacancy_level === 'district' ? 'District-wise' : 'Taluka-wise')}
+            </span>
+          </div>
+
+          <div>
             <span className="text-[#627d98] block mb-0.5">Preferred District</span>
             <span className="font-semibold text-[#102a43]">{jobSpecific.preferredDistrict || '—'}</span>
           </div>
 
-          <div>
-            <span className="text-[#627d98] block mb-0.5">Preferred Taluka</span>
-            <span className="font-semibold text-[#102a43]">{jobSpecific.preferredTaluka || '—'}</span>
-          </div>
+          {job.posting_level !== 'District-wise' && job.vacancy_level !== 'district' && job.vacancy_allocations?.vacancy_level !== 'district' && (
+            <div>
+              <span className="text-[#627d98] block mb-0.5">Preferred Taluka</span>
+              <span className="font-semibold text-[#102a43]">{jobSpecific.preferredTaluka || '—'}</span>
+            </div>
+          )}
 
           {jobSpecific.locationConfirmed && (
             <div className="sm:col-span-2">
@@ -210,6 +239,43 @@ export default function Step3ReviewSubmit({
             </div>
           )}
         </div>
+
+        {/* Answered Location & Mobility Questions */}
+        {jobSpecific.locationAnswers && Object.keys(jobSpecific.locationAnswers).length > 0 && (
+          <div className="pt-3 border-t border-slate-100 space-y-2">
+            <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              Candidate Work Location Preferences
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              {Object.entries(jobSpecific.locationAnswers).map(([qId, val]) => {
+                const questionObj = (job.location_questions || job.vacancy_allocations?.location_questions)?.find(
+                  (q: any) => q.id === qId
+                );
+                const qText = questionObj?.questionText || (
+                  qId === 'work_outside_district'
+                    ? 'Willing to work outside native district'
+                    : qId === 'travel_within_district'
+                    ? 'Willing to travel within assigned district'
+                    : qId === 'work_travel_assigned_taluka'
+                    ? 'Willing to work and travel in assigned taluka'
+                    : qId === 'work_another_taluka'
+                    ? 'Willing to work in another taluka within assigned district'
+                    : qId
+                );
+                return (
+                  <div key={qId} className="p-2.5 rounded-lg border border-slate-200 bg-slate-50/60 flex items-center justify-between gap-2">
+                    <span className="text-slate-700 font-medium">{qText}</span>
+                    <span className={`px-2 py-0.5 rounded font-bold text-[11px] shrink-0 ${
+                      val === true ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-slate-200 text-slate-700'
+                    }`}>
+                      {val === true ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Summary Card 3: Educational Qualifications & Experience ─────────── */}
@@ -336,6 +402,82 @@ export default function Step3ReviewSubmit({
         </div>
       </div>
 
+      {/* ── Summary Card 4: Job-Specific Questionnaire Responses ──────────── */}
+      {hasQuestionnaire && questionnaire && (
+        <div className="border border-slate-200 rounded-xl p-5 bg-white space-y-4 shadow-2xs">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+            <div className="flex items-center gap-2 text-[#102a43]">
+              <ClipboardList className="w-4 h-4 text-emerald-700" />
+              <h3 className="text-xs font-bold uppercase tracking-wider">
+                Job-Specific Assessment Responses
+              </h3>
+            </div>
+            {onEditQuestionnaire && (
+              <button
+                type="button"
+                onClick={onEditQuestionnaire}
+                className="text-xs font-bold text-emerald-700 hover:text-emerald-900 hover:underline cursor-pointer"
+              >
+                Edit Responses
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-3 text-xs">
+            {questionnaire.questions.map((q: JobQuestion, idx: number) => {
+              // 1. Skip questions individually hidden by HR
+              if (q.isVisible === false) return null;
+
+              const answers = jobSpecific.questionnaireResponses || {};
+              const rawVal = answers[q.id];
+
+              // 2. Check conditional visibility & parent cascade
+              if (q.condition) {
+                const parentQ = questionnaire.questions.find(item => item.id === q.condition!.dependsOnQuestionId);
+                if (parentQ && parentQ.isVisible === false) return null;
+
+                const parentVal = answers[q.condition.dependsOnQuestionId];
+                const matches = Array.isArray(parentVal)
+                  ? parentVal.includes(q.condition.expectedValue)
+                  : parentVal === q.condition.expectedValue;
+                if (!matches) return null;
+              }
+
+              let displayVal = '—';
+              if (rawVal === true) displayVal = 'Yes';
+              else if (rawVal === false) displayVal = 'No';
+              else if (Array.isArray(rawVal)) {
+                if (q.options && q.options.length > 0) {
+                  displayVal = rawVal
+                    .map(v => q.options?.find(o => o.value === v)?.label || v)
+                    .join(', ') || '—';
+                } else {
+                  displayVal = rawVal.join(', ') || '—';
+                }
+              } else if (rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== '') {
+                if (q.type === 'radio' || q.type === 'select') {
+                  const opt = q.options?.find(o => o.value === rawVal);
+                  displayVal = opt ? opt.label : String(rawVal);
+                } else {
+                  displayVal = String(rawVal);
+                }
+              }
+
+              return (
+                <div key={q.id || idx} className="p-3 bg-slate-50 rounded-xl border border-slate-200/70">
+                  <span className="font-semibold text-slate-600 block mb-1">
+                    {idx + 1}. {q.questionText}
+                  </span>
+                  <span className="font-bold text-[#102a43] whitespace-pre-wrap">
+                    {displayVal}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* ── Statutory Legal Declaration ──────────────────────────────────────── */}
       <div className="border border-slate-200 rounded-xl p-5 bg-slate-50 space-y-4">
         <div className="flex items-center gap-2 pb-2 border-b border-slate-200 text-[#102a43]">
@@ -377,7 +519,7 @@ export default function Step3ReviewSubmit({
           disabled={submitting}
           className="inline-flex items-center gap-1.5 px-4 py-2.5 border border-slate-300 text-slate-700 text-xs font-semibold rounded-xl hover:bg-slate-50 transition-colors disabled:opacity-50"
         >
-          <ArrowLeft className="w-4 h-4" /> Back to Position Details
+          <ArrowLeft className="w-4 h-4" /> {hasQuestionnaire ? 'Back to Questionnaire' : 'Back to Position Details'}
         </button>
 
         <button

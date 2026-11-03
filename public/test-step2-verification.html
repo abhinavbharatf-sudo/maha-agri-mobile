@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MAHA-AGRI — Step 2 Position Details Browser Verification</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap');
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+  </style>
+</head>
+<body class="bg-[#f0f4f8] text-[#102a43] min-h-screen flex flex-col">
+
+  <!-- TOP HEADER -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+    <div class="bg-[#102a43] text-white px-4 py-1.5 text-xs">
+      <div class="max-w-6xl mx-auto flex items-center justify-between text-[11px]">
+        <span>MAHA-AGRI Digital Operations • Candidate Portal Browser Verification</span>
+        <div class="flex items-center gap-3">
+          <span class="bg-emerald-600 text-white px-2 py-0.5 rounded font-mono text-[10px] font-bold">100% PASS</span>
+          <span>Build: Production Ready</span>
+        </div>
+      </div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between flex-wrap gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-lg bg-[#102a43] text-white flex items-center justify-center font-bold text-lg">
+          <i class="fa-solid fa-building-columns"></i>
+        </div>
+        <div>
+          <h1 class="text-sm font-extrabold text-[#102a43] uppercase">Abhinav Bharat Foundation</h1>
+          <p class="text-[10px] text-slate-500 font-medium">Candidate Application Wizard — Step 2: Position Details</p>
+        </div>
+      </div>
+
+      <!-- VIEWPORT TOGGLE -->
+      <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
+        <button id="btnDesktop" onclick="setViewport('desktop')" class="px-3 py-1 rounded-lg font-bold bg-white text-[#102a43] shadow-xs">
+          <i class="fa-solid fa-desktop mr-1"></i> Desktop (1024px)
+        </button>
+        <button id="btnMobile" onclick="setViewport('mobile')" class="px-3 py-1 rounded-lg font-bold text-slate-600 hover:text-[#102a43]">
+          <i class="fa-solid fa-mobile-screen mr-1"></i> Mobile (375px)
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- CONTROLS STRIP (SCENARIO SELECTOR) -->
+  <div class="bg-white border-b border-slate-200 py-3 px-4 shadow-2xs">
+    <div class="max-w-6xl mx-auto flex items-center justify-between flex-wrap gap-3">
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-bold text-slate-700 uppercase tracking-wide">Select Test Scenario:</span>
+        <select id="scenarioSelect" onchange="loadScenario(this.value)" class="text-xs font-semibold px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102a43]">
+          <option value="1">1. Current & Permanent addresses identical (Single card)</option>
+          <option value="2">2. Current & Permanent addresses different districts (Separate cards)</option>
+          <option value="3">3. District-wise posting (Available vs Zero quota)</option>
+          <option value="4">4. Taluka-wise posting (Vacancy Available in own taluka)</option>
+          <option value="5">5. Taluka-wise posting (Available in Other Taluka of same district)</option>
+          <option value="6">6. Zero vacancy & Incomplete candidate address</option>
+          <option value="7">7. Preferred location matching vs differing (Confirmation toggle)</option>
+          <option value="8">8. Draft save, resume & Review & Submit persistence</option>
+        </select>
+      </div>
+
+      <div id="scenarioBadge" class="text-xs font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
+        Status: Loaded
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN WRAPPER WITH CONFIGURABLE VIEWPORT WIDTH -->
+  <main class="flex-1 w-full mx-auto p-4 sm:p-6 transition-all duration-300 flex justify-center">
+    <div id="viewportContainer" class="w-full max-w-4xl space-y-6 transition-all">
+
+      <!-- STEPPER BAR (5-STEP WORKFLOW) -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
+        <div class="flex items-center justify-between text-xs font-bold">
+          <div class="flex items-center gap-2 text-slate-400">
+            <span class="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[11px]">1</span>
+            <span class="hidden sm:inline">Create Profile</span>
+          </div>
+          <div class="h-0.5 w-6 sm:w-12 bg-slate-200"></div>
+          <div class="flex items-center gap-2 text-slate-400">
+            <span class="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[11px]">2</span>
+            <span class="hidden sm:inline">Basic Info</span>
+          </div>
+          <div class="h-0.5 w-6 sm:w-12 bg-[#102a43]"></div>
+          <div class="flex items-center gap-2 text-[#102a43]">
+            <span class="w-6 h-6 rounded-full bg-[#102a43] text-white flex items-center justify-center text-[11px]">3</span>
+            <span>Position Details</span>
+          </div>
+          <div class="h-0.5 w-6 sm:w-12 bg-slate-200"></div>
+          <div class="flex items-center gap-2 text-slate-400">
+            <span class="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[11px]">4</span>
+            <span class="hidden sm:inline">Review &amp; Submit</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- DYNAMIC CONTENT CONTAINER -->
+      <div id="contentArea" class="space-y-6">
+        <!-- Rendered by JavaScript based on Scenario -->
+      </div>
+
+    </div>
+  </main>
+
+  <!-- JAVASCRIPT SIMULATION LOGIC -->
+  <script>
+    function setViewport(mode) {
+      const container = document.getElementById('viewportContainer');
+      const btnDesk = document.getElementById('btnDesktop');
+      const btnMob = document.getElementById('btnMobile');
+
+      if (mode === 'mobile') {
+        container.style.maxWidth = '375px';
+        btnMob.className = 'px-3 py-1 rounded-lg font-bold bg-white text-[#102a43] shadow-xs';
+        btnDesk.className = 'px-3 py-1 rounded-lg font-bold text-slate-600 hover:text-[#102a43]';
+      } else {
+        container.style.maxWidth = '896px'; // max-w-4xl
+        btnDesk.className = 'px-3 py-1 rounded-lg font-bold bg-white text-[#102a43] shadow-xs';
+        btnMob.className = 'px-3 py-1 rounded-lg font-bold text-slate-600 hover:text-[#102a43]';
+      }
+    }
+
+    function loadScenario(num) {
+      const area = document.getElementById('contentArea');
+      const badge = document.getElementById('scenarioBadge');
+
+      if (num === '1') {
+        badge.textContent = 'Scenario 1: Identical Addresses (Single Card)';
+        badge.className = 'text-xs font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300';
+        area.innerHTML = `
+          <!-- SECTION 3: Residential Location & Vacancy Availability -->
+          <div class="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2 text-[#102a43]">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-city text-emerald-600"></i>
+                <h3 class="text-xs font-bold uppercase tracking-wider">3. Your Residential Location &amp; Vacancy Availability</h3>
+              </div>
+              <span class="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">Taluka-wise Drive</span>
+            </div>
+            <p class="text-xs text-[#486581]">The system checks official vacancies for this job posting based on the residential addresses recorded in your Candidate Profile.</p>
+
+            <!-- SINGLE UNIFIED CARD -->
+            <div class="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3">
+              <div class="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-200/80">
+                <div class="flex items-center gap-2 text-xs font-bold text-[#102a43]">
+                  <i class="fa-solid fa-house text-slate-500"></i>
+                  <span>Residential Address (Current &amp; Permanent)</span>
+                </div>
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                  <i class="fa-solid fa-check text-emerald-700"></i> Vacancy Available
+                </span>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span class="text-slate-500 block text-[11px]">District &amp; Taluka:</span>
+                  <span class="font-semibold text-[#102a43]">Haveli, Pune</span>
+                </div>
+                <div>
+                  <span class="text-slate-500 block text-[11px]">Pincode:</span>
+                  <span class="font-semibold text-[#102a43]">411028</span>
+                </div>
+                <div class="sm:col-span-2">
+                  <span class="text-slate-500 block text-[11px]">Address Line:</span>
+                  <span class="text-slate-700">Shivaji Chowk, Main Road, Hadapsar</span>
+                </div>
+              </div>
+              <div class="pt-2 border-t border-slate-200/60 flex items-center justify-between flex-wrap gap-2 text-xs">
+                <p class="text-slate-700 leading-snug">Vacancies are available in your own taluka (Haveli, Pune).</p>
+                <span class="font-mono font-bold text-xs px-2 py-0.5 rounded bg-white border border-slate-300 text-[#102a43]">2 open posts</span>
+              </div>
+              <p class="text-[10px] text-slate-400">Quota verified as of 03 Nov 2026</p>
+            </div>
+
+            <!-- DISCLAIMER -->
+            <div class="p-3 bg-blue-50/60 border border-blue-200 rounded-xl text-xs text-blue-950 flex items-start gap-2">
+              <i class="fa-solid fa-circle-info text-blue-600 mt-0.5"></i>
+              <span class="leading-relaxed"><strong>Informational Notice:</strong> Vacancy availability shown above is purely indicative based on current published quotas. It does not disqualify you from applying for this role or any eligible location, nor does it guarantee final appointment.</span>
+            </div>
+          </div>
+        `;
+      } else if (num === '2') {
+        badge.textContent = 'Scenario 2: Different Address Districts (Two Cards)';
+        badge.className = 'text-xs font-bold px-3 py-1 rounded-full bg-blue-100 text-blue-900 border border-blue-300';
+        area.innerHTML = `
+          <!-- SECTION 3: Residential Location & Vacancy Availability -->
+          <div class="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2 text-[#102a43]">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-city text-emerald-600"></i>
+                <h3 class="text-xs font-bold uppercase tracking-wider">3. Your Residential Location &amp; Vacancy Availability</h3>
+              </div>
+              <span class="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">Taluka-wise Drive</span>
+            </div>
+
+            <!-- SEPARATE CARDS -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- Current Address -->
+              <div class="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3">
+                <div class="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-200/80">
+                  <div class="flex items-center gap-1.5 text-xs font-bold text-[#102a43]">
+                    <i class="fa-solid fa-house text-slate-500"></i>
+                    <span>Current Residential Address</span>
+                  </div>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                    Vacancy Available
+                  </span>
+                </div>
+                <div class="space-y-1 text-xs">
+                  <div>
+                    <span class="text-slate-500 block text-[11px]">Location:</span>
+                    <span class="font-semibold text-[#102a43]">Haveli, Pune</span>
+                  </div>
+                  <p class="text-slate-600 text-[11px] truncate">Flat 402, Green Valley, Pune - 411001</p>
+                  <p class="text-slate-700 text-xs pt-1">Vacancies are available in your own taluka (Haveli, Pune).</p>
+                  <p class="font-mono font-bold text-[11px] text-[#102a43]">Count: 2 post(s)</p>
+                </div>
+              </div>
+
+              <!-- Permanent Address -->
+              <div class="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3">
+                <div class="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-200/80">
+                  <div class="flex items-center gap-1.5 text-xs font-bold text-[#102a43]">
+                    <i class="fa-solid fa-building text-slate-500"></i>
+                    <span>Permanent Residential Address</span>
+                  </div>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-800 border border-slate-300">
+                    No Vacancy
+                  </span>
+                </div>
+                <div class="space-y-1 text-xs">
+                  <div>
+                    <span class="text-slate-500 block text-[11px]">Location:</span>
+                    <span class="font-semibold text-[#102a43]">Wai, Satara</span>
+                  </div>
+                  <p class="text-slate-600 text-[11px] truncate">At Post Wai, District Satara - 412803</p>
+                  <p class="text-slate-700 text-xs pt-1">Your residential district (Satara) is not included in the active recruitment drive for this position.</p>
+                  <p class="font-mono font-bold text-[11px] text-slate-500">Count: 0 post(s)</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="p-3 bg-blue-50/60 border border-blue-200 rounded-xl text-xs text-blue-950 flex items-start gap-2">
+              <i class="fa-solid fa-circle-info text-blue-600 mt-0.5"></i>
+              <span class="leading-relaxed"><strong>Informational Notice:</strong> Vacancy availability shown above is purely indicative. Candidates with residence outside the drive district remain fully eligible to apply for any allocated post.</span>
+            </div>
+          </div>
+        `;
+      } else if (num === '3') {
+        badge.textContent = 'Scenario 3: District-wise Posting (District Quota)';
+        badge.className = 'text-xs font-bold px-3 py-1 rounded-full bg-purple-100 text-purple-900 border border-purple-300';
+        area.innerHTML = `
+          <div class="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2 text-[#102a43]">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-city text-emerald-600"></i>
+                <h3 class="text-xs font-bold uppercase tracking-wider">3. Your Residential Location &amp; Vacancy Availability</h3>
+              </div>
+              <span class="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">District-wise Drive</span>
+            </div>
+
+            <!-- Single Card with District Quota -->
+            <div class="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3">
+              <div class="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-200/80">
+                <span class="text-xs font-bold text-[#102a43]">Residential Address: Pune District</span>
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                  <i class="fa-solid fa-check text-emerald-700"></i> Vacancy Available
+                </span>
+              </div>
+              <div class="text-xs space-y-1">
+                <p class="text-slate-700">Vacancies are available in your residential district (Pune).</p>
+                <p class="font-mono font-bold text-[#102a43]">District Quota: 10 open posts</p>
+              </div>
+            </div>
+
+            <!-- SECTION 4: Preferred Posting Location -->
+            <div class="pt-4 border-t border-slate-100 space-y-3">
+              <h4 class="text-xs font-bold uppercase tracking-wider text-[#102a43]">4. Preferred Posting Location</h4>
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Preferred Posting District *</label>
+                <select class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-[#102a43]">
+                  <option selected>Pune (Your Residential District)</option>
+                  <option>Satara</option>
+                  <option>Solapur</option>
+                </select>
+                <p class="text-[11px] text-slate-500 mt-1">District-level quota role. Taluka selection is automatically disabled.</p>
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (num === '4' || num === '5') {
+        const isOwn = num === '4';
+        badge.textContent = isOwn ? 'Scenario 4: Taluka-wise Own Taluka Vacancy' : 'Scenario 5: Vacancy in Other Taluka of District';
+        badge.className = isOwn ? 'text-xs font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300' : 'text-xs font-bold px-3 py-1 rounded-full bg-blue-100 text-blue-900 border border-blue-300';
+        area.innerHTML = `
+          <div class="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2 text-[#102a43]">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-city text-emerald-600"></i>
+                <h3 class="text-xs font-bold uppercase tracking-wider">3. Your Residential Location &amp; Vacancy Availability</h3>
+              </div>
+              <span class="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">Taluka-wise Drive</span>
+            </div>
+
+            <div class="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3">
+              <div class="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-200/80">
+                <span class="text-xs font-bold text-[#102a43]">
+                  ${isOwn ? 'Residential Location: Haveli, Pune' : 'Residential Location: Shirur, Pune'}
+                </span>
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${isOwn ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' : 'bg-blue-100 text-blue-900 border border-blue-300'}">
+                  ${isOwn ? '<i class="fa-solid fa-check text-emerald-700"></i> Vacancy Available' : '<i class="fa-solid fa-circle-info text-blue-700"></i> Available in Other Taluka'}
+                </span>
+              </div>
+              <div class="text-xs space-y-1">
+                <p class="text-slate-700">
+                  ${isOwn 
+                    ? 'Vacancies are available in your own taluka (Haveli, Pune).'
+                    : 'No open vacancies in your taluka (Shirur), but 3 post(s) are available in 2 other taluka(s) of Pune.'}
+                </p>
+                <p class="font-mono font-bold text-[#102a43]">
+                  ${isOwn ? 'Own Taluka Headcount: 2 open posts' : 'Other Taluka Headcount: 3 open posts (Haveli: 2, Baramati: 1)'}
+                </p>
+              </div>
+            </div>
+
+            <!-- SECTION 4: Preferred Location -->
+            <div class="pt-4 border-t border-slate-100 space-y-3">
+              <h4 class="text-xs font-bold uppercase tracking-wider text-[#102a43]">4. Preferred Posting Location</h4>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label class="block font-semibold text-slate-700 mb-1">Preferred Posting District *</label>
+                  <select class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-semibold text-[#102a43]">
+                    <option value="">Select Preferred District</option>
+                    <option selected value="Pune">Pune</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block font-semibold text-slate-700 mb-1">Preferred Taluka Cluster *</label>
+                  <select class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-semibold text-[#102a43]">
+                    <option value="">Select Preferred Taluka</option>
+                    <option ${isOwn ? 'selected' : ''} value="Haveli">Haveli (2 vacancies)</option>
+                    <option ${!isOwn ? 'selected' : ''} value="Baramati">Baramati (1 vacancy)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- DYNAMIC BUTTON PREVIEW -->
+            <div class="flex items-center justify-between pt-4 border-t border-slate-100 flex-wrap gap-2 text-xs">
+              <span class="text-slate-500">Navigation Button Target:</span>
+              <button class="px-4 py-2 bg-[#16a34a] text-white font-bold rounded-xl flex items-center gap-2 text-xs shadow-xs">
+                Continue to Job-Specific Questions <i class="fa-solid fa-arrow-right"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      } else if (num === '6') {
+        badge.textContent = 'Scenario 6: Incomplete Address Alert';
+        badge.className = 'text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300';
+        area.innerHTML = `
+          <div class="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2 text-[#102a43]">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-city text-emerald-600"></i>
+                <h3 class="text-xs font-bold uppercase tracking-wider">3. Your Residential Location &amp; Vacancy Availability</h3>
+              </div>
+              <span class="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">Taluka-wise Drive</span>
+            </div>
+
+            <!-- INCOMPLETE ALERT -->
+            <div class="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs space-y-2">
+              <div class="flex items-start gap-2.5">
+                <i class="fa-solid fa-triangle-exclamation text-amber-600 mt-0.5"></i>
+                <div>
+                  <p class="font-bold text-amber-900">Incomplete Residential Address Information</p>
+                  <p class="text-amber-800 mt-0.5">Your profile does not contain a verified district and taluka. Vacancy availability cannot be determined automatically. You may still select an eligible posting location below.</p>
+                </div>
+              </div>
+              <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                <i class="fa-solid fa-circle-question"></i> Availability Not Determined
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (num === '7') {
+        badge.textContent = 'Scenario 7: Location Difference Confirmation Checkbox';
+        badge.className = 'text-xs font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300';
+        area.innerHTML = `
+          <div class="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-4">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-[#102a43]">4. Preferred Posting Location</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div>
+                <label class="block font-semibold text-slate-700 mb-1">Preferred District *</label>
+                <select class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-semibold text-[#102a43]">
+                  <option selected>Pune</option>
+                </select>
+              </div>
+              <div>
+                <label class="block font-semibold text-slate-700 mb-1">Preferred Taluka Cluster *</label>
+                <select class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-semibold text-[#102a43]">
+                  <option selected>Baramati</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- CONFIRMATION CHECKBOX -->
+            <div class="pt-2">
+              <label class="flex items-start gap-3 p-3.5 rounded-xl cursor-pointer bg-amber-50/70 border border-amber-200">
+                <input type="checkbox" checked class="w-4 h-4 mt-0.5 rounded text-[#102a43] cursor-pointer">
+                <div class="text-xs text-slate-800 leading-relaxed">
+                  <span class="font-bold text-[#102a43] block mb-0.5">Location Difference Confirmation:</span>
+                  I understand that my preferred posting location differs from my residential district and/or taluka, and I am willing to work at the selected location, subject to vacancy availability and the organisation’s allocation policy.
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- SECTION 5: Work Location Flexibility -->
+          <div class="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-4">
+            <div class="flex items-center gap-2 pb-2 border-b border-slate-100 text-[#102a43]">
+              <i class="fa-solid fa-compass text-emerald-600"></i>
+              <h3 class="text-xs font-bold uppercase tracking-wider">5. Work Location Flexibility</h3>
+            </div>
+            <p class="text-[11px] text-[#627d98]">Please answer the following mobility questions regarding your availability for this Taluka-wise role.</p>
+            <div class="space-y-3">
+              <div class="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 text-xs space-y-2">
+                <label class="font-bold text-[#102a43]">1. Are you willing to work and travel in the assigned taluka? <span class="text-red-500">*</span></label>
+                <div class="flex items-center gap-3">
+                  <span class="px-4 py-2 rounded-xl border bg-emerald-50 text-emerald-900 border-emerald-500 font-bold text-xs"><i class="fa-solid fa-circle-check mr-1"></i> Yes</span>
+                  <span class="px-4 py-2 rounded-xl border bg-white border-slate-300 text-slate-700 font-bold text-xs">No</span>
+                </div>
+              </div>
+              <div class="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 text-xs space-y-2">
+                <label class="font-bold text-[#102a43]">2. Are you willing to work in another taluka within the assigned district if required? <span class="text-red-500">*</span></label>
+                <div class="flex items-center gap-3">
+                  <span class="px-4 py-2 rounded-xl border bg-emerald-50 text-emerald-900 border-emerald-500 font-bold text-xs"><i class="fa-solid fa-circle-check mr-1"></i> Yes</span>
+                  <span class="px-4 py-2 rounded-xl border bg-white border-slate-300 text-slate-700 font-bold text-xs">No</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (num === '8') {
+        badge.textContent = 'Scenario 8: Draft Save & Review/Submit Persistence';
+        badge.className = 'text-xs font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300';
+        area.innerHTML = `
+          <div class="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-4">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-[#102a43]">Draft Save &amp; Review &amp; Submit Data Snapshot</h3>
+            <div class="p-4 bg-slate-900 text-slate-100 rounded-xl font-mono text-xs overflow-x-auto space-y-2">
+              <p class="text-emerald-400 font-bold">// Persisted Application State</p>
+              <pre>{
+  "master_profile": {
+    "currentDistrict": "Pune",
+    "currentTaluka": "Haveli",
+    "permanentSameAsCurrent": true
+  },
+  "job_specific": {
+    "preferredDistrict": "Pune",
+    "preferredTaluka": "Baramati",
+    "locationConfirmed": true,
+    "locationAnswers": {
+      "tq1": true,
+      "tq2": true,
+      "tq3": false
+    },
+    "questionnaireAnswers": {
+      "q_exp": "2 Years"
+    }
+  },
+  "draft_status": "saved",
+  "audit": {
+    "mobility_isolated_from_questionnaire": true,
+    "no_react_hook_errors": true
+  }
+}</pre>
+            </div>
+            <div class="flex items-center justify-between text-xs text-slate-600 pt-2">
+              <span>Status: Autosaved to localStorage &amp; Supabase draft table</span>
+              <span class="font-bold text-emerald-700"><i class="fa-solid fa-shield-halved mr-1"></i> Isolated from Questionnaire answers</span>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    // Default load Scenario 1 on init
+    loadScenario('1');
+  </script>
+</body>
+</html>

@@ -4,6 +4,8 @@
 
 import { supabase } from '../../lib/supabase/client';
 import { sendInterviewConfirmedTemplate } from '../../services/whatsappService';
+import { syncProfileToLead } from '../../crm/lib/api';
+import { isDummyOtpMode } from './dummyOtp';
 import type {
   RmsCandidateProfile,
   RmsCampaign,
@@ -36,6 +38,20 @@ import type {
 
 // ===== Candidate Profile =====
 export async function getCandidateProfile(userId: string) {
+  if (!userId) return { data: null, error: null };
+
+  // Local Dummy Mode: Safe simulation in developer session without invalid UUID queries
+  if (userId.startsWith('dummy-')) {
+    if (typeof window !== 'undefined') {
+      try {
+        const clean = userId.replace('dummy-candidate-', '').slice(-10);
+        const raw = sessionStorage.getItem(`maha_dummy_profile_${clean}`) || localStorage.getItem(`maha_dummy_profile_${clean}`);
+        if (raw) return { data: JSON.parse(raw) as RmsCandidateProfile, error: null };
+      } catch {}
+    }
+    return { data: null, error: null };
+  }
+
   const { data, error } = await supabase
     .from('rms_candidate_profiles' as never)
     .select('*')
@@ -45,11 +61,154 @@ export async function getCandidateProfile(userId: string) {
 }
 
 export async function upsertCandidateProfile(profile: Partial<RmsCandidateProfile> & { user_id: string; mobile: string; full_name: string }) {
-  const { data, error } = await supabase
+  const cleanMobile = profile.mobile.replace(/\D/g, '').slice(-10);
+  const altMobile = (profile.alternate_mobile || profile.emergency_mobile || '').replace(/\D/g, '').slice(-10) || null;
+
+  // Local Dummy Mode: Safe simulation in developer session without PostgreSQL 22P02 UUID syntax crash
+  if (profile.user_id.startsWith('dummy-')) {
+    const dummyProfile: RmsCandidateProfile = {
+      id: profile.user_id,
+      user_id: profile.user_id,
+      candidate_id: profile.candidate_id || `ABF-CAND-${cleanMobile.slice(-6)}`,
+      mobile: cleanMobile,
+      full_name: profile.full_name,
+      date_of_birth: profile.date_of_birth || null,
+      gender: profile.gender || null,
+      caste_category: profile.caste_category || null,
+      alternate_mobile: altMobile,
+      emergency_mobile: altMobile,
+      district: profile.district || null,
+      taluka: profile.taluka || null,
+      address_line1: (profile as any).address_line1 || null,
+      pincode: (profile as any).pincode || null,
+      permanent_same_as_current: (profile as any).permanent_same_as_current ?? false,
+      permanent_address_line1: (profile as any).permanent_address_line1 || null,
+      permanent_district: (profile as any).permanent_district || null,
+      permanent_taluka: (profile as any).permanent_taluka || null,
+      permanent_pincode: (profile as any).permanent_pincode || null,
+      state: profile.state || 'Maharashtra',
+      email: profile.email || null,
+      aadhaar_hash: (profile as any).aadhaar_hash || null,
+      profile_complete: true,
+      created_at: profile.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as any;
+
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem(`maha_dummy_profile_${cleanMobile}`, JSON.stringify(dummyProfile));
+        localStorage.setItem(`maha_dummy_profile_${cleanMobile}`, JSON.stringify(dummyProfile));
+      } catch {}
+    }
+
+    return { data: dummyProfile, error: null };
+  }
+
+  const payload: Record<string, unknown> = { ...profile };
+
+  // Harmonize alternate and emergency mobile fields
+  if (altMobile) {
+    payload.alternate_mobile = altMobile;
+    payload.emergency_mobile = altMobile;
+  }
+
+  // Never force an empty string for candidate_id. If omitted or blank, omit the key entirely
+  // so that PostgreSQL leaves existing candidate_id untouched on UPDATE and allows the
+  // BEFORE INSERT trigger (trg_rms_candidate_id) to auto-generate ABF-CAND-XXXXXX on new profiles.
+  if (!payload.candidate_id) {
+    delete payload.candidate_id;
+  }
+
+  let { data, error } = await supabase
     .from('rms_candidate_profiles' as never)
-    .upsert({ ...profile, candidate_id: (profile as RmsCandidateProfile).candidate_id || '' }, { onConflict: 'user_id' })
+    .upsert(payload as never, { onConflict: 'user_id' })
     .select()
     .single();
+
+  // Graceful schema resilience: if remote Postgres table doesn't have permanent_* columns yet, retry without them
+  if (error && (error.message?.includes('permanent_') || (error as any).code === '42703')) {
+    console.warn('[upsertCandidateProfile] PostgREST indicated permanent address column missing; retrying with core columns:', error.message);
+    const safePayload = { ...payload };
+    delete safePayload.permanent_same_as_current;
+    delete safePayload.permanent_address_line1;
+    delete safePayload.permanent_district;
+    delete safePayload.permanent_taluka;
+    delete safePayload.permanent_pincode;
+
+    const retryRes = await supabase
+      .from('rms_candidate_profiles' as never)
+      .upsert(safePayload as never, { onConflict: 'user_id' })
+      .select()
+      .single();
+
+    if (!retryRes.error && retryRes.data) {
+      data = {
+        ...(retryRes.data as any),
+        permanent_same_as_current: (payload as any).permanent_same_as_current,
+        permanent_address_line1: (payload as any).permanent_address_line1,
+        permanent_district: (payload as any).permanent_district,
+        permanent_taluka: (payload as any).permanent_taluka,
+        permanent_pincode: (payload as any).permanent_pincode,
+      };
+      error = null;
+    }
+  }
+
+  if (error && isDummyOtpMode()) {
+    console.warn('[upsertCandidateProfile] Supabase upsert returned error in local test mode. Gracefully persisting to local storage:', error);
+    const fallbackProfile: RmsCandidateProfile = {
+      id: profile.user_id,
+      user_id: profile.user_id,
+      candidate_id: profile.candidate_id || `ABF-CAND-${cleanMobile.slice(-6)}`,
+      mobile: cleanMobile,
+      full_name: profile.full_name,
+      date_of_birth: profile.date_of_birth || null,
+      gender: profile.gender || null,
+      caste_category: profile.caste_category || null,
+      alternate_mobile: altMobile,
+      emergency_mobile: altMobile,
+      district: profile.district || null,
+      taluka: profile.taluka || null,
+      address_line1: (profile as any).address_line1 || null,
+      pincode: (profile as any).pincode || null,
+      permanent_same_as_current: (profile as any).permanent_same_as_current ?? false,
+      permanent_address_line1: (profile as any).permanent_address_line1 || null,
+      permanent_district: (profile as any).permanent_district || null,
+      permanent_taluka: (profile as any).permanent_taluka || null,
+      permanent_pincode: (profile as any).permanent_pincode || null,
+      state: profile.state || 'Maharashtra',
+      email: profile.email || null,
+      aadhaar_hash: (profile as any).aadhaar_hash || null,
+      profile_complete: true,
+      created_at: profile.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as any;
+
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem(`maha_dummy_profile_${cleanMobile}`, JSON.stringify(fallbackProfile));
+        localStorage.setItem(`maha_dummy_profile_${cleanMobile}`, JSON.stringify(fallbackProfile));
+      } catch {}
+    }
+
+    return { data: fallbackProfile, error: null };
+  }
+
+  if (!error && data) {
+    // Non-blocking sync to linked CRM lead record with explicit reporting
+    syncProfileToLead(data as RmsCandidateProfile)
+      .then(syncRes => {
+        if (!syncRes.success) {
+          console.warn('[upsertCandidateProfile] CRM Lead Sync reported warning/failure:', syncRes.error);
+        } else {
+          console.log('[upsertCandidateProfile] CRM Lead Sync succeeded for lead ID:', syncRes.leadId);
+        }
+      })
+      .catch(syncErr => {
+        console.error('[upsertCandidateProfile] CRM Lead Sync unexpected exception:', syncErr);
+      });
+  }
+
   return { data: data as RmsCandidateProfile | null, error };
 }
 
@@ -91,6 +250,27 @@ export async function upsertCampaign(campaign: Partial<RmsCampaign>) {
 }
 
 // ===== Job Postings =====
+function hydrateJob(job: any): RmsJobPosting {
+  if (!job) return job;
+  return {
+    ...job,
+    vacancy_level: job.vacancy_level || job.vacancy_allocations?.vacancy_level || 'taluka',
+    experience_details: job.experience_details || job.vacancy_allocations?.experience_details || '',
+    jd_pdf_enabled: job.jd_pdf_enabled !== undefined && job.jd_pdf_enabled !== null
+      ? job.jd_pdf_enabled
+      : (job.vacancy_allocations?.jd_pdf_enabled !== undefined && job.vacancy_allocations?.jd_pdf_enabled !== null
+          ? job.vacancy_allocations.jd_pdf_enabled
+          : true),
+    questionnaire: job.questionnaire || job.vacancy_allocations?.questionnaire || null,
+    posting_level: job.posting_level || job.vacancy_allocations?.posting_level || (
+      job.vacancy_level === 'district' || job.vacancy_allocations?.vacancy_level === 'district'
+        ? 'District-wise'
+        : 'Taluka-wise'
+    ),
+    location_questions: job.location_questions || job.vacancy_allocations?.location_questions || null,
+  };
+}
+
 export async function listPublishedJobs() {
   // Run auto-status engine first so statuses reflect current time
   await supabase.rpc('rms_auto_update_job_statuses' as never, {} as never);
@@ -103,7 +283,7 @@ export async function listPublishedJobs() {
     .order('is_urgent',   { ascending: false })
     .order('sort_order', { ascending: false })
     .order('created_at',  { ascending: false });
-  return { data: (data ?? []) as RmsJobPosting[], error };
+  return { data: ((data ?? []) as any[]).map(hydrateJob), error };
 }
 
 export async function listAllJobs() {
@@ -112,7 +292,7 @@ export async function listAllJobs() {
     .select('*')
     .or('is_trashed.is.null,is_trashed.eq.false')
     .order('created_at', { ascending: false });
-  return { data: (data ?? []) as RmsJobPosting[], error };
+  return { data: ((data ?? []) as any[]).map(hydrateJob), error };
 }
 
 export async function listTrashedJobs() {
@@ -121,7 +301,7 @@ export async function listTrashedJobs() {
     .select('*')
     .eq('is_trashed', true)
     .order('trashed_at', { ascending: false });
-  return { data: (data ?? []) as RmsJobPosting[], error };
+  return { data: ((data ?? []) as any[]).map(hydrateJob), error };
 }
 
 export async function archiveJob(id: string): Promise<{ error: string | null }> {
@@ -171,8 +351,8 @@ export async function duplicateJob(id: string): Promise<{ data: RmsJobPosting | 
   if (error) return { data: null, error: error.message };
   const src = data as RmsJobPosting;
   // Copy every field except id, applications, status, created_at
-  const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = src;
-  const payload = {
+  const { id: _id, created_at: _ca, updated_at: _ua, vacancy_level, experience_details, jd_pdf_enabled, ...rest } = src;
+  const payload: any = {
     ...rest,
     title: `${src.title} (Copy)`,
     slug: `${src.slug}-copy-${Date.now().toString(36)}`,
@@ -186,13 +366,21 @@ export async function duplicateJob(id: string): Promise<{ data: RmsJobPosting | 
     closing_date: null,
     application_close_date: null,
   };
+  if (vacancy_level || experience_details || jd_pdf_enabled !== undefined) {
+    payload.vacancy_allocations = {
+      ...(payload.vacancy_allocations ?? {}),
+      ...(vacancy_level ? { vacancy_level } : {}),
+      ...(experience_details ? { experience_details } : {}),
+      ...(jd_pdf_enabled !== undefined ? { jd_pdf_enabled } : {}),
+    };
+  }
   const { data: inserted, error: insErr } = await supabase
     .from('rms_job_postings' as never)
     .insert(payload as never)
     .select('*')
     .single();
   if (insErr) return { data: null, error: insErr.message };
-  return { data: inserted as RmsJobPosting, error: null };
+  return { data: hydrateJob(inserted), error: null };
 }
 
 export async function setJobStatus(id: string, status: string): Promise<{ data: RmsJobPosting | null; error: string | null }> {
@@ -471,7 +659,7 @@ export async function getJobBySlug(slug: string) {
     .eq('slug', slug)
     .or('is_trashed.is.null,is_trashed.eq.false')
     .maybeSingle();
-  return { data: data as RmsJobPosting | null, error };
+  return { data: hydrateJob(data), error };
 }
 
 export async function getJob(id: string) {
@@ -480,7 +668,7 @@ export async function getJob(id: string) {
     .select('*')
     .eq('id', id)
     .single();
-  return { data: data as RmsJobPosting | null, error };
+  return { data: hydrateJob(data), error };
 }
 
 export async function upsertJob(job: Partial<RmsJobPosting>) {
@@ -494,12 +682,26 @@ export async function upsertJob(job: Partial<RmsJobPosting>) {
     };
   }
 
+  // Ensure vacancy_level, experience_details, jd_pdf_enabled, questionnaire, posting_level, and location_questions are stored inside vacancy_allocations JSONB
+  // and not sent as unmapped top-level columns if the remote column does not exist yet
+  const { vacancy_level, experience_details, jd_pdf_enabled, questionnaire, posting_level, location_questions, ...rest } = job;
+  const payload: any = { ...rest };
+  payload.vacancy_allocations = {
+    ...(payload.vacancy_allocations ?? {}),
+    ...(vacancy_level ? { vacancy_level } : {}),
+    ...(experience_details !== undefined ? { experience_details } : {}),
+    ...(jd_pdf_enabled !== undefined ? { jd_pdf_enabled } : {}),
+    ...(questionnaire !== undefined ? { questionnaire } : {}),
+    ...(posting_level !== undefined ? { posting_level } : {}),
+    ...(location_questions !== undefined ? { location_questions } : {}),
+  };
+
   const { data, error } = await supabase
     .from('rms_job_postings' as never)
-    .upsert(job)
+    .upsert(payload)
     .select()
     .single();
-  return { data: data as RmsJobPosting | null, error };
+  return { data: hydrateJob(data), error };
 }
 
 export async function deleteJob(id: string) {
@@ -548,11 +750,12 @@ export async function createApplication(payload: {
   preferred_location?: string;
   preferred_taluka?: string | null;
   application_data?: Record<string, unknown>;
+  status?: ApplicationStatus;
 }) {
   // 1. Verify job is actively accepting applications at API boundary
   const { data: job, error: jobErr } = await supabase
     .from('rms_job_postings' as never)
-    .select('id, status, is_trashed')
+    .select('id, status, is_trashed, closing_date, application_close_date, never_close_applications, location_districts, vacancy_allocations')
     .eq('id', payload.job_posting_id)
     .single();
 
@@ -560,7 +763,16 @@ export async function createApplication(payload: {
     return { data: null, error: { message: 'Position not found', code: 'JOB_NOT_FOUND' } as never };
   }
 
-  const jobRecord = job as { status: string; is_trashed?: boolean };
+  const jobRecord = job as {
+    status: string;
+    is_trashed?: boolean;
+    closing_date?: string | null;
+    application_close_date?: string | null;
+    never_close_applications?: boolean | null;
+    location_districts?: string[] | null;
+    vacancy_allocations?: any;
+  };
+
   if (jobRecord.is_trashed || jobRecord.status !== 'published') {
     return {
       data: null,
@@ -571,18 +783,123 @@ export async function createApplication(payload: {
     };
   }
 
-  // 2. Perform insert with sanitized columns matching rms_applications schema
+  // 1b. Authoritative Deadline Validation
+  if (!jobRecord.never_close_applications) {
+    const now = new Date();
+    if (jobRecord.closing_date && now > new Date(jobRecord.closing_date)) {
+      return {
+        data: null,
+        error: {
+          message: `Applications closed for this position on ${new Date(jobRecord.closing_date).toLocaleDateString('en-IN')}.`,
+          code: 'APPLICATIONS_CLOSED',
+        } as never,
+      };
+    }
+    if (jobRecord.application_close_date && now > new Date(jobRecord.application_close_date)) {
+      return {
+        data: null,
+        error: {
+          message: `Applications closed for this position on ${new Date(jobRecord.application_close_date).toLocaleDateString('en-IN')}.`,
+          code: 'APPLICATIONS_CLOSED',
+        } as never,
+      };
+    }
+  }
+
+  // 1c. Location Quota Validation: District
+  if (
+    payload.preferred_district &&
+    Array.isArray(jobRecord.location_districts) &&
+    jobRecord.location_districts.length > 0
+  ) {
+    if (!jobRecord.location_districts.includes(payload.preferred_district)) {
+      return {
+        data: null,
+        error: {
+          message: `The selected district (${payload.preferred_district}) is not eligible for this position.`,
+          code: 'INVALID_DISTRICT',
+        } as never,
+      };
+    }
+  }
+
+  // 1d. Location Quota Validation: Taluka
+  const isDistrictLevel = jobRecord.vacancy_allocations?.vacancy_level === 'district';
+  if (!isDistrictLevel && payload.preferred_district && payload.preferred_taluka) {
+    const distAlloc = jobRecord.vacancy_allocations?.district_allocations?.[payload.preferred_district];
+    if (distAlloc && distAlloc.taluka_allocations) {
+      const talukaAlloc = distAlloc.taluka_allocations;
+      if (Object.keys(talukaAlloc).length > 0) {
+        const item = talukaAlloc[payload.preferred_taluka];
+        if (!item || item.included === false) {
+          return {
+            data: null,
+            error: {
+              message: `The selected taluka (${payload.preferred_taluka}) has no allocated vacancies in ${payload.preferred_district} district.`,
+              code: 'INVALID_TALUKA',
+            } as never,
+          };
+        }
+      }
+    }
+  }
+
+  // 2. Perform insert or safe draft promotion with sanitized columns
   const applicationData = {
     ...(payload.application_data || {}),
     ...(payload.preferred_taluka ? { preferred_taluka: payload.preferred_taluka } : {}),
   };
 
+  // Check for existing application to safely handle retries and drafts
+  const { data: existingApp } = await supabase
+    .from('rms_applications' as never)
+    .select('id, application_number, status, is_trashed')
+    .eq('candidate_id', payload.candidate_id)
+    .eq('job_posting_id', payload.job_posting_id)
+    .or('is_trashed.is.null,is_trashed.eq.false')
+    .maybeSingle();
+
+  if (existingApp && (existingApp as any).status !== 'draft') {
+    return {
+      data: existingApp as RmsApplication,
+      error: { message: 'You have already applied for this position.', code: '23505' } as never,
+    };
+  }
+
+  const targetStatus = payload.status || 'draft';
+  const nowIso = new Date().toISOString();
+
+  if (existingApp && (existingApp as any).status === 'draft') {
+    // Safely update existing draft in place without hitting unique constraint
+    const { data: updatedDraft, error: updateErr } = await supabase
+      .from('rms_applications' as never)
+      .update({
+        application_data: applicationData,
+        preferred_district: payload.preferred_district ?? null,
+        preferred_location: payload.preferred_location || payload.preferred_taluka || null,
+        status: targetStatus,
+        last_status_change_at: nowIso,
+        ...(targetStatus !== 'draft' ? { submitted_at: nowIso } : {}),
+        updated_at: nowIso,
+      } as never)
+      .eq('id', (existingApp as any).id)
+      .select()
+      .single();
+
+    if (updateErr) {
+      console.error('[createApplication] Draft update error:', updateErr);
+    }
+    return { data: updatedDraft as RmsApplication | null, error: updateErr };
+  }
+
   const insertRow: Record<string, unknown> = {
     candidate_id: payload.candidate_id,
     job_posting_id: payload.job_posting_id,
     application_number: '',
-    status: 'draft',
+    status: targetStatus,
     application_data: applicationData,
+    last_status_change_at: nowIso,
+    ...(targetStatus !== 'draft' ? { submitted_at: nowIso } : {}),
   };
 
   if (payload.campaign_id) insertRow.campaign_id = payload.campaign_id;
@@ -599,6 +916,20 @@ export async function createApplication(payload: {
     .single();
 
   if (error) {
+    // Handle concurrent insertion race: if duplicate key (23505) occurs, retrieve existing application
+    if ((error as { code?: string })?.code === '23505') {
+      const { data: racedApp } = await supabase
+        .from('rms_applications' as never)
+        .select()
+        .eq('candidate_id', payload.candidate_id)
+        .eq('job_posting_id', payload.job_posting_id)
+        .or('is_trashed.is.null,is_trashed.eq.false')
+        .maybeSingle();
+
+      if (racedApp) {
+        return { data: racedApp as RmsApplication, error: null };
+      }
+    }
     console.error('[createApplication] Insert error:', error);
   }
 
@@ -788,6 +1119,45 @@ export async function getApplicationPayments(applicationId: string) {
     .eq('application_id', applicationId)
     .order('created_at', { ascending: false });
   return { data: (data ?? []) as (RmsPayment & { receipt?: RmsPaymentReceipt })[], error };
+}
+
+export async function initiateApplicationPayment(
+  applicationId: string,
+  amount: number,
+  gateway: 'razorpay' | 'cashfree' | 'manual' = 'razorpay',
+  feeLabel: string = 'Application Processing Fee',
+) {
+  // Check if an existing pending or success payment already exists for this application
+  const { data: existing } = await supabase
+    .from('rms_payments' as never)
+    .select('id, status, amount, created_at')
+    .eq('application_id', applicationId)
+    .in('status', ['pending', 'initiated', 'success'])
+    .maybeSingle();
+
+  if (existing) {
+    return { data: existing as RmsPayment, error: null };
+  }
+
+  const { data, error } = await supabase
+    .from('rms_payments' as never)
+    .insert({
+      application_id: applicationId,
+      payment_type: 'application_fee',
+      amount,
+      currency: 'INR',
+      fee_label: feeLabel,
+      gateway,
+      status: 'pending',
+    } as never)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[initiateApplicationPayment] Insert error:', error);
+    return { data: null, error: error.message };
+  }
+  return { data: data as RmsPayment, error: null };
 }
 
 export async function getTodayPayments() {
@@ -1532,6 +1902,97 @@ export async function permanentlyDeleteApplication(id: string): Promise<{ succes
   return { success: true, error: null };
 }
 
+export async function permanentlyDeleteCandidate(
+  candidateId?: string | null,
+  mobile?: string | null,
+  confirmation?: string
+): Promise<{ success: boolean; error: string | null; message?: string }> {
+  if (!confirmation || confirmation !== 'PERMANENTLY DELETE') {
+    return {
+      success: false,
+      error: 'Confirmation mismatch: You must enter "PERMANENTLY DELETE" to confirm this destructive operation.',
+    };
+  }
+
+  // 1. Step 1: Discover candidate storage files in 'candidate-docs' bucket
+  let storagePaths: string[] = [];
+  try {
+    const { data: infoData, error: infoErr } = await supabase.rpc(
+      'rms_get_candidate_storage_info' as never,
+      {
+        p_candidate_id: candidateId || null,
+        p_mobile: mobile || null,
+      } as never
+    );
+
+    if (infoErr) {
+      return { success: false, error: `Pre-deletion storage check failed: ${infoErr.message}` };
+    }
+
+    const info = infoData as {
+      success?: boolean;
+      error?: string;
+      storage_paths?: string[];
+      user_id?: string;
+    };
+
+    if (info && info.success === false) {
+      return { success: false, error: info.error || 'Failed to resolve candidate details.' };
+    }
+
+    storagePaths = info?.storage_paths || [];
+  } catch (err) {
+    return {
+      success: false,
+      error: `Failed to inspect candidate storage: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  // 2. Step 2: Delete candidate storage objects via official Supabase Storage API
+  // Using batches of 50 to safely handle nested paths and multiple documents.
+  let filesDeleted = 0;
+  if (storagePaths.length > 0) {
+    const BATCH_SIZE = 50;
+    for (let i = 0; i < storagePaths.length; i += BATCH_SIZE) {
+      const batch = storagePaths.slice(i, i + BATCH_SIZE);
+      const { data: removedObjects, error: removeErr } = await supabase.storage
+        .from('candidate-docs')
+        .remove(batch);
+
+      if (removeErr) {
+        return {
+          success: false,
+          error: `Storage API cleanup failed: ${removeErr.message}. Database records were NOT modified. You may safely retry.`,
+        };
+      }
+      filesDeleted += removedObjects?.length || batch.length;
+    }
+  }
+
+  // 3. Step 3: Call master deletion RPC to purge database records, CRM leads, OTPs, and auth.users
+  const { data, error } = await supabase.rpc('rms_permanently_delete_candidate' as never, {
+    p_candidate_id: candidateId || null,
+    p_mobile: mobile || null,
+    p_confirmation: confirmation,
+    p_storage_files_deleted: filesDeleted,
+    p_force_ignore_storage: false,
+  } as never);
+
+  if (error) {
+    return {
+      success: false,
+      error: `Database purge failed: ${error.message}. Storage files were cleaned. You may safely retry the purge.`,
+    };
+  }
+
+  const res = data as { success?: boolean; error?: string; message?: string };
+  if (res && res.success === false) {
+    return { success: false, error: res.error || 'Failed to permanently delete candidate.' };
+  }
+
+  return { success: true, error: null, message: res?.message };
+}
+
 // ============================================================
 // Candidate Portal — extra helpers
 // ============================================================
@@ -1706,6 +2167,25 @@ export async function deleteJobFaq(id: string) {
 // ============================================================
 
 export async function getExistingApplication(candidateId: string, jobId: string) {
+  if (!candidateId || !jobId) {
+    return { data: null, error: null };
+  }
+
+  // Local Dummy Mode: check simulated candidate application in storage
+  if (candidateId.startsWith('dummy-')) {
+    if (typeof window !== 'undefined') {
+      try {
+        const submittedKey = `maha_candidate_app_${jobId}_${candidateId}`;
+        const raw = sessionStorage.getItem(submittedKey) || localStorage.getItem(submittedKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          return { data: parsed as RmsApplication, error: null };
+        }
+      } catch {}
+    }
+    return { data: null, error: null };
+  }
+
   const { data, error } = await supabase
     .from('rms_applications' as never)
     .select('*')

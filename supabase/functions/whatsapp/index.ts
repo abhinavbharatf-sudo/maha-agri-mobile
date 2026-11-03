@@ -295,8 +295,15 @@ Deno.serve(async (req: Request) => {
       const newSecurePassword = crypto.randomUUID();
       let existingUserId = null;
 
-      // 1. Try public.rms_candidate_profiles
-      const { data: profile } = await supabase.from('rms_candidate_profiles').select('user_id').eq('mobile', phone).single();
+      const raw10Digit = phone.slice(-10);
+      const authPhone = `+91${raw10Digit}`;
+
+      // 1. Try public.rms_candidate_profiles (by 10-digit, 91-prefix, or E.164)
+      const { data: profile } = await supabase
+        .from('rms_candidate_profiles')
+        .select('user_id')
+        .or(`mobile.eq.${raw10Digit},mobile.eq.91${raw10Digit},mobile.eq.+91${raw10Digit}`)
+        .maybeSingle();
       if (profile?.user_id) existingUserId = profile.user_id;
 
       // 2. Fallback to auth.admin.listUsers pagination if not found in profiles
@@ -309,7 +316,10 @@ Deno.serve(async (req: Request) => {
              break;
            }
            if (!usersData || !usersData.users || usersData.users.length === 0) break;
-           const user = usersData.users.find(u => u.phone === phone || u.phone === phone.replace('+', ''));
+           const user = usersData.users.find(u => {
+             const uDigits = (u.phone || '').replace(/\D/g, '').slice(-10);
+             return uDigits === raw10Digit;
+           });
            if (user) { existingUserId = user.id; break; }
            page++;
          }
@@ -321,6 +331,7 @@ Deno.serve(async (req: Request) => {
 
       if (existingUserId) {
         const { data: updateData, error: updateError } = await supabase.auth.admin.updateUserById(existingUserId, {
+          phone: authPhone,
           password: newSecurePassword,
           phone_confirm: true
         });
@@ -330,13 +341,36 @@ Deno.serve(async (req: Request) => {
         }
       } else {
         const { data: createData, error: createError } = await supabase.auth.admin.createUser({
-          phone,
+          phone: authPhone,
           password: newSecurePassword,
           phone_confirm: true
         });
         console.log(`[verifyOtp] createUser() response: Data=${JSON.stringify(createData)}, Error=${JSON.stringify(createError)}`);
         if (createError) {
-          return new Response(JSON.stringify({ error: createError.message }), { status: 500, headers: corsHeaders });
+          // If user already exists in auth.users, find and update them safely
+          if (createError.message?.toLowerCase().includes('already') || (createError as any).status === 422) {
+            let fallbackUserId: string | null = null;
+            let p = 1;
+            while (true) {
+              const { data: uData } = await supabase.auth.admin.listUsers({ page: p, perPage: 1000 });
+              if (!uData || !uData.users || uData.users.length === 0) break;
+              const u = uData.users.find(usr => (usr.phone || '').replace(/\D/g, '').slice(-10) === raw10Digit);
+              if (u) { fallbackUserId = u.id; break; }
+              p++;
+            }
+            if (fallbackUserId) {
+              existingUserId = fallbackUserId;
+              await supabase.auth.admin.updateUserById(fallbackUserId, {
+                phone: authPhone,
+                password: newSecurePassword,
+                phone_confirm: true,
+              });
+            } else {
+              return new Response(JSON.stringify({ error: createError.message }), { status: 500, headers: corsHeaders });
+            }
+          } else {
+            return new Response(JSON.stringify({ error: createError.message }), { status: 500, headers: corsHeaders });
+          }
         }
       }
 
@@ -344,7 +378,57 @@ Deno.serve(async (req: Request) => {
         console.log(`[verifyOtp] New user detected (will be returned in response).`);
       }
 
-      return new Response(JSON.stringify({ success: true, password: newSecurePassword, isNewUser }), {
+      // 3. Ensure CRM Visitor Lead exists via Service Role (bypasses RLS)
+      let resolvedLeadId: string | null = null;
+      let resolvedCandidateId: string | null = null;
+      try {
+        const { data: existingLead } = await supabase
+          .from('crm_leads')
+          .select('id, internal_candidate_id')
+          .eq('mobile_number', raw10Digit)
+          .maybeSingle();
+
+        if (existingLead) {
+          resolvedLeadId = existingLead.id;
+          resolvedCandidateId = existingLead.internal_candidate_id;
+          await supabase
+            .from('crm_leads')
+            .update({
+              otp_verified_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingLead.id);
+          console.log(`[verifyOtp] Reused existing CRM Lead: ${existingLead.id} (${existingLead.internal_candidate_id})`);
+        } else {
+          const { data: newLead, error: leadErr } = await supabase
+            .from('crm_leads')
+            .insert({
+              mobile_number: raw10Digit,
+              otp_verified_at: new Date().toISOString(),
+              lead_source: 'Career Portal'
+            })
+            .select('id, internal_candidate_id')
+            .maybeSingle();
+
+          if (leadErr) {
+            console.error(`[verifyOtp] Service-role lead insert error:`, JSON.stringify(leadErr));
+          } else if (newLead) {
+            resolvedLeadId = newLead.id;
+            resolvedCandidateId = newLead.internal_candidate_id;
+            console.log(`[verifyOtp] Created new CRM Visitor Lead: ${newLead.id} (${newLead.internal_candidate_id})`);
+          }
+        }
+      } catch (crmErr) {
+        console.error(`[verifyOtp] CRM lead ensure exception:`, crmErr);
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        password: newSecurePassword,
+        isNewUser,
+        leadId: resolvedLeadId,
+        internalCandidateId: resolvedCandidateId
+      }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

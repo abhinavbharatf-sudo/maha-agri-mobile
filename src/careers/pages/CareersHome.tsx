@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Briefcase, MapPin, Clock, Users, ChevronRight,
@@ -7,7 +7,7 @@ import {
   GraduationCap, IndianRupee, ChevronDown, Lock, CheckCircle2, XCircle,
   Sprout, Siren, BookOpen, Stethoscope, Heart, Trees,
   ArrowDownUp, CalendarClock, TrendingUp, TrendingDown, Building2,
-  AlertCircle, RefreshCw,
+  AlertCircle, RefreshCw, User,
 } from 'lucide-react';
 import { listPublicCampaigns, listPublicDrives, listPublishedJobs } from '../lib/api';
 import type { RmsCampaign, RmsRecruitmentDrive, RmsJobPosting, JobStatus } from '../lib/types';
@@ -145,6 +145,16 @@ export default function CareersHome() {
   const [otpOpen, setOtpOpen] = useState(false);
   const [pendingJobSlug, setPendingJobSlug] = useState<string | null>(null);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectParam = searchParams.get('redirect');
+  const loginParam = searchParams.get('login');
+
+  useEffect(() => {
+    if (loginParam === 'true') {
+      setPendingJobSlug(null);
+      setOtpOpen(true);
+    }
+  }, [loginParam]);
 
   const handleJobClick = (slug: string) => {
     // As per user request: Require OTP when clicking "View Details"
@@ -152,11 +162,17 @@ export default function CareersHome() {
     setOtpOpen(true);
   };
 
-  const handleLoginSuccess = async (_isNewUser?: boolean, _mobile?: string) => {
+  const handleLoginSuccess = async (isNewUser?: boolean, _mobile?: string) => {
     setOtpOpen(false);
 
     if (pendingJobSlug) {
       navigate(`/careers/jobs/${pendingJobSlug}`);
+    } else if (redirectParam) {
+      navigate(redirectParam);
+    } else if (isNewUser) {
+      navigate('/candidate/profile');
+    } else {
+      navigate('/candidate/dashboard');
     }
   };
 
@@ -366,7 +382,7 @@ export default function CareersHome() {
       </section>
 
       {/* ── Filter + Sort Bar ──────────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-30 bg-white border-b border-primary-100 shadow-sm">
+      <div className="sticky top-[128px] md:top-[156px] lg:top-[168px] z-30 bg-white border-b border-primary-100 shadow-sm">
         <div className="container-government py-2">
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-0.5">
             <span className="text-xs font-bold text-primary-400 uppercase tracking-wider shrink-0 hidden sm:block pr-0.5">
@@ -530,15 +546,6 @@ export default function CareersHome() {
                 {totalVacancies > 0 && `${fmtNum(totalVacancies)}+ total vacancies across Maharashtra`}
               </p>
             </div>
-
-            {session && (
-              <Link
-                to="/candidate/dashboard"
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-primary-200 rounded-lg text-sm font-medium text-primary-700 hover:bg-primary-50 transition-colors touch-manipulation"
-              >
-                My Applications <ArrowRight className="w-4 h-4" />
-              </Link>
-            )}
           </div>
 
           {/* Loading state */}
@@ -664,8 +671,12 @@ export default function CareersHome() {
         isOpen={otpOpen} 
         onClose={() => setOtpOpen(false)} 
         onSuccess={handleLoginSuccess} 
-        title="Candidate Registration"
-        subtitle="Verify your mobile number to view job details and apply."
+        title={pendingJobSlug ? "Candidate Registration" : "Candidate Login"}
+        subtitle={
+          pendingJobSlug 
+            ? "Verify your mobile number to view job details and apply." 
+            : "Verify your registered mobile number with OTP to access your candidate dashboard and applications."
+        }
       />
     </div>
   );
@@ -785,11 +796,15 @@ function JobCard({ job, theme, ji, fmtDate, onClick }: {
         {job.vacancies_per_district != null && job.vacancies_per_district > 0 && (
           <DetailItem icon={MapPin} label="Per District" value={fmtNum(job.vacancies_per_district)} />
         )}
-        {job.vacancies_per_taluka != null && job.vacancies_per_taluka > 0 && (
-          <DetailItem icon={MapPin} label="Per Taluka" value={fmtNum(job.vacancies_per_taluka)} />
-        )}
         {(() => {
-          const qual = (job.eligibility_criteria as { label?: string }[] | null)?.[0]?.label?.trim();
+          const isDistLevel = job.vacancy_level === 'district' || job.vacancy_allocations?.vacancy_level === 'district';
+          return !isDistLevel && job.vacancies_per_taluka != null && job.vacancies_per_taluka > 0 ? (
+            <DetailItem icon={MapPin} label="Per Taluka" value={fmtNum(job.vacancies_per_taluka)} />
+          ) : null;
+        })()}
+        {(() => {
+          const rawCrit = Array.isArray(job.eligibility_criteria) ? job.eligibility_criteria[0] : null;
+          const qual = typeof rawCrit === 'string' ? rawCrit.trim() : (rawCrit as { label?: string } | null)?.label?.trim();
           return qual ? <DetailItem icon={GraduationCap} label="Qualification" value={qual} /> : null;
         })()}
         {job.experience_required?.trim() ? (

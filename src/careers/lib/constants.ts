@@ -1,4 +1,4 @@
-import type { ApplicationStatus, DriveType, DriveStatus, StageType } from './types';
+import type { ApplicationStatus, DriveType, DriveStatus, StageType, PostingLevel, JobLocationQuestion } from './types';
 
 // ===== Application Status Config =====
 export const APPLICATION_STATUS_CONFIG: Record<
@@ -274,11 +274,27 @@ function salaryUnit(salaryType: string | null): string {
  * Priority: structured fields (salary_amount + salary_type) > legacy salary_honorarium.
  * Examples: ₹35,000 / Month | ₹900 / Day | Negotiable | Volunteer (No Honorarium)
  */
-export function formatSalaryDisplay(job: {
-  salary_amount?: number | null;
-  salary_type?: string | null;
-  salary_honorarium?: string | null;
-}): string | null {
+export function formatSalaryDisplay(
+  jobOrAmount?: {
+    salary_amount?: number | null;
+    salary_type?: string | null;
+    salary_honorarium?: string | null;
+  } | number | null,
+  salaryTypeParam?: string | null
+): string | null {
+  if (!jobOrAmount) return null;
+
+  // Handle call as formatSalaryDisplay(amount, type)
+  if (typeof jobOrAmount === 'number') {
+    const amount = jobOrAmount;
+    const type = salaryTypeParam || null;
+    if (amount > 0) {
+      return `₹${amount.toLocaleString('en-IN')}${salaryUnit(type)}`;
+    }
+    return type || null;
+  }
+
+  const job = jobOrAmount;
   const amount = job.salary_amount;
   const type = job.salary_type;
 
@@ -308,14 +324,20 @@ export function formatSalaryDisplay(job: {
 /**
  * Returns the salary package display string, or null if not configured.
  */
-export function formatSalaryPackage(job: {
-  salary_package_type?: string | null;
-  salary_package_custom?: string | null;
-}): string | null {
-  const pkg = job.salary_package_type;
+export function formatSalaryPackage(
+  jobOrPackage?: {
+    salary_package_type?: string | null;
+    salary_package_custom?: string | null;
+    salary_package?: string | null;
+  } | string | null
+): string | null {
+  if (!jobOrPackage) return null;
+  if (typeof jobOrPackage === 'string') return jobOrPackage;
+
+  const pkg = jobOrPackage.salary_package_type || (jobOrPackage as { salary_package?: string | null }).salary_package;
   if (!pkg) return null;
   if (pkg === 'Other') {
-    return job.salary_package_custom?.trim() || null;
+    return jobOrPackage.salary_package_custom?.trim() || null;
   }
   return pkg;
 }
@@ -331,4 +353,49 @@ export function parseSalaryValue(job: {
   if (!job.salary_honorarium) return 0;
   const n = Number(job.salary_honorarium.replace(/[^\d]/g, ''));
   return isNaN(n) ? 0 : n;
+}
+
+/**
+ * Standard sensible default Yes/No Location & Mobility Questions
+ * based on Posting Level (District-wise vs Taluka-wise).
+ */
+export function getDefaultLocationQuestions(level: PostingLevel = 'Taluka-wise'): JobLocationQuestion[] {
+  if (level === 'District-wise') {
+    return [
+      {
+        id: 'work_outside_district',
+        questionText: 'Are you willing to work outside your native district if required?',
+        enabled: true,
+        required: true,
+      },
+      {
+        id: 'travel_within_district',
+        questionText: 'Are you willing to travel within the assigned district?',
+        enabled: true,
+        required: true,
+      },
+    ];
+  }
+
+  // Taluka-wise defaults — exactly 3 questions
+  return [
+    {
+      id: 'work_travel_assigned_taluka',
+      questionText: 'Are you willing to work and travel in the assigned taluka?',
+      enabled: true,
+      required: true,
+    },
+    {
+      id: 'work_another_taluka',
+      questionText: 'Are you willing to work in another taluka within the assigned district if required?',
+      enabled: true,
+      required: true,
+    },
+    {
+      id: 'work_outside_district',
+      questionText: 'Are you willing to work outside your native district if required?',
+      enabled: true,
+      required: true,
+    },
+  ];
 }

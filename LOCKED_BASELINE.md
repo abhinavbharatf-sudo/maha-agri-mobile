@@ -1,7 +1,7 @@
 # MAHA-AGRI Candidate Portal — Locked Baseline & Frozen Specifications
 
 **Status:** APPROVED, LOCKED & FROZEN  
-**Baseline Date:** 02 November 2026  
+**Baseline Date:** 04 November 2026  
 **System:** MAHA-AGRI Government Digital Operations Platform  
 
 ---
@@ -70,6 +70,48 @@
 
 ---
 
+### E. Candidate Master Profile Unification
+1. **Single Source of Truth:**
+   * Legacy `MyProfile.tsx` is completely unified with the Application Wizard profile experience.
+   * Candidate Dashboard > My Profile reuses [`Step1CreateProfile.tsx`](file:///e:/project-bolt-sb1-qsboyjjv/project/src/careers/portal/steps/Step1CreateProfile.tsx) and [`Step2MasterProfile.tsx`](file:///e:/project-bolt-sb1-qsboyjjv/project/src/careers/portal/steps/Step2MasterProfile.tsx) in standalone mode without requiring an active job or application.
+   * Reads and writes to master `rms_candidate_profiles` table.
+2. **Dual Address Architecture:**
+   * Current Residential Address (`address_line1`, `district`, `taluka`, `pincode`) and Permanent Residential Address (`permanent_address_line1`, `permanent_district`, `permanent_taluka`, `permanent_pincode`) are explicitly managed and persisted.
+   * "Permanent Address Same as Current Address" toggle synchronizes addresses in real time when checked, and allows independent editing when unchecked.
+3. **Demographic & Mobile Harmonization:**
+   * `caste_category` persisted into master profile.
+   * `alternate_mobile` and `emergency_mobile` harmonized.
+   * Existing submitted application snapshots remain immutable.
+
+---
+
+### F. Job-Specific Posting Preferences & Navigation
+1. **Explicit Posting Location Selection:**
+   * Candidate native residential district/taluka is **not** automatically pre-selected as preferred posting location.
+   * District-wise jobs present only the District dropdown with initial placeholder `-- Select Preferred District --`.
+   * Taluka-wise jobs present dependent Taluka dropdown with initial placeholder `-- Select District First --`, resetting Taluka selection on District changes.
+2. **Dynamic Step Navigation:**
+   * Navigation button dynamically switches based on job assessment questionnaire configuration:
+     * With published questionnaire: `"Continue to Job-Specific Questions →"`
+     * Without published questionnaire: `"Continue to Review & Declaration →"`
+
+---
+
+### G. Strict PIN Code Security & Validation
+1. **English Numerals Only (0–9) & 6-Digit Limit:**
+   * Keystrokes for non-digits blocked on desktop; DOM-level sanitization forcibly strips invalid characters on mobile and IME.
+   * Maximum 6 digits strictly enforced via `maxLength={6}` and input bounds.
+2. **Marathi Digits (`०-९`) Rejection:**
+   * Explicit bilingual error: `"फक्त इंग्रजी अंक (0–9) ग्राह्य आहेत. मराठी अंक स्वीकारले जाणार नाहीत. (Only English digits 0–9 allowed)"`.
+   * Marathi digits stripped and never committed to state or database.
+3. **Mixed-Content Paste Protection:**
+   * Pasting mixed content (e.g. `12ABC345`, `४११०२८`, `411 001`, `4110019`) is completely rejected via `e.preventDefault()`.
+   * Does **not** silently accept partial digits; completely preserves previous input value.
+4. **Indian Postal Code Conformance:**
+   * Validated against regex `/^[1-9][0-9]{5}$/` (first digit cannot be 0). Required on final form submission.
+
+---
+
 ## 2. Frozen Source Files
 
 The following files contain the approved baseline implementation and must NOT be altered without explicit authorization:
@@ -78,13 +120,15 @@ The following files contain the approved baseline implementation and must NOT be
 |---|---|
 | **Portal Data Types & Initial State** | [`project/src/careers/portal/types.ts`](file:///e:/project-bolt-sb1-qsboyjjv/project/src/careers/portal/types.ts) |
 | **Aadhaar, Date & Duration Utilities** | [`project/src/careers/portal/utils/verhoeff.ts`](file:///e:/project-bolt-sb1-qsboyjjv/project/src/careers/portal/utils/verhoeff.ts) |
-| **Step 2: Basic Information (Aadhaar)** | [`project/src/careers/portal/steps/Step2MasterProfile.tsx`](file:///e:/project-bolt-sb1-qsboyjjv/project/src/careers/portal/steps/Step2MasterProfile.tsx) |
-| **Step 1: Master Profile (Fallback)** | [`project/src/careers/portal/steps/Step1MasterProfile.tsx`](file:///e:/project-bolt-sb1-qsboyjjv/project/src/careers/portal/steps/Step1MasterProfile.tsx) |
-| **Step 3: Position Details (Edu & Exp)** | [`project/src/careers/portal/steps/Step2JobSpecific.tsx`](file:///e:/project-bolt-sb1-qsboyjjv/project/src/careers/portal/steps/Step2JobSpecific.tsx) |
-| **HR Dashboard Application Review** | [`project/src/careers/admin/HRApplications.tsx`](file:///e:/project-bolt-sb1-qsboyjjv/project/src/careers/admin/HRApplications.tsx) |
-| **HR Candidate Profile Modal** | [`project/src/careers/admin/HRCandidateProfile.tsx`](file:///e:/project-bolt-sb1-qsboyjjv/project/src/careers/admin/HRCandidateProfile.tsx) |
+| **Step 1: Create Profile (Identity & Contact)** | [`project/src/careers/portal/steps/Step1CreateProfile.tsx`](file:///e:/project-bolt-sb1-qsboyjjv/project/src/careers/portal/steps/Step1CreateProfile.tsx) |
+| **Step 2: Basic Information (Master Profile)** | [`project/src/careers/portal/steps/Step2MasterProfile.tsx`](file:///e:/project-bolt-sb1-qsboyjjv/project/src/careers/portal/steps/Step2MasterProfile.tsx) |
+| **Dashboard Master Profile Manager** | [`project/src/careers/dashboard/MyProfile.tsx`](file:///e:/project-bolt-sb1-qsboyjjv/project/src/careers/dashboard/MyProfile.tsx) |
+| **Step 3: Position Details (Preferences, Edu & Exp)** | [`project/src/careers/portal/steps/Step2JobSpecific.tsx`](file:///e:/project-bolt-sb1-qsboyjjv/project/src/careers/portal/steps/Step2JobSpecific.tsx) |
+| **Step 4: Dynamic Job Questionnaire** | [`project/src/careers/portal/steps/Step4Questionnaire.tsx`](file:///e:/project-bolt-sb1-qsboyjjv/project/src/careers/portal/steps/Step4Questionnaire.tsx) |
 | **Candidate Portal Review & Submit** | [`project/src/careers/portal/steps/Step3ReviewSubmit.tsx`](file:///e:/project-bolt-sb1-qsboyjjv/project/src/careers/portal/steps/Step3ReviewSubmit.tsx) |
 | **Candidate Portal Confirmation & PDF** | [`project/src/careers/portal/steps/Step4Confirmation.tsx`](file:///e:/project-bolt-sb1-qsboyjjv/project/src/careers/portal/steps/Step4Confirmation.tsx) |
+| **HR Dashboard Application Review** | [`project/src/careers/admin/HRApplications.tsx`](file:///e:/project-bolt-sb1-qsboyjjv/project/src/careers/admin/HRApplications.tsx) |
+| **HR Candidate Profile Modal** | [`project/src/careers/admin/HRCandidateProfile.tsx`](file:///e:/project-bolt-sb1-qsboyjjv/project/src/careers/admin/HRCandidateProfile.tsx) |
 | **Single-Page Application Form** | [`project/src/careers/pages/Apply.tsx`](file:///e:/project-bolt-sb1-qsboyjjv/project/src/careers/pages/Apply.tsx) |
 
 ---
@@ -96,7 +140,11 @@ The automated test suites in `project/src/careers/portal/__tests__/` enforce thi
 * **Suite 1:** `repeatableStep2.test.mjs` (30 tests: Highest qualification hierarchy, Course/Stream options, Percentage/CGPA validation, Experience duration, UI alignment, IST date handling).
 * **Suite 2:** `candidateMasterProfileStep.test.mjs` (27 tests: Profile creation, DOB/Age validation, duplicate prevention, Aadhaar Verhoeff checksum).
 * **Suite 3:** `profileEnhancements.test.mjs` (15 tests: Aadhaar auto-hyphen formatter, age calculation, address/PIN validation, non-overlapping work experience summing).
-* **Total Passing Tests:** **72 / 72 PASS** (0 failures).
+* **Suite 4:** `pincodeStrictValidation.test.mjs` (14 tests: 6-digit English restriction, Marathi digit rejection, mixed-content paste protection, 0-start rejection).
+* **Suite 5:** `candidateProfileUnification.test.mjs` (6 tests: Unified master profile mapping, dual address sync, caste category, immutable snapshots).
+* **Suite 6:** `postImplementationVerification.test.mjs` (11 tests: Complete elimination of legacy MyProfile handlers, Step 1 & 2 reuse).
+* **All Suites:** 41 test suites total across candidate portal, draft lifecycle, questionnaire, and vacancy eligibility.
+* **Total Passing Tests:** **230 / 230 PASS** (0 failures, 100% pass rate).
 
 ---
 

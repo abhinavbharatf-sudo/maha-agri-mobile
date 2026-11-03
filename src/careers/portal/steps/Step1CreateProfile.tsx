@@ -276,22 +276,29 @@ export default function Step1CreateProfile({
       else if (normalizedGender === 'female') dbGender = 'female';
       else dbGender = 'other';
 
+      const cleanAlt = data.alternateMobile?.trim().replace(/\D/g, '') || null;
       const payload: Record<string, unknown> = {
         user_id: userId,
         mobile: cleanMobile,
         full_name: data.fullName.trim(),
         date_of_birth: data.dateOfBirth,
         gender: dbGender,
-        emergency_mobile: data.alternateMobile?.trim() || null,
+        emergency_mobile: cleanAlt,
+        alternate_mobile: cleanAlt,
         email: data.email?.trim() || null,
         profile_complete: true,
       };
 
-      // Preserve native address / district / taluka if already stored
-      if (data.homeDistrict) payload.district = data.homeDistrict;
-      if (data.homeTaluka) payload.taluka = data.homeTaluka;
-      if (data.addressLine1) payload.address_line1 = data.addressLine1;
-      if (data.pincode) payload.pincode = data.pincode;
+      if (data.casteCategory) payload.caste_category = data.casteCategory;
+      if (data.homeDistrict || data.currentDistrict) payload.district = data.currentDistrict || data.homeDistrict;
+      if (data.homeTaluka || data.currentTaluka) payload.taluka = data.currentTaluka || data.homeTaluka;
+      if (data.addressLine1 || data.currentAddressLine1) payload.address_line1 = data.currentAddressLine1 || data.addressLine1;
+      if (data.pincode || data.currentPincode) payload.pincode = data.currentPincode || data.pincode;
+      if (data.permanentSameAsCurrent !== undefined) payload.permanent_same_as_current = data.permanentSameAsCurrent;
+      if (data.permanentAddressLine1) payload.permanent_address_line1 = data.permanentAddressLine1;
+      if (data.permanentDistrict) payload.permanent_district = data.permanentDistrict;
+      if (data.permanentTaluka) payload.permanent_taluka = data.permanentTaluka;
+      if (data.permanentPincode) payload.permanent_pincode = data.permanentPincode;
 
       const { data: savedProfile, error: saveErr } = await upsertCandidateProfile(payload as any);
 

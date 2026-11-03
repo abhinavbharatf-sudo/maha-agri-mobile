@@ -8,6 +8,7 @@ interface ImportMetaEnv {
   readonly VITE_WHATSAPP_API_URL: string;
   readonly VITE_WHATSAPP_API_KEY: string;
   readonly VITE_WHATSAPP_OTP_TEMPLATE: string;
+  readonly VITE_ENABLE_DUMMY_OTP?: string;
 }
 
 interface ImportMeta {

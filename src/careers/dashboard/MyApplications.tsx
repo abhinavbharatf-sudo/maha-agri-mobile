@@ -9,6 +9,8 @@ import { APPLICATION_STATUS_CONFIG } from '../lib/constants';
 
 const STATUS_FILTERS: { value: ApplicationStatus | 'all'; label: string }[] = [
   { value: 'all', label: 'All' },
+  { value: 'draft', label: 'Drafts' },
+  { value: 'payment_pending', label: 'Payment Pending' },
   { value: 'submitted', label: 'Submitted' },
   { value: 'interview_scheduled', label: 'Interview' },
   { value: 'selected', label: 'Selected' },
@@ -17,19 +19,27 @@ const STATUS_FILTERS: { value: ApplicationStatus | 'all'; label: string }[] = [
 ];
 
 export default function MyApplications() {
-  const { profile } = useCandidateAuth();
+  const { profile, verifiedMobile, user } = useCandidateAuth();
   const [apps, setApps] = useState<RmsApplicationWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ApplicationStatus | 'all'>('all');
 
   useEffect(() => {
-    if (!profile) return;
+    const activeMobile = (verifiedMobile || user?.phone || '').replace(/\D/g, '').slice(-10);
+    const profileMobile = (profile?.mobile || '').replace(/\D/g, '').slice(-10);
+
+    if (!profile || (activeMobile && profileMobile && profileMobile !== activeMobile)) {
+      setApps([]);
+      setLoading(false);
+      return;
+    }
+
     getMyApplications(profile.id).then(r => {
       setApps(r.data);
       setLoading(false);
     });
-  }, [profile]);
+  }, [profile, verifiedMobile, user?.phone]);
 
   const filtered = apps.filter(a => {
     const matchSearch = !search || a.job_posting?.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -104,6 +114,54 @@ export default function MyApplications() {
                       }`}
                     />
                   ))}
+              </div>
+
+              {/* Status-Aware Action Footer */}
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-1.5 text-xs">
+                  {a.status === 'draft' ? (
+                    <span className="text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-md border border-amber-200 font-semibold">
+                      Incomplete Draft
+                    </span>
+                  ) : a.status === 'payment_pending' ? (
+                    <span className="text-blue-800 bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-200 font-semibold">
+                      Application Fee Pending
+                    </span>
+                  ) : (
+                    <span className="text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200 font-semibold">
+                      Application Submitted
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {a.status === 'draft' && (
+                    <Link
+                      to={`/careers/portal/apply/${a.job_posting?.id || a.job_posting_id}`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary-900 hover:bg-primary-800 text-white rounded-lg text-xs font-bold transition-colors shadow-xs"
+                    >
+                      Continue Application <ArrowRight className="w-3.5 h-3.5" />
+                    </Link>
+                  )}
+
+                  {a.status === 'payment_pending' && (
+                    <Link
+                      to="/candidate/payments"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs"
+                    >
+                      Complete Payment <ArrowRight className="w-3.5 h-3.5" />
+                    </Link>
+                  )}
+
+                  {a.status !== 'draft' && a.status !== 'payment_pending' && (
+                    <Link
+                      to={a.job_posting?.slug ? `/careers/jobs/${a.job_posting.slug}` : '/careers'}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold transition-colors"
+                    >
+                      View Position Details
+                    </Link>
+                  )}
+                </div>
               </div>
             </div>
           ))}

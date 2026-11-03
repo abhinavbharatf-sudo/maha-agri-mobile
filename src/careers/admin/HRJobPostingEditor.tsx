@@ -10,11 +10,13 @@ import {
   GraduationCap, HelpCircle, GitBranch, MapPin, IndianRupee, ExternalLink,
   Save, CheckCircle2, ClipboardList, Mail, Settings, Loader2,
   Building2, Globe, Compass, Layers, Calculator, Sliders, Square, ChevronRight,
+  Sparkles,
 } from 'lucide-react';
 import HRBadgeManager from './HRBadgeManager';
 import HRFlowManager from './HRFlowManager';
 import HRFaqManager from './HRFaqManager';
 import HRLocationAndVacancyManager from './components/HRLocationAndVacancyManager';
+import HRQuestionnaireBuilder from './components/HRQuestionnaireBuilder';
 import { supabase } from '../../lib/supabase/client';
 import {
   listAllJobs, upsertJob, listWorkflowTemplates, archiveJob, duplicateJob,
@@ -38,6 +40,7 @@ import { getTalukasForDistrict } from '../../data/maharashtraGeography';
 const EMPTY_JOB: Partial<RmsJobPosting> = {
   title: '', slug: '', department: '', location: '', employment_type: 'full_time',
   experience_required: '', status: 'draft',
+  experience_details: '',
   description: '', project_duration: '',
   eligibility_criteria: [], required_documents: [], skills_required: [],
   application_fee_amount: 0, onboarding_fee_amount: 0,
@@ -51,6 +54,7 @@ const EMPTY_JOB: Partial<RmsJobPosting> = {
   recruitment_status: 'open',
   project_pdf_enabled: true,
   project_video_enabled: true,
+  jd_pdf_enabled: true,
   is_trashed: false,
   is_featured: false,
   is_urgent: false,
@@ -62,6 +66,9 @@ const EMPTY_JOB: Partial<RmsJobPosting> = {
   display_deadline_public: true,
   acknowledgement_text: '',
   location_type: 'Multiple Locations',
+  vacancy_level: 'taluka',
+  posting_level: 'Taluka-wise',
+  location_questions: null,
   location_regions: [],
   location_districts: [],
   location_talukas: [],
@@ -70,6 +77,7 @@ const EMPTY_JOB: Partial<RmsJobPosting> = {
   city_name: '',
   vacancy_allocations: {},
   auto_calculate_vacancies: false,
+  questionnaire: null,
 };
 
 // ─── Unified Form Tabs ────────────────────────────────────────────────────────
@@ -77,8 +85,9 @@ const FORM_TABS = [
   { id: 'position',       label: '1. Position Setup',           icon: Briefcase     },
   { id: 'qualifications', label: '2. Qualifications & Media',    icon: FileText      },
   { id: 'workflow',       label: '3. Workflow & Badges',        icon: GitBranch     },
-  { id: 'faqs',           label: '4. FAQs & Declaration',       icon: HelpCircle    },
-  { id: 'scheduling',     label: '5. Scheduling & Publish',      icon: CalendarClock },
+  { id: 'questionnaire',  label: '4. Job-Specific Questionnaire', icon: ClipboardList },
+  { id: 'faqs',           label: '5. FAQs & Declaration',       icon: HelpCircle    },
+  { id: 'scheduling',     label: '6. Scheduling & Publish',      icon: CalendarClock },
 ] as const;
 
 type FormTabId = typeof FORM_TABS[number]['id'];
@@ -187,6 +196,7 @@ export default function HRJobPostingEditor() {
   const [showForm, setShowForm] = useState(searchParams.get('new') === '1');
   const [activeTab, setActiveTab] = useState<FormTabId>('position');
   const [formData, setFormData] = useState<Partial<RmsJobPosting>>(EMPTY_JOB);
+  const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false);
   const [saving, setSaving] = useState(false);
   const [eligInput, setEligInput] = useState('');
   const [docInput, setDocInput] = useState('');
@@ -282,11 +292,70 @@ export default function HRJobPostingEditor() {
 
     setSaving(true);
     setError(null);
-    const payload = { ...formData };
-    if (!payload.slug && payload.title) payload.slug = generateSlug(payload.title);
+
+    // Auto-commit any pending inputs that the user typed but didn't click "Add" for
+    let currentEligibility = Array.isArray(formData.eligibility_criteria)
+      ? (formData.eligibility_criteria as any[]).map(item =>
+          typeof item === 'string' ? { label: item, required: true } : item
+        )
+      : [];
+    if (eligInput.trim()) {
+      currentEligibility = [...currentEligibility, { label: eligInput.trim(), required: true }];
+      setEligInput('');
+    }
+
+    let currentSkills = Array.isArray(formData.skills_required)
+      ? [...(formData.skills_required as string[])]
+      : [];
+    if (skillInput.trim() && !currentSkills.includes(skillInput.trim())) {
+      currentSkills = [...currentSkills, skillInput.trim()];
+      setSkillInput('');
+    }
+
+    let currentDocs = Array.isArray(formData.required_documents)
+      ? (formData.required_documents as any[]).map(item =>
+          typeof item === 'string' ? { key: item.toLowerCase().replace(/\s+/g, '_'), label: item } : item
+        )
+      : [];
+    if (docInput.trim()) {
+      currentDocs = [
+        ...currentDocs,
+        { key: docInput.trim().toLowerCase().replace(/\s+/g, '_'), label: docInput.trim() },
+      ];
+      setDocInput('');
+    }
+
+    const payload = {
+      ...formData,
+      eligibility_criteria: currentEligibility,
+      skills_required: currentSkills,
+      required_documents: currentDocs,
+    };
+    if (!payload.slug?.trim() && payload.title?.trim()) payload.slug = generateSlug(payload.title);
     if (!payload.id && !payload.created_by) {
       const { data: { user } } = await supabase.auth.getUser();
       if (user?.id) payload.created_by = user.id;
+    }
+    if (payload.vacancy_level) {
+      payload.vacancy_allocations = {
+        ...(payload.vacancy_allocations ?? {}),
+        vacancy_level: payload.vacancy_level,
+      };
+      delete payload.vacancy_level;
+    }
+    if (payload.posting_level) {
+      payload.vacancy_allocations = {
+        ...(payload.vacancy_allocations ?? {}),
+        posting_level: payload.posting_level,
+      };
+      delete payload.posting_level;
+    }
+    if (payload.location_questions) {
+      payload.vacancy_allocations = {
+        ...(payload.vacancy_allocations ?? {}),
+        location_questions: payload.location_questions,
+      };
+      delete payload.location_questions;
     }
     const { data: savedJob, error: err } = await upsertJob(payload);
     setSaving(false);
@@ -295,12 +364,14 @@ export default function HRJobPostingEditor() {
     showSuccess('Changes saved successfully.');
     if (savedJob) {
       setFormData(savedJob);
+      setIsSlugManuallyEdited(Boolean(savedJob.slug && savedJob.title && savedJob.slug !== generateSlug(savedJob.title)));
     }
     load();
 
     if (mode === 'close') {
       setShowForm(false);
       setFormData(EMPTY_JOB);
+      setIsSlugManuallyEdited(false);
     } else if (mode === 'continue') {
       const currentIdx = FORM_TABS.findIndex(t => t.id === activeTab);
       if (currentIdx >= 0 && currentIdx < FORM_TABS.length - 1) {
@@ -327,27 +398,66 @@ export default function HRJobPostingEditor() {
     load();
   };
 
+  // ── Open Edit Form ────────────────────────────────────────────────────────
+  const openEditForm = (job: RmsJobPosting) => {
+    const isCustomSlug = Boolean(job.slug && job.title && job.slug !== generateSlug(job.title));
+    setIsSlugManuallyEdited(isCustomSlug);
+
+    const normalizedEligibility = Array.isArray(job.eligibility_criteria)
+      ? job.eligibility_criteria.map(item =>
+          typeof item === 'string' ? { label: item, required: true } : item
+        )
+      : [];
+    const normalizedDocs = Array.isArray(job.required_documents)
+      ? job.required_documents.map(item =>
+          typeof item === 'string' ? { key: item.toLowerCase().replace(/\s+/g, '_'), label: item } : item
+        )
+      : [];
+    const normalizedSkills = Array.isArray(job.skills_required) ? job.skills_required : [];
+
+    setFormData({
+      ...EMPTY_JOB,
+      ...job,
+      project_overview: job.project_overview || '',
+      experience_details: job.experience_details || job.vacancy_allocations?.experience_details || '',
+      eligibility_criteria: normalizedEligibility,
+      required_documents: normalizedDocs,
+      skills_required: normalizedSkills,
+      location_type: job.location_type || 'Multiple Locations',
+      location_districts: job.location_districts || [],
+      location_regions: job.location_regions || [],
+      location_talukas: job.location_talukas || [],
+      show_city_publicly: job.show_city_publicly !== false,
+      city_name: job.city_name || '',
+      internal_location: job.internal_location || '',
+      project_pdf_enabled: job.project_pdf_enabled !== false,
+      project_video_enabled: job.project_video_enabled !== false,
+      jd_pdf_enabled: job.jd_pdf_enabled !== false,
+      vacancy_level: job.vacancy_level || job.vacancy_allocations?.vacancy_level || 'taluka',
+      posting_level: job.posting_level || job.vacancy_allocations?.posting_level || (
+        job.vacancy_level === 'district' || job.vacancy_allocations?.vacancy_level === 'district'
+          ? 'District-wise'
+          : 'Taluka-wise'
+      ),
+      location_questions: job.location_questions || job.vacancy_allocations?.location_questions || null,
+      auto_calculate_vacancies: !!job.auto_calculate_vacancies,
+      vacancy_allocations: job.vacancy_allocations || {},
+      questionnaire: job.questionnaire || (job.vacancy_allocations as any)?.questionnaire || null,
+    });
+    setEligInput('');
+    setDocInput('');
+    setSkillInput('');
+    setActiveTab('position');
+    setShowForm(true);
+  };
+
   // ── Quick Actions ──────────────────────────────────────────────────────────
   const handleAction = async (action: ActionKey, job: RmsJobPosting) => {
     setOpenMenuId(null);
     setError(null);
     switch (action) {
       case 'edit':
-        setFormData({
-          ...EMPTY_JOB,
-          ...job,
-          location_type: job.location_type || 'Multiple Locations',
-          location_districts: job.location_districts || [],
-          location_regions: job.location_regions || [],
-          location_talukas: job.location_talukas || [],
-          show_city_publicly: job.show_city_publicly !== false,
-          city_name: job.city_name || '',
-          internal_location: job.internal_location || '',
-          auto_calculate_vacancies: !!job.auto_calculate_vacancies,
-          vacancy_allocations: job.vacancy_allocations || {},
-        });
-        setActiveTab('position');
-        setShowForm(true);
+        openEditForm(job);
         break;
       case 'preview':
         handlePreview(job);
@@ -492,36 +602,57 @@ export default function HRJobPostingEditor() {
   // ── Eligibility / Document / Skill helpers ─────────────────────────────────
   const addEligibility = () => {
     if (!eligInput.trim()) return;
-    set('eligibility_criteria', [...(formData.eligibility_criteria as { label: string; required: boolean }[]), { label: eligInput.trim(), required: true }]);
+    const current = Array.isArray(formData.eligibility_criteria)
+      ? (formData.eligibility_criteria as any[]).map(item =>
+          typeof item === 'string' ? { label: item, required: true } : item
+        )
+      : [];
+    set('eligibility_criteria', [...current, { label: eligInput.trim(), required: true }]);
     setEligInput('');
   };
   const removeEligibility = (i: number) => {
-    const list = [...(formData.eligibility_criteria as { label: string; required: boolean }[])];
-    list.splice(i, 1); set('eligibility_criteria', list);
+    const list = Array.isArray(formData.eligibility_criteria)
+      ? (formData.eligibility_criteria as any[]).map(item =>
+          typeof item === 'string' ? { label: item, required: true } : item
+        )
+      : [];
+    list.splice(i, 1);
+    set('eligibility_criteria', list);
   };
 
   const addSkill = () => {
     if (!skillInput.trim()) return;
-    const current = (formData.skills_required as string[] ?? []);
+    const current = Array.isArray(formData.skills_required) ? (formData.skills_required as string[]) : [];
     if (!current.includes(skillInput.trim())) {
       set('skills_required', [...current, skillInput.trim()]);
     }
     setSkillInput('');
   };
   const removeSkill = (i: number) => {
-    const list = [...(formData.skills_required as string[] ?? [])];
-    list.splice(i, 1); set('skills_required', list);
+    const list = Array.isArray(formData.skills_required) ? [...(formData.skills_required as string[])] : [];
+    list.splice(i, 1);
+    set('skills_required', list);
   };
 
   const addDocument = () => {
     if (!docInput.trim()) return;
     const key = docInput.trim().toLowerCase().replace(/\s+/g, '_');
-    set('required_documents', [...(formData.required_documents as { key: string; label: string }[]), { key, label: docInput.trim() }]);
+    const current = Array.isArray(formData.required_documents)
+      ? (formData.required_documents as any[]).map(item =>
+          typeof item === 'string' ? { key: item.toLowerCase().replace(/\s+/g, '_'), label: item } : item
+        )
+      : [];
+    set('required_documents', [...current, { key, label: docInput.trim() }]);
     setDocInput('');
   };
   const removeDocument = (i: number) => {
-    const list = [...(formData.required_documents as { key: string; label: string }[])];
-    list.splice(i, 1); set('required_documents', list);
+    const list = Array.isArray(formData.required_documents)
+      ? (formData.required_documents as any[]).map(item =>
+          typeof item === 'string' ? { key: item.toLowerCase().replace(/\s+/g, '_'), label: item } : item
+        )
+      : [];
+    list.splice(i, 1);
+    set('required_documents', list);
   };
 
   // ─── Render ─────────────────────────────────────────────────────────────────
@@ -638,7 +769,7 @@ export default function HRJobPostingEditor() {
           <Link to="/admin/rms/trash" className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-primary-600 hover:text-primary-800 bg-white border border-primary-200 rounded-xl hover:bg-primary-50 transition-colors">
             <Trash2 className="w-3.5 h-3.5" /> Job Trash
           </Link>
-          <button onClick={() => { setFormData(EMPTY_JOB); setActiveTab('position'); setShowForm(true); }}
+          <button onClick={() => { setFormData(EMPTY_JOB); setIsSlugManuallyEdited(false); setActiveTab('position'); setShowForm(true); }}
             className="flex items-center gap-2 px-4 py-2 bg-primary-900 text-white text-sm font-bold rounded-xl hover:bg-primary-800 transition-colors">
             <Plus className="w-4 h-4" /> New Position
           </button>
@@ -698,7 +829,7 @@ export default function HRJobPostingEditor() {
           className="bg-white rounded-2xl border-2 border-primary-200 shadow-xl overflow-hidden">
           
           {/* Top Form Header */}
-          <div className="p-5 border-b border-primary-100 flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-primary-50/50 to-white">
+          <div className="p-4 sm:p-5 border-b border-primary-100 flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-primary-50/50 to-white">
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-primary-900">
@@ -729,7 +860,7 @@ export default function HRJobPostingEditor() {
           </div>
 
           {/* 5-Tab Bar */}
-          <div className="flex overflow-x-auto border-b border-primary-100 bg-slate-50/60 scrollbar-hide">
+          <div className="flex overflow-x-auto border-b border-primary-100 bg-slate-50/60 scrollbar-hide px-1 sm:px-2">
             {FORM_TABS.map(tab => {
               const active = activeTab === tab.id;
               const Icon = tab.icon;
@@ -752,7 +883,7 @@ export default function HRJobPostingEditor() {
           </div>
 
           {/* Form Content */}
-          <form onSubmit={e => handleSave(e, 'continue')} className="p-6 space-y-6">
+          <form onSubmit={e => handleSave(e, 'continue')} className="p-4 sm:p-6 space-y-6">
 
             {/* ═════ TAB 1: POSITION SETUP ═════ */}
             {activeTab === 'position' && (
@@ -764,7 +895,7 @@ export default function HRJobPostingEditor() {
                   <p className="text-xs text-primary-500 mt-0.5">Define core identifiers, department, location and employment classification.</p>
                 </div>
 
-                <div className="grid sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {[
                     { label: 'Job Title *', key: 'title', placeholder: 'e.g. District Coordinator' },
                     { label: 'URL Slug *', key: 'slug', placeholder: 'auto-generated from title' },
@@ -775,8 +906,27 @@ export default function HRJobPostingEditor() {
                       <label className="block text-xs font-semibold text-primary-700 mb-1.5">{f.label}</label>
                       <input value={(formData[f.key as keyof RmsJobPosting] as string) ?? ''} placeholder={f.placeholder}
                         onChange={e => {
-                          set(f.key as keyof RmsJobPosting, e.target.value);
-                          if (f.key === 'title' && !formData.id) set('slug', generateSlug(e.target.value));
+                          const val = e.target.value;
+                          if (f.key === 'title') {
+                            setFormData(prev => {
+                              const isSlugEmpty = !prev.slug || !prev.slug.trim();
+                              const shouldAutoSlug = !isSlugManuallyEdited || isSlugEmpty;
+                              return {
+                                ...prev,
+                                title: val,
+                                slug: shouldAutoSlug ? generateSlug(val) : prev.slug,
+                              };
+                            });
+                          } else if (f.key === 'slug') {
+                            if (!val.trim()) {
+                              setIsSlugManuallyEdited(false);
+                            } else {
+                              setIsSlugManuallyEdited(true);
+                            }
+                            set('slug', val);
+                          } else {
+                            set(f.key as keyof RmsJobPosting, val);
+                          }
                         }}
                         className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white" />
                     </div>
@@ -822,7 +972,7 @@ export default function HRJobPostingEditor() {
                 />
 
                 {/* Fees Grid */}
-                <div className="grid sm:grid-cols-2 gap-4 p-4 bg-amber-50/70 rounded-xl border border-amber-200">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3.5 sm:p-4 bg-amber-50/70 rounded-xl border border-amber-200">
                   <div>
                     <label className="block text-xs font-semibold text-amber-900 mb-1.5">Application Fee (₹) — 0 for Free</label>
                     <input type="number" min="0" step="1" value={formData.application_fee_amount ?? 0}
@@ -838,7 +988,7 @@ export default function HRJobPostingEditor() {
                 </div>
 
                 {/* Salary / Honorarium Configuration */}
-                <div className="border border-primary-200 rounded-xl p-4 bg-primary-50/30 space-y-3">
+                <div className="border border-primary-200 rounded-xl p-3.5 sm:p-4 bg-primary-50/30 space-y-3">
                   <label className="block text-xs font-bold text-primary-800 uppercase tracking-wide">
                     Salary / Honorarium Configuration (Enterprise HRMS)
                   </label>
@@ -934,6 +1084,16 @@ export default function HRJobPostingEditor() {
                     className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white resize-y" />
                 </div>
 
+                {/* Experience Details Textarea */}
+                <div>
+                  <label className="block text-xs font-semibold text-primary-700 mb-1.5">
+                    Experience Details <span className="font-normal text-primary-400">(optional, shown on public portal)</span>
+                  </label>
+                  <textarea value={formData.experience_details ?? ''} onChange={e => set('experience_details', e.target.value)}
+                    rows={4} placeholder="Describe relevant work experience, practical responsibilities, and the type of experience expected from candidates."
+                    className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white resize-y" />
+                </div>
+
                 {/* Required Skills Tag Builder */}
                 <div>
                   <label className="block text-xs font-semibold text-primary-700 mb-2">Required Skills &amp; Competencies</label>
@@ -941,9 +1101,9 @@ export default function HRJobPostingEditor() {
                     <input value={skillInput} onChange={e => setSkillInput(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addSkill())}
                       placeholder="e.g. Agronomy, Field Survey, Soil Chemistry..."
-                      className="flex-1 border border-primary-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500" />
+                      className="flex-1 min-w-0 border border-primary-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500" />
                     <button type="button" onClick={addSkill}
-                      className="px-4 py-2 bg-primary-100 text-primary-700 font-semibold rounded-lg text-sm hover:bg-primary-200 transition-colors">Add Skill</button>
+                      className="px-4 py-2 bg-primary-100 text-primary-700 font-semibold rounded-lg text-sm hover:bg-primary-200 transition-colors shrink-0">Add Skill</button>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {((formData.skills_required as string[]) ?? []).map((s, i) => (
@@ -963,18 +1123,22 @@ export default function HRJobPostingEditor() {
                     <input value={eligInput} onChange={e => setEligInput(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addEligibility())}
                       placeholder="Type criterion (e.g. Graduate in Agriculture/Allied Science) and press enter..."
-                      className="flex-1 border border-primary-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500" />
+                      className="flex-1 min-w-0 border border-primary-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500" />
                     <button type="button" onClick={addEligibility}
-                      className="px-4 py-2 bg-primary-100 text-primary-700 font-semibold rounded-lg text-sm hover:bg-primary-200 transition-colors">Add</button>
+                      className="px-4 py-2 bg-primary-100 text-primary-700 font-semibold rounded-lg text-sm hover:bg-primary-200 transition-colors shrink-0">Add</button>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {(formData.eligibility_criteria as { label: string }[] ?? []).map((c, i) => (
-                      <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary-50 border border-primary-200 rounded-full text-xs font-medium text-primary-700">
-                        <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
-                        {c.label}
-                        <button type="button" onClick={() => removeEligibility(i)} className="ml-1 text-primary-400 hover:text-red-500 transition-colors">×</button>
-                      </span>
-                    ))}
+                    {(Array.isArray(formData.eligibility_criteria) ? formData.eligibility_criteria : []).map((c: any, i: number) => {
+                      const label = typeof c === 'string' ? c : c?.label || '';
+                      if (!label.trim()) return null;
+                      return (
+                        <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary-50 border border-primary-200 rounded-full text-xs font-medium text-primary-700">
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                          {label}
+                          <button type="button" onClick={() => removeEligibility(i)} className="ml-1 text-primary-400 hover:text-red-500 transition-colors">×</button>
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -985,27 +1149,31 @@ export default function HRJobPostingEditor() {
                     <input value={docInput} onChange={e => setDocInput(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addDocument())}
                       placeholder="e.g. Aadhaar Card, Degree Certificate, Driving License..."
-                      className="flex-1 border border-primary-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500" />
+                      className="flex-1 min-w-0 border border-primary-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500" />
                     <button type="button" onClick={addDocument}
-                      className="px-4 py-2 bg-primary-100 text-primary-700 font-semibold rounded-lg text-sm hover:bg-primary-200 transition-colors">Add</button>
+                      className="px-4 py-2 bg-primary-100 text-primary-700 font-semibold rounded-lg text-sm hover:bg-primary-200 transition-colors shrink-0">Add</button>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {(formData.required_documents as { label: string }[] ?? []).map((d, i) => (
-                      <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-full text-xs font-medium text-blue-700">
-                        {d.label}
-                        <button type="button" onClick={() => removeDocument(i)} className="ml-1 text-blue-400 hover:text-red-500 transition-colors">×</button>
-                      </span>
-                    ))}
+                    {(Array.isArray(formData.required_documents) ? formData.required_documents : []).map((d: any, i: number) => {
+                      const label = typeof d === 'string' ? d : d?.label || '';
+                      if (!label.trim()) return null;
+                      return (
+                        <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-full text-xs font-medium text-blue-700">
+                          {label}
+                          <button type="button" onClick={() => removeDocument(i)} className="ml-1 text-blue-400 hover:text-red-500 transition-colors">×</button>
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
 
                 {/* Project Resources */}
-                <div className="p-4 bg-blue-50/70 rounded-xl border border-blue-100 space-y-3">
+                <div className="p-3.5 sm:p-4 bg-blue-50/70 rounded-xl border border-blue-100 space-y-3">
                   <p className="text-xs font-bold text-blue-800 uppercase tracking-wide">Project Resources &amp; Downloads</p>
                   {([
                     { label: 'Project Information PDF URL', key: 'project_pdf_url',   toggle: 'project_pdf_enabled' },
                     { label: 'Project Introduction Video URL', key: 'project_video_url', toggle: 'project_video_enabled' },
-                    { label: 'Job Description PDF URL', key: 'jd_pdf_url',          toggle: null },
+                    { label: 'Job Description PDF URL', key: 'jd_pdf_url',          toggle: 'jd_pdf_enabled' },
                   ] as { label: string; key: keyof RmsJobPosting; toggle: keyof RmsJobPosting | null }[]).map(f => (
                     <div key={f.key}>
                       <div className="flex items-center justify-between mb-1.5">
@@ -1074,20 +1242,50 @@ export default function HRJobPostingEditor() {
                   </div>
                 )}
 
-                {/* Custom Application Questions Notice */}
-                <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-xl space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <ClipboardList className="w-4 h-4 text-amber-700" />
-                    <h5 className="text-xs font-bold text-amber-900">Custom Application Questions (Status: Future Phase)</h5>
+                {/* Job-Specific Questionnaire shortcut banner */}
+                <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-xl flex items-center justify-between gap-3 flex-wrap">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <ClipboardList className="w-4 h-4 text-emerald-700" />
+                      <h5 className="text-xs font-bold text-emerald-900">Job-Specific Assessment Questionnaire</h5>
+                    </div>
+                    <p className="text-xs text-emerald-800 leading-relaxed">
+                      Configure role-specific questions, sections, and conditional logic in the dedicated Questionnaire tab.
+                    </p>
                   </div>
-                  <p className="text-xs text-amber-800 leading-relaxed">
-                    Custom candidate application questions are currently not implemented in the candidate application portal. The active candidate portal uses a standardized 7-step verification wizard (Personal, Address, Education, Experience, Preference, Declaration, Preview). Questionnaire database schema persistence is reserved for an upcoming release.
-                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('questionnaire')}
+                    className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                  >
+                    Go to Questionnaire Tab →
+                  </button>
                 </div>
               </div>
             )}
 
-            {/* ═════ TAB 4: FAQS & DECLARATION ═════ */}
+            {/* ═════ TAB 4: JOB-SPECIFIC QUESTIONNAIRE ═════ */}
+            {activeTab === 'questionnaire' && (
+              <div className="space-y-6">
+                <div className="border-b border-primary-100 pb-3">
+                  <h4 className="text-sm font-bold text-primary-900 flex items-center gap-2">
+                    <ClipboardList className="w-4 h-4 text-emerald-700" /> Job-Specific Questionnaire Builder
+                  </h4>
+                  <p className="text-xs text-primary-500 mt-0.5">
+                    Build and publish role assessment questions loaded dynamically in Candidate Application Step 4 for this position.
+                  </p>
+                </div>
+
+                <HRQuestionnaireBuilder
+                  job={formData}
+                  onChange={q => set('questionnaire', q)}
+                  onSave={handleSave}
+                  saving={saving}
+                />
+              </div>
+            )}
+
+            {/* ═════ TAB 5: FAQS & DECLARATION ═════ */}
             {activeTab === 'faqs' && (
               <div className="space-y-6">
                 <div className="border-b border-primary-100 pb-3">
@@ -1148,7 +1346,7 @@ export default function HRJobPostingEditor() {
               </div>
             )}
 
-            {/* ═════ TAB 5: SCHEDULING & PUBLISH ═════ */}
+            {/* ═════ TAB 6: SCHEDULING & PUBLISH ═════ */}
             {activeTab === 'scheduling' && (
               <div className="space-y-6">
                 <div className="border-b border-primary-100 pb-3">
@@ -1159,7 +1357,7 @@ export default function HRJobPostingEditor() {
                 </div>
 
                 {/* Status Selector */}
-                <div className="grid sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-primary-700 mb-1.5">Position Status</label>
                     <select value={formData.status} onChange={e => set('status', e.target.value)}
@@ -1167,7 +1365,7 @@ export default function HRJobPostingEditor() {
                       {JOB_STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                     </select>
                   </div>
-                  <div className="flex items-center gap-4 pt-6">
+                  <div className="flex flex-wrap items-center gap-3 sm:gap-4 pt-1 sm:pt-6">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" checked={formData.is_featured ?? false}
                         onChange={e => set('is_featured', e.target.checked)} className="rounded border-amber-300" />
@@ -1203,26 +1401,26 @@ export default function HRJobPostingEditor() {
             )}
 
             {/* Bottom Unified Action Bar */}
-            <div className="pt-4 border-t border-primary-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50 -mx-6 -mb-6 p-4 rounded-b-2xl">
-              <div className="flex items-center gap-2">
+            <div className="pt-4 border-t border-primary-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-50/50 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 p-4 rounded-b-2xl">
+              <div className="flex flex-wrap items-center gap-2">
                 <button type="button" onClick={() => { setShowForm(false); setError(null); }}
-                  className="px-4 py-2 border border-primary-200 text-primary-700 font-semibold rounded-xl hover:bg-primary-100 text-xs transition-colors">
+                  className="flex-1 sm:flex-none px-4 py-2 border border-primary-200 text-primary-700 font-semibold rounded-xl hover:bg-primary-100 text-xs transition-colors">
                   Cancel
                 </button>
                 {formData.slug && (
                   <button type="button" onClick={() => handlePreview(formData)}
-                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-primary-700 bg-white border border-primary-200 rounded-xl hover:bg-primary-50 transition-colors">
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-primary-700 bg-white border border-primary-200 rounded-xl hover:bg-primary-50 transition-colors">
                     <Eye className="w-3.5 h-3.5" /> Preview Public View
                   </button>
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <button
                   type="button"
                   onClick={() => handleSave(undefined, 'continue')}
                   disabled={saving || !formData.title?.trim()}
-                  className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-primary-900 text-primary-900 font-bold rounded-xl hover:bg-primary-50 disabled:opacity-50 text-xs transition-all"
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-white border-2 border-primary-900 text-primary-900 font-bold rounded-xl hover:bg-primary-50 disabled:opacity-50 text-xs transition-all"
                 >
                   {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                   {saving ? 'Saving...' : 'Save & Continue Editing'}
@@ -1232,7 +1430,7 @@ export default function HRJobPostingEditor() {
                   type="button"
                   onClick={() => handleSave(undefined, 'close')}
                   disabled={saving || !formData.title?.trim()}
-                  className="flex items-center gap-2 px-5 py-2 bg-primary-900 text-white font-bold rounded-xl hover:bg-primary-800 disabled:opacity-50 text-xs shadow-md transition-all"
+                  className="flex items-center justify-center gap-2 px-5 py-2 bg-primary-900 text-white font-bold rounded-xl hover:bg-primary-800 disabled:opacity-50 text-xs shadow-md transition-all"
                 >
                   {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
                   {saving ? 'Saving...' : 'Save & Close'}
@@ -1314,23 +1512,7 @@ export default function HRJobPostingEditor() {
                       <Eye className="w-4 h-4" />
                     </button>
                     {/* Edit button */}
-                    <button onClick={() => {
-                      setFormData({
-                        ...EMPTY_JOB,
-                        ...job,
-                        location_type: job.location_type || 'Multiple Locations',
-                        location_districts: job.location_districts || [],
-                        location_regions: job.location_regions || [],
-                        location_talukas: job.location_talukas || [],
-                        show_city_publicly: job.show_city_publicly !== false,
-                        city_name: job.city_name || '',
-                        internal_location: job.internal_location || '',
-                        auto_calculate_vacancies: !!job.auto_calculate_vacancies,
-                        vacancy_allocations: job.vacancy_allocations || {},
-                      });
-                      setActiveTab('position');
-                      setShowForm(true);
-                    }} title="Edit"
+                    <button onClick={() => openEditForm(job)} title="Edit"
                       className="p-2 rounded-lg border border-primary-200 text-primary-500 hover:bg-primary-50 transition-all">
                       <Edit2 className="w-4 h-4" />
                     </button>

@@ -4,9 +4,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, User, FileText, Calendar, CreditCard,
   FolderOpen, Bell, BookOpen, Award, Settings,
-  LogOut, Menu, X, ChevronRight, Briefcase,
+  LogOut, Menu, X, ChevronRight, Briefcase, Lock,
 } from 'lucide-react';
 import { useCandidateAuth } from '../lib/CandidateAuthContext';
+import OTPLoginModal from '../components/OTPLoginModal';
 
 const navItems = [
   { path: '/candidate/dashboard',      label: 'Dashboard',          icon: LayoutDashboard },
@@ -24,8 +25,9 @@ const navItems = [
 export default function CandidateDashboardLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile, signOut, loading } = useCandidateAuth();
+  const { user, profile, signOut, loading, setVerifiedMobile } = useCandidateAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [loginModalOpen, setLoginModalOpen] = useState(true);
 
   useEffect(() => { setSidebarOpen(false); }, [location.pathname]);
 
@@ -33,6 +35,56 @@ export default function CandidateDashboardLayout() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-primary-50">
         <div className="animate-spin w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full" />
+      </div>
+    );
+  }
+
+  // Auth Guard: Unauthenticated users are presented with a working login flow
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-primary-50 flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white rounded-2xl border border-primary-100 p-8 text-center shadow-lg">
+          <div className="w-14 h-14 rounded-2xl bg-primary-100 flex items-center justify-center mx-auto mb-4">
+            <Lock className="w-7 h-7 text-primary-700" />
+          </div>
+          <h2 className="text-xl font-bold text-primary-900 mb-2">Candidate Login Required</h2>
+          <p className="text-sm text-primary-600 mb-6 leading-relaxed">
+            Please log in with your registered mobile number and OTP to access your candidate dashboard, profile, and applications.
+          </p>
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={() => setLoginModalOpen(true)}
+              className="w-full flex items-center justify-center gap-2 py-3 bg-primary-900 text-white font-semibold rounded-xl hover:bg-primary-800 transition-colors shadow-sm"
+            >
+              <User className="w-4 h-4" />
+              Log In with Mobile OTP
+            </button>
+            <Link
+              to="/careers"
+              className="block w-full py-2.5 text-xs text-primary-500 hover:text-primary-800 font-medium transition-colors"
+            >
+              ← Return to Careers Portal
+            </Link>
+          </div>
+        </div>
+
+        <OTPLoginModal
+          isOpen={loginModalOpen}
+          onClose={() => setLoginModalOpen(false)}
+          onSuccess={(isNewUser, mobile) => {
+            setLoginModalOpen(false);
+            if (mobile) {
+              const clean = mobile.replace(/\D/g, '').slice(-10);
+              setVerifiedMobile(clean);
+            }
+            if (isNewUser) {
+              navigate('/candidate/profile');
+            }
+          }}
+          title="Candidate Login"
+          subtitle="Enter your mobile number to receive a one-time verification code."
+        />
       </div>
     );
   }

@@ -18,10 +18,12 @@ import {
   type MasterProfileFormData,
   type JobSpecificFormData,
   type PortalWizardState,
+  type JobQuestionnaire,
 } from './types';
 import Step1CreateProfile from './steps/Step1CreateProfile';
 import Step2MasterProfile from './steps/Step2MasterProfile';
 import Step2JobSpecific from './steps/Step2JobSpecific';
+import Step4Questionnaire from './steps/Step4Questionnaire';
 import Step3ReviewSubmit from './steps/Step3ReviewSubmit';
 import Step4Confirmation from './steps/Step4Confirmation';
 import { submitCandidateApplication, saveCandidateDraft, loadCandidateDraft } from './api';
@@ -186,8 +188,8 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
           dateOfBirth: isProfileMatching ? (profile?.date_of_birth || state.masterProfile.dateOfBirth || '') : (state.masterProfile.dateOfBirth || ''),
           gender: isProfileMatching ? (profile?.gender || state.masterProfile.gender || '') : (state.masterProfile.gender || ''),
           mobile: cleanMobile,
-          alternateMobile: isProfileMatching ? (profile?.emergency_mobile || (profile as any)?.alternate_mobile || state.masterProfile.alternateMobile || '') : (state.masterProfile.alternateMobile || ''),
-          casteCategory: state.masterProfile.casteCategory || '',
+          alternateMobile: isProfileMatching ? (profile?.alternate_mobile || profile?.emergency_mobile || (profile as any)?.alternate_mobile || state.masterProfile.alternateMobile || '') : (state.masterProfile.alternateMobile || ''),
+          casteCategory: isProfileMatching ? (profile?.caste_category || state.masterProfile.casteCategory || '') : (state.masterProfile.casteCategory || ''),
           homeDistrict: isProfileMatching ? (profile?.district || state.masterProfile.homeDistrict || '') : (state.masterProfile.homeDistrict || ''),
           homeTaluka: isProfileMatching ? (profile?.taluka || state.masterProfile.homeTaluka || '') : (state.masterProfile.homeTaluka || ''),
           addressLine1: isProfileMatching ? ((profile as any)?.address_line1 || state.masterProfile.addressLine1 || '') : (state.masterProfile.addressLine1 || ''),
@@ -196,11 +198,11 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
           currentDistrict: isProfileMatching ? (profile?.district || state.masterProfile.currentDistrict || state.masterProfile.homeDistrict || '') : (state.masterProfile.currentDistrict || state.masterProfile.homeDistrict || ''),
           currentTaluka: isProfileMatching ? (profile?.taluka || state.masterProfile.currentTaluka || state.masterProfile.homeTaluka || '') : (state.masterProfile.currentTaluka || state.masterProfile.homeTaluka || ''),
           currentPincode: isProfileMatching ? ((profile as any)?.pincode || state.masterProfile.currentPincode || state.masterProfile.pincode || '') : (state.masterProfile.currentPincode || state.masterProfile.pincode || ''),
-          permanentSameAsCurrent: state.masterProfile.permanentSameAsCurrent ?? false,
-          permanentAddressLine1: state.masterProfile.permanentAddressLine1 || '',
-          permanentDistrict: state.masterProfile.permanentDistrict || '',
-          permanentTaluka: state.masterProfile.permanentTaluka || '',
-          permanentPincode: state.masterProfile.permanentPincode || '',
+          permanentSameAsCurrent: isProfileMatching ? ((profile as any)?.permanent_same_as_current ?? state.masterProfile.permanentSameAsCurrent ?? false) : (state.masterProfile.permanentSameAsCurrent ?? false),
+          permanentAddressLine1: isProfileMatching ? ((profile as any)?.permanent_address_line1 || state.masterProfile.permanentAddressLine1 || '') : (state.masterProfile.permanentAddressLine1 || ''),
+          permanentDistrict: isProfileMatching ? ((profile as any)?.permanent_district || state.masterProfile.permanentDistrict || '') : (state.masterProfile.permanentDistrict || ''),
+          permanentTaluka: isProfileMatching ? ((profile as any)?.permanent_taluka || state.masterProfile.permanentTaluka || '') : (state.masterProfile.permanentTaluka || ''),
+          permanentPincode: isProfileMatching ? ((profile as any)?.permanent_pincode || state.masterProfile.permanentPincode || '') : (state.masterProfile.permanentPincode || ''),
           email: isProfileMatching ? (profile?.email || state.masterProfile.email || '') : (state.masterProfile.email || ''),
           candidateId: isProfileMatching ? (profile?.candidate_id || state.masterProfile.candidateId || '') : (state.masterProfile.candidateId || ''),
           profileCreatedDate: isProfileMatching && profile?.created_at ? new Date(profile.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : (state.masterProfile.profileCreatedDate || ''),
@@ -318,7 +320,8 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
             dateOfBirth: prev.masterProfile.dateOfBirth || activeProf.date_of_birth || '',
             gender: prev.masterProfile.gender || activeProf.gender || '',
             mobile: activeProf.mobile || prev.masterProfile.mobile,
-            alternateMobile: prev.masterProfile.alternateMobile || activeProf.emergency_mobile || (activeProf as any).alternate_mobile || '',
+            alternateMobile: prev.masterProfile.alternateMobile || activeProf.alternate_mobile || activeProf.emergency_mobile || (activeProf as any).alternate_mobile || '',
+            casteCategory: prev.masterProfile.casteCategory || activeProf.caste_category || '',
             email: prev.masterProfile.email || activeProf.email || '',
             candidateId: prev.masterProfile.candidateId || activeProf.candidate_id || '',
             profileCreatedDate: prev.masterProfile.profileCreatedDate || (activeProf.created_at ? new Date(activeProf.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : ''),
@@ -326,6 +329,15 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
             homeTaluka: prev.masterProfile.homeTaluka || activeProf.taluka || '',
             addressLine1: prev.masterProfile.addressLine1 || (activeProf as any).address_line1 || '',
             pincode: prev.masterProfile.pincode || (activeProf as any).pincode || '',
+            currentAddressLine1: prev.masterProfile.currentAddressLine1 || (activeProf as any).address_line1 || '',
+            currentDistrict: prev.masterProfile.currentDistrict || activeProf.district || '',
+            currentTaluka: prev.masterProfile.currentTaluka || activeProf.taluka || '',
+            currentPincode: prev.masterProfile.currentPincode || (activeProf as any).pincode || '',
+            permanentSameAsCurrent: prev.masterProfile.permanentSameAsCurrent ?? (activeProf as any).permanent_same_as_current ?? false,
+            permanentAddressLine1: prev.masterProfile.permanentAddressLine1 || (activeProf as any).permanent_address_line1 || '',
+            permanentDistrict: prev.masterProfile.permanentDistrict || (activeProf as any).permanent_district || '',
+            permanentTaluka: prev.masterProfile.permanentTaluka || (activeProf as any).permanent_taluka || '',
+            permanentPincode: prev.masterProfile.permanentPincode || (activeProf as any).permanent_pincode || '',
           },
         };
       });
@@ -470,6 +482,38 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
       refreshProfile(clean);
     }
   };
+
+  // ── Active Job-Specific Questionnaire Resolution (Hook placed before early returns) ─
+  const activeQuestionnaire = useMemo(() => {
+    const q = (job as any)?.questionnaire || (job?.vacancy_allocations as any)?.questionnaire;
+    if (
+      q &&
+      q.status !== 'draft' &&
+      q.isVisibleToCandidates !== false &&
+      Array.isArray(q.questions) &&
+      q.questions.some((item: any) => item.isVisible !== false)
+    ) {
+      return q as JobQuestionnaire;
+    }
+    return null;
+  }, [job]);
+
+  // ── Dynamic Stepper Steps (Auto-skips Step 4 if job has no questionnaire) ─
+  const visibleSteps = useMemo(() => {
+    if (activeQuestionnaire) {
+      return PORTAL_STEPS;
+    }
+    return PORTAL_STEPS
+      .filter(s => s.id !== 'questionnaire')
+      .map((s, idx) => ({ ...s, stepNumber: idx + 1 }));
+  }, [activeQuestionnaire]);
+
+  // If current step is questionnaire but questionnaire is inactive or hidden, auto-advance to review
+  useEffect(() => {
+    if (state.currentStep === 'questionnaire' && !activeQuestionnaire && !jobLoading) {
+      goToStep('review');
+    }
+  }, [state.currentStep, activeQuestionnaire, jobLoading, goToStep]);
 
   // ── Loading State ──────────────────────────────────────────────────────────
   if (authLoading || jobLoading) {
@@ -635,7 +679,7 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
   }
 
   // ── Active Step Index Calculation ──────────────────────────────────────────
-  const currentStepIndex = PORTAL_STEPS.findIndex(s => s.id === state.currentStep);
+  const currentStepIndex = visibleSteps.findIndex(s => s.id === state.currentStep);
 
   return (
     <div className="min-h-screen bg-[#f0f4f8] py-8 px-4 sm:px-6">
@@ -758,8 +802,8 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
           </div>
 
           {/* Stepper Progress Bar */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 pt-4">
-            {PORTAL_STEPS.map((s, idx) => {
+          <div className={`grid grid-cols-2 sm:grid-cols-3 ${activeQuestionnaire ? 'md:grid-cols-6' : 'md:grid-cols-5'} gap-2 pt-4`}>
+            {visibleSteps.map((s, idx) => {
               const isCurrent = s.id === state.currentStep;
               const isPast = idx < currentStepIndex;
 
@@ -883,8 +927,13 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
               job={job}
               onChange={updateJobSpecific}
               onNext={() => {
-                goToStep('review');
-                saveDraft('review', false);
+                if (activeQuestionnaire) {
+                  goToStep('questionnaire');
+                  saveDraft('questionnaire', false);
+                } else {
+                  goToStep('review');
+                  saveDraft('review', false);
+                }
               }}
               onBack={() => {
                 goToStep('master_profile');
@@ -893,7 +942,32 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
             />
           )}
 
-          {/* STEP 4: Review Application & Statutory Declaration */}
+          {/* STEP 4: Job-Specific Questionnaire (Dynamic Assessment) */}
+          {state.currentStep === 'questionnaire' && (
+            activeQuestionnaire ? (
+              <Step4Questionnaire
+                job={job}
+                questionnaire={activeQuestionnaire}
+                answers={state.jobSpecific.questionnaireResponses || {}}
+                onChange={answers => {
+                  updateJobSpecific('questionnaireResponses', answers);
+                  if (activeQuestionnaire.version) {
+                    updateJobSpecific('questionnaireVersion', activeQuestionnaire.version);
+                  }
+                }}
+                onNext={() => {
+                  goToStep('review');
+                  saveDraft('review', false);
+                }}
+                onBack={() => {
+                  goToStep('job_specific');
+                  saveDraft('job_specific', false);
+                }}
+              />
+            ) : null
+          )}
+
+          {/* STEP 5: Review Application & Statutory Declaration */}
           {state.currentStep === 'review' && (
             <Step3ReviewSubmit
               masterProfile={state.masterProfile}
@@ -901,9 +975,17 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
               job={job}
               submitting={state.submitting}
               onBack={() => {
-                goToStep('job_specific');
-                saveDraft('job_specific', false);
+                if (activeQuestionnaire) {
+                  goToStep('questionnaire');
+                  saveDraft('questionnaire', false);
+                } else {
+                  goToStep('job_specific');
+                  saveDraft('job_specific', false);
+                }
               }}
+              onEditQuestionnaire={activeQuestionnaire ? () => {
+                goToStep('questionnaire');
+              } : undefined}
               onSubmit={handleReviewSubmit}
             />
           )}

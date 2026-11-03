@@ -10,6 +10,7 @@ interface Step1MasterProfileProps {
   userId: string;
   verifiedMobile: string;
   isCasteRequired?: boolean;
+  submitButtonLabel?: string;
   onChange: (field: keyof MasterProfileFormData, value: any) => void;
   onNext: () => void;
   onBack?: () => void;
@@ -23,6 +24,7 @@ export default function Step1MasterProfile({
   userId,
   verifiedMobile,
   isCasteRequired = false,
+  submitButtonLabel,
   onChange,
   onNext,
   onBack,
@@ -250,7 +252,16 @@ export default function Step1MasterProfile({
           return 'PIN code is required.';
         }
         if (/[\u0900-\u097F]/.test(trimmed) || /[\u0966-\u096F]/.test(trimmed)) {
-          return 'Only English digits (0–9) are allowed. Marathi numerals are not accepted.';
+          return 'फक्त इंग्रजी अंक (0–9) ग्राह्य आहेत. मराठी अंक स्वीकारले जाणार नाहीत. (Only English digits 0–9 allowed)';
+        }
+        if (/[a-zA-Z]/.test(trimmed)) {
+          return 'Only English digits (0–9) are allowed. Letters and symbols are not accepted.';
+        }
+        if (/[^0-9]/.test(trimmed)) {
+          return 'Only English digits (0–9) are allowed.';
+        }
+        if (trimmed.length !== 6) {
+          return 'PIN code must be exactly 6 digits.';
         }
         const pincodeRegex = /^[1-9][0-9]{5}$/;
         if (!pincodeRegex.test(trimmed)) {
@@ -295,7 +306,16 @@ export default function Step1MasterProfile({
           return 'Permanent PIN code is required.';
         }
         if (/[\u0900-\u097F]/.test(trimmed) || /[\u0966-\u096F]/.test(trimmed)) {
-          return 'Only English digits (0–9) are allowed. Marathi numerals are not accepted.';
+          return 'फक्त इंग्रजी अंक (0–9) ग्राह्य आहेत. मराठी अंक स्वीकारले जाणार नाहीत. (Only English digits 0–9 allowed)';
+        }
+        if (/[a-zA-Z]/.test(trimmed)) {
+          return 'Only English digits (0–9) are allowed. Letters and symbols are not accepted.';
+        }
+        if (/[^0-9]/.test(trimmed)) {
+          return 'Only English digits (0–9) are allowed.';
+        }
+        if (trimmed.length !== 6) {
+          return 'PIN code must be exactly 6 digits.';
         }
         const pincodeRegex = /^[1-9][0-9]{5}$/;
         if (!pincodeRegex.test(trimmed)) {
@@ -361,6 +381,64 @@ export default function Step1MasterProfile({
     if (field === 'currentAddressLine1' || field === 'permanentAddressLine1' || field === 'addressLine1') {
       finalVal = rawVal.toUpperCase();
     }
+
+    if (field === 'currentPincode' || field === 'permanentPincode') {
+      const errorKey = field as keyof FieldErrors;
+
+      // Check for Marathi / Devanagari script or numerals explicitly
+      if (/[\u0900-\u097F]/.test(rawVal) || /[\u0966-\u096F]/.test(rawVal)) {
+        setErrors(prev => ({
+          ...prev,
+          [errorKey]: 'फक्त इंग्रजी अंक (0–9) ग्राह्य आहेत. मराठी अंक स्वीकारले जाणार नाहीत. (Only English digits 0–9 allowed)',
+          ...(field === 'currentPincode' ? { pincode: 'फक्त इंग्रजी अंक (0–9) ग्राह्य आहेत. मराठी अंक स्वीकारले जाणार नाहीत. (Only English digits 0–9 allowed)' } : {})
+        }));
+        finalVal = rawVal.replace(/[^0-9]/g, '').slice(0, 6);
+        onChange(field, finalVal);
+        if (field === 'currentPincode') onChange('pincode', finalVal);
+        if (data.permanentSameAsCurrent && field === 'currentPincode') {
+          onChange('permanentPincode', finalVal);
+        }
+        return;
+      }
+
+      // Check for letters or other non-digit characters
+      if (/[a-zA-Z]/.test(rawVal) || /[^0-9]/.test(rawVal)) {
+        setErrors(prev => ({
+          ...prev,
+          [errorKey]: 'Only English digits (0–9) are allowed. Letters and symbols are not accepted.',
+          ...(field === 'currentPincode' ? { pincode: 'Only English digits (0–9) are allowed. Letters and symbols are not accepted.' } : {})
+        }));
+        finalVal = rawVal.replace(/[^0-9]/g, '').slice(0, 6);
+        onChange(field, finalVal);
+        if (field === 'currentPincode') onChange('pincode', finalVal);
+        if (data.permanentSameAsCurrent && field === 'currentPincode') {
+          onChange('permanentPincode', finalVal);
+        }
+        return;
+      }
+
+      // Pure English digits - strictly limit to at most 6 digits
+      finalVal = rawVal.replace(/[^0-9]/g, '').slice(0, 6);
+
+      // Clear error when valid digits are entered
+      if (errors[errorKey] || (field === 'currentPincode' && errors.pincode)) {
+        setErrors(prev => {
+          const next = { ...prev };
+          delete next[errorKey];
+          if (field === 'currentPincode') delete next.pincode;
+          return next;
+        });
+      }
+
+      if (finalVal.length === 6 && !/^[1-9][0-9]{5}$/.test(finalVal)) {
+        setErrors(prev => ({
+          ...prev,
+          [errorKey]: 'Enter a valid 6-digit Indian PIN code (e.g. 400001).',
+          ...(field === 'currentPincode' ? { pincode: 'Enter a valid 6-digit Indian PIN code (e.g. 400001).' } : {})
+        }));
+      }
+    }
+
     onChange(field, finalVal);
 
     // Sync legacy aliases for current address backward compatibility
@@ -377,13 +455,97 @@ export default function Step1MasterProfile({
       if (field === 'currentPincode' || field === 'pincode') onChange('permanentPincode', finalVal);
     }
 
-    if (errors[field as keyof FieldErrors]) {
+    if (errors[field as keyof FieldErrors] && field !== 'currentPincode' && field !== 'permanentPincode') {
       setErrors(prev => {
         const next = { ...prev };
         delete next[field as keyof FieldErrors];
         return next;
       });
     }
+  };
+
+  // Prevent non-numeric characters from being typed in PIN code
+  const handlePincodeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (
+      ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter', 'Home', 'End'].includes(e.key) ||
+      e.ctrlKey || e.metaKey
+    ) {
+      return;
+    }
+
+    const isMarathi = /[\u0900-\u097F]/.test(e.key) || /[\u0966-\u096F]/.test(e.key);
+    const targetId = (e.currentTarget as HTMLElement).id;
+    const isCurrent = targetId.includes('current');
+    const errorKey: keyof FieldErrors = isCurrent ? 'currentPincode' : 'permanentPincode';
+
+    if (!/^[0-9]$/.test(e.key)) {
+      e.preventDefault();
+      setErrors(prev => ({
+        ...prev,
+        [errorKey]: isMarathi
+          ? 'फक्त इंग्रजी अंक (0–9) ग्राह्य आहेत. मराठी अंक स्वीकारले जाणार नाहीत. (Only English digits 0–9 allowed)'
+          : 'Only English digits (0–9) are allowed. Letters and symbols are not accepted.',
+        ...(isCurrent ? { pincode: isMarathi
+          ? 'फक्त इंग्रजी अंक (0–9) ग्राह्य आहेत. मराठी अंक स्वीकारले जाणार नाहीत. (Only English digits 0–9 allowed)'
+          : 'Only English digits (0–9) are allowed. Letters and symbols are not accepted.' } : {})
+      }));
+      return;
+    }
+
+    const input = e.currentTarget;
+    const selectedLength = (input.selectionEnd || 0) - (input.selectionStart || 0);
+    if (input.value.length >= 6 && selectedLength === 0) {
+      e.preventDefault();
+    }
+  };
+
+  // Intercept paste events to reject non-digits, Marathi script, and length overflow
+  const handlePincodePaste = (e: React.ClipboardEvent<HTMLInputElement>, field: 'currentPincode' | 'permanentPincode') => {
+    const pastedText = e.clipboardData.getData('text');
+    const errorKey: keyof FieldErrors = field;
+    const input = e.currentTarget;
+    const currentVal = input.value || '';
+    const start = input.selectionStart ?? 0;
+    const end = input.selectionEnd ?? currentVal.length;
+
+    // 1. If paste contains Marathi / Devanagari script or numerals, reject the ENTIRE paste
+    if (/[\u0900-\u097F]/.test(pastedText) || /[\u0966-\u096F]/.test(pastedText)) {
+      e.preventDefault();
+      setErrors(prev => ({
+        ...prev,
+        [errorKey]: 'फक्त इंग्रजी अंक (0–9) ग्राह्य आहेत. मराठी अंक स्वीकारले जाणार नाहीत. (Only English digits 0–9 allowed)',
+        ...(field === 'currentPincode' ? { pincode: 'फक्त इंग्रजी अंक (0–9) ग्राह्य आहेत. मराठी अंक स्वीकारले जाणार नाहीत. (Only English digits 0–9 allowed)' } : {})
+      }));
+      return; // Do NOT call handleAddressChange; previous input value is completely preserved
+    }
+
+    // 2. If paste contains alphabets, spaces, punctuation, or any non-English-digit character, reject the ENTIRE paste
+    if (/[^0-9]/.test(pastedText)) {
+      e.preventDefault();
+      setErrors(prev => ({
+        ...prev,
+        [errorKey]: 'Only English digits (0–9) are allowed. Letters and symbols are not accepted.',
+        ...(field === 'currentPincode' ? { pincode: 'Only English digits (0–9) are allowed. Letters and symbols are not accepted.' } : {})
+      }));
+      return; // Do NOT call handleAddressChange; previous input value is completely preserved
+    }
+
+    // 3. If pasted content exceeds 6 digits or resulting length exceeds 6, reject the ENTIRE paste
+    const resultingLength = currentVal.length - (end - start) + pastedText.length;
+    if (pastedText.length > 6 || resultingLength > 6) {
+      e.preventDefault();
+      setErrors(prev => ({
+        ...prev,
+        [errorKey]: 'PIN code must be exactly 6 digits.',
+        ...(field === 'currentPincode' ? { pincode: 'PIN code must be exactly 6 digits.' } : {})
+      }));
+      return; // Do NOT call handleAddressChange; previous input value is completely preserved
+    }
+
+    // 4. Valid pure English digits paste (1–6 digits within length limit): apply cleanly
+    e.preventDefault();
+    const newVal = currentVal.slice(0, start) + pastedText + currentVal.slice(end);
+    handleAddressChange(field, newVal);
   };
 
   // ── Same as Current Address Checkbox Toggle ─────────────────────────────────
@@ -527,14 +689,32 @@ export default function Step1MasterProfile({
       if (data.email?.trim()) {
         payload.email = data.email.trim();
       }
+      if (data.casteCategory?.trim()) {
+        payload.caste_category = data.casteCategory.trim();
+      }
       if (data.alternateMobile?.trim()) {
-        payload.emergency_mobile = data.alternateMobile.trim().replace(/\D/g, '');
+        const cleanAlt = data.alternateMobile.trim().replace(/\D/g, '');
+        payload.emergency_mobile = cleanAlt;
+        payload.alternate_mobile = cleanAlt;
       }
       if (currentAddressLine1Val.trim()) {
         payload.address_line1 = currentAddressLine1Val.trim().toUpperCase();
       }
       if (currentPincodeVal.trim()) {
         payload.pincode = currentPincodeVal.trim();
+      }
+      payload.permanent_same_as_current = isSameAddress;
+      if (permanentAddressLine1Val.trim()) {
+        payload.permanent_address_line1 = permanentAddressLine1Val.trim().toUpperCase();
+      }
+      if (permanentDistrictVal.trim()) {
+        payload.permanent_district = permanentDistrictVal.trim();
+      }
+      if (permanentTalukaVal.trim()) {
+        payload.permanent_taluka = permanentTalukaVal.trim();
+      }
+      if (permanentPincodeVal.trim()) {
+        payload.permanent_pincode = permanentPincodeVal.trim();
       }
 
       const { data: savedProfile, error: saveErr } = await upsertCandidateProfile(payload as any);
@@ -989,11 +1169,22 @@ export default function Step1MasterProfile({
                 id="field-currentPincode"
                 ref={fieldRefs.currentPincode}
                 type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 required
                 maxLength={6}
                 placeholder="E.G. 411001"
                 value={currentPincodeVal}
-                onChange={e => handleAddressChange('currentPincode', e.target.value)}
+                onKeyDown={handlePincodeKeyDown}
+                onPaste={e => handlePincodePaste(e, 'currentPincode')}
+                onChange={e => {
+                  const raw = e.target.value;
+                  const clean = raw.replace(/[^0-9]/g, '').slice(0, 6);
+                  if (e.target.value !== clean) {
+                    e.target.value = clean;
+                  }
+                  handleAddressChange('currentPincode', raw);
+                }}
                 onBlur={() => handleBlur('currentPincode')}
                 aria-invalid={Boolean(errors.currentPincode || errors.pincode)}
                 className={getFieldClass(Boolean(errors.currentPincode || errors.pincode))}
@@ -1136,12 +1327,23 @@ export default function Step1MasterProfile({
                 id="field-permanentPincode"
                 ref={fieldRefs.permanentPincode}
                 type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 required
                 maxLength={6}
                 readOnly={isSameAddress}
                 placeholder="E.G. 411001"
                 value={permanentPincodeVal}
-                onChange={e => handleAddressChange('permanentPincode', e.target.value)}
+                onKeyDown={handlePincodeKeyDown}
+                onPaste={e => handlePincodePaste(e, 'permanentPincode')}
+                onChange={e => {
+                  const raw = e.target.value;
+                  const clean = raw.replace(/[^0-9]/g, '').slice(0, 6);
+                  if (e.target.value !== clean) {
+                    e.target.value = clean;
+                  }
+                  handleAddressChange('permanentPincode', raw);
+                }}
                 onBlur={() => handleBlur('permanentPincode')}
                 aria-invalid={Boolean(errors.permanentPincode)}
                 className={`${getFieldClass(Boolean(errors.permanentPincode))} ${isSameAddress ? 'bg-slate-100 text-slate-700 cursor-not-allowed select-none' : ''}`}
@@ -1192,7 +1394,7 @@ export default function Step1MasterProfile({
             </>
           ) : (
             <>
-              Save &amp; Proceed to Position Details <ArrowRight className="w-4 h-4" />
+              {submitButtonLabel || 'Save & Proceed to Position Details'} <ArrowRight className="w-4 h-4" />
             </>
           )}
         </button>

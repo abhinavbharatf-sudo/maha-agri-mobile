@@ -5,7 +5,7 @@
  * Confined strictly to src/careers/portal/ to ensure zero impact on legacy modules.
  */
 
-export type PortalStep = 'create_profile' | 'master_profile' | 'job_specific' | 'review' | 'confirmation';
+export type PortalStep = 'create_profile' | 'master_profile' | 'job_specific' | 'questionnaire' | 'review' | 'confirmation';
 
 export interface PortalStepItem {
   id: PortalStep;
@@ -34,18 +34,39 @@ export const PORTAL_STEPS: PortalStepItem[] = [
     shortDescription: 'Qualifications & Posting Quotas',
   },
   {
-    id: 'review',
+    id: 'questionnaire',
     stepNumber: 4,
+    label: 'Job-Specific Questionnaire',
+    shortDescription: 'Role Assessment Questions',
+  },
+  {
+    id: 'review',
+    stepNumber: 5,
     label: 'Review & Submit',
     shortDescription: 'Summary & Legal Undertaking',
   },
   {
     id: 'confirmation',
-    stepNumber: 5,
+    stepNumber: 6,
     label: 'Confirmation',
     shortDescription: 'Receipt & Next Steps',
   },
 ];
+
+// ── Job-Specific Questionnaire Models ────────────────────────────────────────
+export type {
+  QuestionType,
+  QuestionOption,
+  QuestionCondition,
+  JobQuestion,
+  QuestionnaireSection,
+  QuestionnaireVersionSnapshot,
+  JobQuestionnaire,
+  PostingLevel,
+  JobLocationQuestion,
+} from '../lib/types';
+
+export type QuestionnaireResponses = Record<string, any>;
 
 export const CASTE_CATEGORIES = [
   { value: 'OPEN', label: 'Open / General' },
@@ -268,6 +289,9 @@ export interface JobSpecificFormData {
   locationConfirmed?: boolean;
   drivingLicence?: DrivingLicenceType;
   marathiFluent?: boolean;
+  questionnaireResponses?: Record<string, any>;
+  questionnaireVersion?: string;
+  locationAnswers?: Record<string, boolean>;
 }
 
 export interface PortalWizardState {
@@ -352,6 +376,9 @@ export const INITIAL_JOB_SPECIFIC: JobSpecificFormData = {
   locationConfirmed: false,
   drivingLicence: 'none',
   marathiFluent: true,
+  questionnaireResponses: {},
+  questionnaireVersion: '',
+  locationAnswers: {},
 };
 
 export const INITIAL_WIZARD_STATE: PortalWizardState = {

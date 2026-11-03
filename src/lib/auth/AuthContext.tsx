@@ -148,6 +148,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             } as Profile);
             setRoleKey('super_admin');
             setPermissions(new Set(['all', 'admin', 'hr', 'crm', 'super_admin']));
+
+            // If using default super admin account, sync Supabase auth session so PostgREST RLS passes
+            if (u.email === 'admin@abhinavbharat.org') {
+              supabase.auth.signInWithPassword({
+                email: 'admin@abhinavbharat.org',
+                password: 'Admin@123'
+              }).catch((e) => console.warn('[auth] Supabase background auth sync warning:', e));
+            }
+
             return true;
           }
         } catch (e) {

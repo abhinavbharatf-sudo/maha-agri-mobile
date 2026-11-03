@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Phone, MessageSquare, ArrowRight, RefreshCw, X, CheckCircle, Shield } from 'lucide-react';
+import { Phone, MessageSquare, ArrowRight, RefreshCw, X, CheckCircle, Shield, AlertTriangle } from 'lucide-react';
 import { useCandidateAuth } from '../lib/CandidateAuthContext';
+import { normalizeMobileNumber } from '../../lib/utils';
+import { isDummyOtpMode, verifyDummyOtp, DUMMY_OTP_CODE } from '../lib/dummyOtp';
 
 interface OTPLoginModalProps {
   isOpen: boolean;
@@ -14,7 +16,7 @@ interface OTPLoginModalProps {
 type Step = 'mobile' | 'otp' | 'success';
 
 export default function OTPLoginModal({ isOpen, onClose, onSuccess, title, subtitle }: OTPLoginModalProps) {
-  const { requestOtp, verifyOtp } = useCandidateAuth();
+  const { requestOtp, verifyOtp, setVerifiedMobile } = useCandidateAuth();
   const [step, setStep] = useState<Step>('mobile');
   const [mobile, setMobile] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -24,6 +26,8 @@ export default function OTPLoginModal({ isOpen, onClose, onSuccess, title, subti
   const [sentSuccess, setSentSuccess] = useState(false);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
   const generatedOtpRef = useRef('');
+
+  const dummyActive = isDummyOtpMode();
 
   useEffect(() => {
     if (!isOpen) {
@@ -49,6 +53,19 @@ export default function OTPLoginModal({ isOpen, onClose, onSuccess, title, subti
     if (mobile.length !== 10) return setError('Please enter a valid 10-digit mobile number.');
     setError(null);
     setLoading(true);
+
+    if (dummyActive) {
+      console.log(`[LOCAL TEST MODE] Simulated OTP dispatch for +91${mobile}. Test OTP is ${DUMMY_OTP_CODE}. WhatsApp API bypassed.`);
+      setLoading(false);
+      setSentSuccess(true);
+      setResendTimer(30);
+      setTimeout(() => {
+        setSentSuccess(false);
+        setStep('otp');
+        setTimeout(() => otpRefs.current[0]?.focus(), 100);
+      }, 600);
+      return;
+    }
     
     console.log(`[DEBUG] 2. Calling requestOtp() for mobile: ${mobile}`);
     const { error: sendErr } = await requestOtp(mobile);
@@ -94,20 +111,49 @@ export default function OTPLoginModal({ isOpen, onClose, onSuccess, title, subti
     if (token.length !== 6) return setError('Please enter the complete 6-digit OTP.');
     setError(null);
     setLoading(true);
+
+    if (dummyActive) {
+      const verifyRes = verifyDummyOtp(token);
+      if (!verifyRes.valid) {
+        setLoading(false);
+        return setError(verifyRes.error || `Invalid OTP. In LOCAL TEST MODE, please enter ${DUMMY_OTP_CODE}.`);
+      }
+
+      const cleanMobile = normalizeMobileNumber(mobile);
+      setVerifiedMobile(cleanMobile);
+
+      console.log(`[LOCAL TEST MODE] Test OTP ${DUMMY_OTP_CODE} successfully verified for +91${cleanMobile}. Simulating WELCOME RECRUITMENT PORTAL flow.`);
+      setLoading(false);
+      setStep('success');
+      setTimeout(() => onSuccess(false, cleanMobile), 800);
+      return;
+    }
+
     const { error: verifyErr, isNewUser } = await verifyOtp(mobile, token);
     if (verifyErr) {
       setLoading(false);
       return setError(verifyErr);
     }
+    const cleanMobile = normalizeMobileNumber(mobile);
+    setVerifiedMobile(cleanMobile);
     setLoading(false);
     setStep('success');
-    setTimeout(() => onSuccess(isNewUser, mobile), 1000);
+    setTimeout(() => onSuccess(isNewUser, cleanMobile), 1000);
   };
 
   const handleResend = async () => {
     setError(null);
     setOtp(['', '', '', '', '', '']);
     setLoading(true);
+
+    if (dummyActive) {
+      console.log(`[LOCAL TEST MODE] Resend simulated for +91${mobile}. Test OTP remains ${DUMMY_OTP_CODE}. WhatsApp API bypassed.`);
+      setLoading(false);
+      setResendTimer(30);
+      otpRefs.current[0]?.focus();
+      return;
+    }
+
     const { error: sendErr } = await requestOtp(mobile);
     setLoading(false);
     if (sendErr) return setError(sendErr);
@@ -157,6 +203,33 @@ export default function OTPLoginModal({ isOpen, onClose, onSuccess, title, subti
             </div>
 
             <div className="px-6 py-6">
+              {dummyActive && (
+                <div className="mb-5 p-3.5 bg-amber-50 border border-amber-300 rounded-xl flex items-start gap-3 text-amber-900">
+                  <div className="w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold">
+                    !
+                  </div>
+                  <div className="text-xs flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-extrabold uppercase tracking-wider text-amber-900">
+                        LOCAL TEST MODE
+                      </span>
+                      <span className="text-[10px] px-1.5 py-0.5 bg-amber-200 text-amber-950 rounded font-mono font-bold">
+                        DEV ONLY
+                      </span>
+                    </div>
+                    <p className="mt-1 text-amber-800 text-[11px] leading-relaxed">
+                      WhatsApp OTP sending is bypassed for local frontend testing.
+                    </p>
+                    <div className="mt-2 pt-2 border-t border-amber-200/80 flex items-center justify-between">
+                      <span className="font-semibold text-amber-900">Configured Test OTP:</span>
+                      <code className="px-2.5 py-0.5 bg-white border border-amber-300 rounded-md font-mono font-bold text-sm tracking-widest text-amber-950 shadow-xs">
+                        {DUMMY_OTP_CODE}
+                      </code>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <AnimatePresence mode="wait">
                 {/* Step 1: Mobile */}
                 {step === 'mobile' && (
@@ -319,8 +392,12 @@ export default function OTPLoginModal({ isOpen, onClose, onSuccess, title, subti
                     >
                       <CheckCircle className="w-9 h-9 text-emerald-600" />
                     </motion.div>
-                    <h3 className="text-lg font-bold text-primary-900">Login Successful!</h3>
-                    <p className="text-primary-600 text-sm mt-1">Redirecting to your dashboard...</p>
+                    <h3 className="text-lg font-bold text-primary-900">
+                      {dummyActive ? 'Test Verification Successful!' : 'Login Successful!'}
+                    </h3>
+                    <p className="text-primary-600 text-sm mt-1">
+                      {dummyActive ? 'Redirecting to Recruitment Portal / Job Details...' : 'Redirecting to your dashboard...'}
+                    </p>
                   </motion.div>
                 )}
               </AnimatePresence>

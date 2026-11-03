@@ -7,10 +7,10 @@ import {
   HelpCircle, ChevronUp, AlertTriangle,
 } from 'lucide-react';
 import type {
-  RmsJobPosting, JobLocationType, VacancyAllocationsConfig,
+  RmsJobPosting, JobLocationType, VacancyAllocationsConfig, VacancyLevel, PostingLevel, JobLocationQuestion,
 } from '../../lib/types';
 import {
-  JOB_LOCATION_TYPES, MAHARASHTRA_REGIONS, MAHARASHTRA_DISTRICTS,
+  JOB_LOCATION_TYPES, MAHARASHTRA_REGIONS, MAHARASHTRA_DISTRICTS, getDefaultLocationQuestions,
 } from '../../lib/constants';
 import {
   calculateVacancies, generatePublicLocationString,
@@ -31,6 +31,7 @@ export default function HRLocationAndVacancyManager({
   const [districtSearch, setDistrictSearch] = useState('');
   const [expandedDistricts, setExpandedDistricts] = useState<Record<string, boolean>>({});
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showCandidatePreview, setShowCandidatePreview] = useState(false);
 
   // Simple Mode: Quick Taluka Exclusion state
   const [exclusionDistrict, setExclusionDistrict] = useState<string>('');
@@ -45,16 +46,38 @@ export default function HRLocationAndVacancyManager({
     return Array.isArray(formData.location_regions) ? formData.location_regions : [];
   }, [formData.location_regions]);
 
-  const defaultPerTaluka = Math.max(1, formData.vacancies_per_taluka ?? 1);
+  const vacancyLevel: VacancyLevel = formData.vacancy_level ?? formData.vacancy_allocations?.vacancy_level ?? 'taluka';
+  const postingLevel: PostingLevel = formData.posting_level || (
+    formData.vacancy_level === 'district' || formData.vacancy_allocations?.vacancy_level === 'district'
+      ? 'District-wise'
+      : 'Taluka-wise'
+  );
+  const defaultPerDistrict = formData.vacancies_per_district ?? formData.vacancy_allocations?.default_per_district ?? null;
+  const defaultPerTaluka = formData.vacancies_per_taluka != null
+    ? Math.max(0, formData.vacancies_per_taluka)
+    : (formData.vacancy_allocations?.default_per_taluka != null ? Math.max(0, formData.vacancy_allocations.default_per_taluka) : 1);
+
+  // Authoritative location questions configuration
+  const locationQuestions: JobLocationQuestion[] = useMemo(() => {
+    if (Array.isArray(formData.location_questions) && formData.location_questions.length > 0) {
+      return formData.location_questions;
+    }
+    if (Array.isArray(formData.vacancy_allocations?.location_questions) && formData.vacancy_allocations!.location_questions.length > 0) {
+      return formData.vacancy_allocations!.location_questions;
+    }
+    return getDefaultLocationQuestions(postingLevel);
+  }, [formData.location_questions, formData.vacancy_allocations, postingLevel]);
 
   // Compute live vacancy allocations
   const vacancyCalc = useMemo(() => {
     return calculateVacancies(
       selectedDistricts,
       formData.vacancy_allocations,
-      defaultPerTaluka
+      defaultPerTaluka,
+      defaultPerDistrict,
+      vacancyLevel
     );
-  }, [selectedDistricts, formData.vacancy_allocations, defaultPerTaluka]);
+  }, [selectedDistricts, formData.vacancy_allocations, defaultPerTaluka, defaultPerDistrict, vacancyLevel]);
 
   // Filtered districts list for the search box
   const filteredDistricts = useMemo(() => {
@@ -125,7 +148,7 @@ export default function HRLocationAndVacancyManager({
       currentLocation: formData.location,
     });
 
-    const calcResult = calculateVacancies(newDistricts, formData.vacancy_allocations, defaultPerTaluka);
+    const calcResult = calculateVacancies(newDistricts, formData.vacancy_allocations, defaultPerTaluka, defaultPerDistrict, vacancyLevel);
 
     setFormData(prev => ({
       ...prev,
@@ -163,7 +186,7 @@ export default function HRLocationAndVacancyManager({
       currentLocation: formData.location,
     });
 
-    const calcResult = calculateVacancies(updatedDistricts, formData.vacancy_allocations, defaultPerTaluka);
+    const calcResult = calculateVacancies(updatedDistricts, formData.vacancy_allocations, defaultPerTaluka, defaultPerDistrict, vacancyLevel);
 
     setFormData(prev => ({
       ...prev,
@@ -212,7 +235,7 @@ export default function HRLocationAndVacancyManager({
       selectedRegions: selectedRegions,
       currentLocation: formData.location,
     });
-    const calcResult = calculateVacancies(allDistricts, formData.vacancy_allocations, defaultPerTaluka);
+    const calcResult = calculateVacancies(allDistricts, formData.vacancy_allocations, defaultPerTaluka, defaultPerDistrict, vacancyLevel);
 
     setFormData(prev => ({
       ...prev,
@@ -232,7 +255,7 @@ export default function HRLocationAndVacancyManager({
       selectedRegions: [],
       currentLocation: formData.location,
     });
-    const calcResult = calculateVacancies([], formData.vacancy_allocations, defaultPerTaluka);
+    const calcResult = calculateVacancies([], formData.vacancy_allocations, defaultPerTaluka, defaultPerDistrict, vacancyLevel);
 
     setFormData(prev => ({
       ...prev,
@@ -257,7 +280,7 @@ export default function HRLocationAndVacancyManager({
       currentLocation: formData.location,
     });
 
-    const calcResult = calculateVacancies(updatedDistricts, formData.vacancy_allocations, defaultPerTaluka);
+    const calcResult = calculateVacancies(updatedDistricts, formData.vacancy_allocations, defaultPerTaluka, defaultPerDistrict, vacancyLevel);
 
     setFormData(prev => ({
       ...prev,
@@ -270,21 +293,142 @@ export default function HRLocationAndVacancyManager({
     }));
   };
 
-  // ── Handler: Vacancy Per-Taluka Default Change ─────────────────────────────
-  const handleDefaultPerTalukaChange = (val: number) => {
-    const perTaluka = Math.max(1, val);
-    set('vacancies_per_taluka', perTaluka);
+  // ── Handler: Posting Level Change (District-wise vs Taluka-wise) ───────────
+  const handlePostingLevelChange = (newPostingLevel: PostingLevel) => {
+    if (newPostingLevel === postingLevel) return;
+
+    const newVacancyLevel: VacancyLevel = newPostingLevel === 'District-wise' ? 'district' : 'taluka';
+    set('posting_level', newPostingLevel);
+    set('vacancy_level', newVacancyLevel);
+
+    // Cache current questions under the previous posting level to prevent silent overwriting
+    const existingByLevel = (formData.vacancy_allocations as any)?.location_questions_by_level || {};
+    const updatedByLevel: Record<string, JobLocationQuestion[]> = {
+      ...existingByLevel,
+      [postingLevel]: locationQuestions,
+    };
+
+    // Restore previously saved questions for the target posting level if available,
+    // otherwise load the official default questions for the new posting level
+    const targetQuestions: JobLocationQuestion[] =
+      Array.isArray(updatedByLevel[newPostingLevel]) && updatedByLevel[newPostingLevel].length > 0
+        ? updatedByLevel[newPostingLevel]
+        : getDefaultLocationQuestions(newPostingLevel);
+
     const updatedConfig: VacancyAllocationsConfig = {
       ...(formData.vacancy_allocations ?? {}),
-      default_per_taluka: perTaluka,
+      vacancy_level: newVacancyLevel,
+      posting_level: newPostingLevel,
+      location_questions: targetQuestions,
+      location_questions_by_level: updatedByLevel,
+      default_per_district: defaultPerDistrict,
     };
-    const calcResult = calculateVacancies(selectedDistricts, updatedConfig, perTaluka);
+
+    const calcResult = calculateVacancies(
+      selectedDistricts,
+      updatedConfig,
+      defaultPerTaluka,
+      defaultPerDistrict,
+      newVacancyLevel
+    );
+
     setFormData(prev => ({
       ...prev,
-      vacancies_per_taluka: perTaluka,
+      posting_level: newPostingLevel,
+      vacancy_level: newVacancyLevel,
+      location_questions: targetQuestions,
       vacancy_allocations: calcResult.config,
       total_vacancies: prev.auto_calculate_vacancies ? calcResult.grandTotal : prev.total_vacancies,
     }));
+  };
+
+  const updateLocationQuestions = (newQuestions: JobLocationQuestion[]) => {
+    set('location_questions', newQuestions);
+    const existingByLevel = (formData.vacancy_allocations as any)?.location_questions_by_level || {};
+    const updatedByLevel = {
+      ...existingByLevel,
+      [postingLevel]: newQuestions,
+    };
+
+    setFormData(prev => ({
+      ...prev,
+      location_questions: newQuestions,
+      vacancy_allocations: {
+        ...(prev.vacancy_allocations ?? {}),
+        location_questions: newQuestions,
+        location_questions_by_level: updatedByLevel,
+      },
+    }));
+  };
+
+  const handleToggleQuestionEnabled = (qId: string) => {
+    const updated = locationQuestions.map(q => (q.id === qId ? { ...q, enabled: !q.enabled } : q));
+    updateLocationQuestions(updated);
+  };
+
+  const handleToggleQuestionRequired = (qId: string) => {
+    const updated = locationQuestions.map(q => (q.id === qId ? { ...q, required: !q.required } : q));
+    updateLocationQuestions(updated);
+  };
+
+  const handleUpdateQuestionText = (qId: string, text: string) => {
+    const updated = locationQuestions.map(q => (q.id === qId ? { ...q, questionText: text } : q));
+    updateLocationQuestions(updated);
+  };
+
+  const handleResetQuestionsToDefault = () => {
+    const defaults = getDefaultLocationQuestions(postingLevel);
+    updateLocationQuestions(defaults);
+  };
+
+  // ── Handler: Vacancy Level Change (Taluka vs District) ─────────────────────
+  const handleVacancyLevelChange = (newLevel: VacancyLevel) => {
+    const newPostingLevel: PostingLevel = newLevel === 'district' ? 'District-wise' : 'Taluka-wise';
+    handlePostingLevelChange(newPostingLevel);
+  };
+
+  // ── Handler: Vacancy Per-District Default Change ───────────────────────────
+  const handleDefaultPerDistrictChange = (val: number | null) => {
+    set('vacancies_per_district', val);
+    const updatedConfig: VacancyAllocationsConfig = {
+      ...(formData.vacancy_allocations ?? {}),
+      default_per_district: val,
+    };
+    const calcResult = calculateVacancies(
+      selectedDistricts,
+      updatedConfig,
+      defaultPerTaluka,
+      val,
+      vacancyLevel
+    );
+    setFormData(prev => ({
+      ...prev,
+      vacancies_per_district: val,
+      vacancy_allocations: calcResult.config,
+      total_vacancies: prev.auto_calculate_vacancies ? calcResult.grandTotal : prev.total_vacancies,
+    }));
+  };
+
+  // ── Handler: Vacancy Per-Taluka Default Change ─────────────────────────────
+  const handleDefaultPerTalukaChange = (val: number | null) => {
+    const updatedConfig: VacancyAllocationsConfig = {
+      ...(formData.vacancy_allocations ?? {}),
+      default_per_taluka: val,
+    };
+    const effectiveRate = val != null ? Math.max(0, val) : 0;
+    const calcResult = calculateVacancies(selectedDistricts, updatedConfig, effectiveRate, defaultPerDistrict, vacancyLevel);
+    setFormData(prev => {
+      const wasInSync = prev.total_vacancies === null || prev.total_vacancies === calculatedTotal;
+      return {
+        ...prev,
+        vacancies_per_taluka: val,
+        vacancy_allocations: {
+          ...calcResult.config,
+          default_per_taluka: val,
+        },
+        total_vacancies: prev.auto_calculate_vacancies || wasInSync ? calcResult.grandTotal : prev.total_vacancies,
+      };
+    });
   };
 
   // ── Handler: District Override Total ───────────────────────────────────────
@@ -306,7 +450,7 @@ export default function HRLocationAndVacancyManager({
       district_allocations: updatedDistAlloc,
     };
 
-    const calcResult = calculateVacancies(selectedDistricts, newConfig, defaultPerTaluka);
+    const calcResult = calculateVacancies(selectedDistricts, newConfig, defaultPerTaluka, defaultPerDistrict, vacancyLevel);
 
     setFormData(prev => ({
       ...prev,
@@ -334,7 +478,7 @@ export default function HRLocationAndVacancyManager({
       district_allocations: updatedDistAlloc,
     };
 
-    const calcResult = calculateVacancies(selectedDistricts, newConfig, defaultPerTaluka);
+    const calcResult = calculateVacancies(selectedDistricts, newConfig, defaultPerTaluka, defaultPerDistrict, vacancyLevel);
 
     setFormData(prev => ({
       ...prev,
@@ -376,7 +520,7 @@ export default function HRLocationAndVacancyManager({
       district_allocations: updatedDistAlloc,
     };
 
-    const calcResult = calculateVacancies(selectedDistricts, newConfig, defaultPerTaluka);
+    const calcResult = calculateVacancies(selectedDistricts, newConfig, defaultPerTaluka, defaultPerDistrict, vacancyLevel);
 
     setFormData(prev => ({
       ...prev,
@@ -423,7 +567,7 @@ export default function HRLocationAndVacancyManager({
       district_allocations: updatedDistAlloc,
     };
 
-    const calcResult = calculateVacancies(selectedDistricts, newConfig, defaultPerTaluka);
+    const calcResult = calculateVacancies(selectedDistricts, newConfig, defaultPerTaluka, defaultPerDistrict, vacancyLevel);
 
     setFormData(prev => ({
       ...prev,
@@ -456,7 +600,7 @@ export default function HRLocationAndVacancyManager({
     <div className="space-y-6">
 
       {/* ══ 1. SMART LOCATION CONFIGURATION CARD ═════════════════════════════ */}
-      <div className="border border-primary-200 rounded-2xl p-5 bg-white shadow-sm space-y-5">
+      <div className="border border-primary-200 rounded-2xl p-3.5 sm:p-5 bg-white shadow-sm space-y-5">
         <div className="border-b border-primary-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h4 className="text-sm font-bold text-primary-950 flex items-center gap-2">
@@ -638,28 +782,28 @@ export default function HRLocationAndVacancyManager({
                   Select Districts ({selectedDistricts.length} / {MAHARASHTRA_DISTRICTS.length})
                 </label>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="relative">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative flex-1 sm:flex-none">
                   <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
                   <input
                     type="text"
                     placeholder="Search district..."
                     value={districtSearch}
                     onChange={e => setDistrictSearch(e.target.value)}
-                    className="pl-8 pr-2 py-1 text-xs border border-slate-200 rounded-lg w-40 focus:outline-none focus:border-primary-500"
+                    className="w-full sm:w-40 pl-8 pr-2 py-1 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-primary-500"
                   />
                 </div>
                 <button
                   type="button"
                   onClick={handleSelectAllDistricts}
-                  className="px-2.5 py-1 text-[11px] font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-md border border-primary-200"
+                  className="px-2.5 py-1 text-[11px] font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-md border border-primary-200 shrink-0"
                 >
                   Select All 36
                 </button>
                 <button
                   type="button"
                   onClick={handleClearAllDistricts}
-                  className="px-2.5 py-1 text-[11px] font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md"
+                  className="px-2.5 py-1 text-[11px] font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md shrink-0"
                 >
                   Clear All
                 </button>
@@ -750,7 +894,7 @@ export default function HRLocationAndVacancyManager({
       </div>
 
       {/* ══ 2. AUTOMATIC VACANCY CALCULATOR (SIMPLE MODE BY DEFAULT) ═════════ */}
-      <div className="border border-primary-200 rounded-2xl p-5 bg-white shadow-sm space-y-5">
+      <div className="border border-primary-200 rounded-2xl p-3.5 sm:p-5 bg-white shadow-sm space-y-5">
         <div className="border-b border-primary-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h4 className="text-sm font-bold text-primary-950 flex items-center gap-2">
@@ -770,13 +914,210 @@ export default function HRLocationAndVacancyManager({
               className="rounded border-slate-300 text-primary-600 focus:ring-primary-500 h-4 w-4"
             />
             <span className="text-xs font-bold text-primary-900">
-              Auto-Calculate Vacancies from Talukas
+              Auto-Calculate Vacancies from {vacancyLevel === 'district' ? 'Districts' : 'Talukas'}
             </span>
           </label>
         </div>
 
+        {/* Posting Level Selector (Required Field) */}
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-primary-600" />
+              Posting Level <span className="text-red-500">*</span>
+            </span>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Specify whether this position is deployed at District-wise level (district quota only) or Taluka-wise level (district &amp; dependent talukas).
+            </p>
+          </div>
+
+          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 gap-1 self-start sm:self-center shadow-xs">
+            <button
+              type="button"
+              onClick={() => handlePostingLevelChange('District-wise')}
+              className={`px-3.5 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                postingLevel === 'District-wise'
+                  ? 'bg-primary-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              District-wise
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePostingLevelChange('Taluka-wise')}
+              className={`px-3.5 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                postingLevel === 'Taluka-wise'
+                  ? 'bg-primary-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              Taluka-wise
+            </button>
+          </div>
+        </div>
+
+        {/* Candidate Work Location Preferences Configuration Panel */}
+        <div className="border border-slate-200 rounded-xl p-4 bg-white space-y-3 shadow-2xs">
+          <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-100">
+            <div>
+              <h5 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <Compass className="w-3.5 h-3.5 text-primary-600" />
+                Candidate Work Location Preferences ({postingLevel})
+              </h5>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Configure Yes/No questions to understand candidate mobility and location flexibility.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCandidatePreview(prev => !prev)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                  showCandidatePreview
+                    ? 'bg-primary-600 text-white border-primary-600 shadow-xs'
+                    : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
+                }`}
+                title="Preview how enabled questions will appear to candidates"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                {showCandidatePreview ? 'Edit Configuration' : 'Preview Candidate View'}
+              </button>
+              <button
+                type="button"
+                onClick={handleResetQuestionsToDefault}
+                className="text-[11px] font-bold text-primary-600 hover:text-primary-800 hover:underline cursor-pointer"
+                title="Reset questions to official default wording for this posting level"
+              >
+                Reset to Defaults
+              </button>
+            </div>
+          </div>
+
+          {/* Candidate View Preview Mode */}
+          {showCandidatePreview ? (
+            <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                <span className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                  <Eye className="w-3.5 h-3.5 text-primary-600" />
+                  Candidate Portal Live Preview
+                </span>
+                <span className="text-[11px] text-slate-500">
+                  Showing {locationQuestions.filter(q => q.enabled).length} of {locationQuestions.length} questions enabled
+                </span>
+              </div>
+
+              {locationQuestions.filter(q => q.enabled).length === 0 ? (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-center text-xs text-amber-800">
+                  <p className="font-bold">No questions currently enabled for candidates.</p>
+                  <p className="text-[11px] text-amber-700 mt-1">
+                    Toggle &quot;Enabled for Candidates&quot; on at least one question in Edit mode to present mobility questions to applicants.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3 pt-1">
+                  {locationQuestions.filter(q => q.enabled).map((q, idx) => (
+                    <div
+                      key={q.id}
+                      className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-2.5 text-xs shadow-2xs"
+                    >
+                      <div className="font-bold text-[#102a43] leading-snug">
+                        <span className="text-slate-400 font-mono mr-1.5">{idx + 1}.</span>
+                        {q.questionText}
+                        {q.required ? (
+                          <span className="text-red-500 ml-1" title="Required">*</span>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 font-normal ml-1.5">(optional)</span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-4 pt-0.5">
+                        <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-semibold text-slate-700">
+                          <input
+                            type="radio"
+                            name={`preview_${q.id}`}
+                            disabled
+                            className="w-4 h-4 text-emerald-600 border-slate-300 focus:ring-emerald-500"
+                          />
+                          <span>Yes</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-semibold text-slate-700">
+                          <input
+                            type="radio"
+                            name={`preview_${q.id}`}
+                            disabled
+                            className="w-4 h-4 text-slate-800 border-slate-300 focus:ring-slate-500"
+                          />
+                          <span>No</span>
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Edit Configuration Mode */
+            <div className="space-y-2.5">
+              {locationQuestions.map((q, idx) => (
+                <div
+                  key={q.id}
+                  className={`p-3 rounded-xl border transition-all text-xs space-y-2 ${
+                    q.enabled
+                      ? 'border-slate-200 bg-slate-50/60'
+                      : 'border-dashed border-slate-200 bg-slate-100/40 opacity-70'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded">
+                        Q{idx + 1}
+                      </span>
+                      <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-800 select-none">
+                        <input
+                          type="checkbox"
+                          checked={q.enabled}
+                          onChange={() => handleToggleQuestionEnabled(q.id)}
+                          className="rounded border-slate-300 text-primary-600 focus:ring-primary-500 h-3.5 w-3.5"
+                        />
+                        <span>{q.enabled ? 'Enabled for Candidates' : 'Disabled (Hidden)'}</span>
+                      </label>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-1.5 cursor-pointer select-none text-[11px]">
+                        <input
+                          type="checkbox"
+                          checked={q.required}
+                          disabled={!q.enabled}
+                          onChange={() => handleToggleQuestionRequired(q.id)}
+                          className="rounded border-slate-300 text-primary-600 focus:ring-primary-500 h-3.5 w-3.5 disabled:opacity-50"
+                        />
+                        <span className={q.required ? 'font-bold text-red-600' : 'text-slate-500'}>
+                          {q.required ? 'Required *' : 'Optional'}
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <input
+                      type="text"
+                      value={q.questionText}
+                      disabled={!q.enabled}
+                      onChange={e => handleUpdateQuestionText(q.id, e.target.value)}
+                      placeholder="Enter question text..."
+                      className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:border-primary-500 disabled:bg-slate-100 disabled:text-slate-400"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* High-Level Vacancy Inputs Grid (Simple Mode) */}
-        <div className="grid sm:grid-cols-3 md:grid-cols-5 gap-3 p-4 bg-primary-50/30 rounded-xl border border-primary-100">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 p-3.5 sm:p-4 bg-primary-50/30 rounded-xl border border-primary-100">
           <div>
             <label className="block text-xs font-bold text-primary-900 mb-1">
               Approved Vacancies *
@@ -792,34 +1133,48 @@ export default function HRLocationAndVacancyManager({
             <span className="text-[10px] text-primary-500 mt-0.5 block">Statutory published count</span>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-primary-700 mb-1">
-              Default / District
+          <div className={vacancyLevel === 'taluka' ? 'opacity-60' : ''}>
+            <label className={`block text-xs font-semibold mb-1 ${vacancyLevel === 'district' ? 'text-primary-950 font-bold' : 'text-slate-500'}`}>
+              Default / District {vacancyLevel === 'district' ? '*' : '(Disabled in Taluka Level)'}
             </label>
             <input
               type="number"
               min="0"
+              disabled={vacancyLevel === 'taluka'}
               value={formData.vacancies_per_district ?? ''}
-              placeholder="e.g. 2"
-              onChange={e => set('vacancies_per_district', e.target.value === '' ? null : parseInt(e.target.value) || null)}
-              className="w-full border border-primary-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:border-primary-500 bg-white"
+              placeholder={vacancyLevel === 'taluka' ? 'N/A' : 'e.g. 2'}
+              onChange={e => handleDefaultPerDistrictChange(e.target.value === '' ? null : parseInt(e.target.value) || null)}
+              className="w-full border border-primary-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:border-primary-500 bg-white disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
-            <span className="text-[10px] text-slate-400 mt-0.5 block">Target per district</span>
+            <span className="text-[10px] text-slate-500 mt-0.5 block">
+              {vacancyLevel === 'district' ? 'Quota for each selected district' : 'Active only in District Level mode'}
+            </span>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-primary-700 mb-1">
-              Default / Taluka
+          <div className={vacancyLevel === 'district' ? 'opacity-60' : ''}>
+            <label className={`block text-xs font-semibold mb-1 ${vacancyLevel === 'taluka' ? 'text-primary-950 font-bold' : 'text-slate-500'}`}>
+              Default / Taluka {vacancyLevel === 'district' ? '(Disabled in District Level)' : '*'}
             </label>
             <input
               type="number"
-              min="1"
-              value={formData.vacancies_per_taluka ?? 1}
-              placeholder="e.g. 1"
-              onChange={e => handleDefaultPerTalukaChange(parseInt(e.target.value) || 1)}
-              className="w-full border border-primary-200 rounded-lg px-2.5 py-2 text-sm font-semibold focus:outline-none focus:border-primary-500 bg-white"
+              min="0"
+              disabled={vacancyLevel === 'district'}
+              value={formData.vacancies_per_taluka ?? formData.vacancy_allocations?.default_per_taluka ?? ''}
+              placeholder={vacancyLevel === 'district' ? 'N/A' : 'e.g. 1'}
+              onChange={e => {
+                const raw = e.target.value;
+                if (raw === '') {
+                  handleDefaultPerTalukaChange(null);
+                } else {
+                  const num = parseInt(raw, 10);
+                  handleDefaultPerTalukaChange(isNaN(num) ? null : Math.max(0, num));
+                }
+              }}
+              className="w-full border border-primary-200 rounded-lg px-2.5 py-2 text-sm font-semibold focus:outline-none focus:border-primary-500 bg-white disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
-            <span className="text-[10px] text-slate-400 mt-0.5 block">Standard per taluka</span>
+            <span className="text-[10px] text-slate-500 mt-0.5 block">
+              {vacancyLevel === 'district' ? 'Active only in Taluka Level mode' : 'Standard per taluka'}
+            </span>
           </div>
 
           <div>
@@ -874,8 +1229,12 @@ export default function HRLocationAndVacancyManager({
               </div>
               <p className="text-xs mt-0.5 opacity-90">
                 {isConsistent
-                  ? `Approved total vacancies (${approvedTotal}) matches bottom-up calculation from ${vacancyCalc.totalActiveTalukas} eligible talukas.`
-                  : `Discrepancy of ${diff > 0 ? `+${diff}` : diff} vacancies between approved headcount (${approvedTotal}) and bottom-up taluka calculation (${calculatedTotal}).`}
+                  ? vacancyLevel === 'district'
+                    ? `Approved total vacancies (${approvedTotal}) matches district quota calculation across ${selectedDistricts.length} selected districts.`
+                    : `Approved total vacancies (${approvedTotal}) matches bottom-up calculation from ${vacancyCalc.totalActiveTalukas} eligible talukas.`
+                  : vacancyLevel === 'district'
+                    ? `Discrepancy of ${diff > 0 ? `+${diff}` : diff} vacancies between approved headcount (${approvedTotal}) and district quota calculation (${calculatedTotal}).`
+                    : `Discrepancy of ${diff > 0 ? `+${diff}` : diff} vacancies between approved headcount (${approvedTotal}) and bottom-up taluka calculation (${calculatedTotal}).`}
               </p>
             </div>
           </div>
@@ -899,12 +1258,20 @@ export default function HRLocationAndVacancyManager({
             <span className="text-lg font-bold text-slate-900">{selectedDistricts.length}</span>
           </div>
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-center">
-            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Eligible Talukas</span>
-            <span className="text-lg font-bold text-emerald-700">{vacancyCalc.totalActiveTalukas}</span>
+            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
+              {vacancyLevel === 'district' ? 'Vacancy Scope' : 'Eligible Talukas'}
+            </span>
+            <span className="text-lg font-bold text-emerald-700">
+              {vacancyLevel === 'district' ? 'District-Wide' : vacancyCalc.totalActiveTalukas}
+            </span>
           </div>
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-center">
-            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Excluded Talukas</span>
-            <span className="text-lg font-bold text-slate-400">{vacancyCalc.totalExcludedTalukas}</span>
+            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
+              {vacancyLevel === 'district' ? 'Allocation Level' : 'Excluded Talukas'}
+            </span>
+            <span className="text-lg font-bold text-slate-600">
+              {vacancyLevel === 'district' ? 'District Quota' : vacancyCalc.totalExcludedTalukas}
+            </span>
           </div>
           <div className="p-3 bg-primary-50 border border-primary-200 rounded-xl text-center">
             <span className="text-[10px] text-primary-700 font-bold uppercase tracking-wider block">Grand Calculated Total</span>
@@ -912,8 +1279,24 @@ export default function HRLocationAndVacancyManager({
           </div>
         </div>
 
+        {/* ── SIMPLE MODE: District-Level Notice ───────────────────────────── */}
+        {vacancyLevel === 'district' && selectedDistricts.length > 0 && (
+          <div className="p-4 bg-emerald-50/70 rounded-xl border border-emerald-200 flex items-start gap-3">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="text-xs font-bold text-emerald-950">
+                District-Wide Vacancies Active
+              </p>
+              <p className="text-[11px] text-emerald-800 leading-relaxed">
+                Vacancies apply across each selected district as a whole ({selectedDistricts.length} districts selected).
+                Eligible candidates residing anywhere in the selected districts are eligible to apply. No individual taluka quotas or exclusions are required.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* ── SIMPLE MODE: Quick Taluka Exclusions ───────────────────────────── */}
-        {selectedDistricts.length > 0 && (
+        {vacancyLevel === 'taluka' && selectedDistricts.length > 0 && (
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
@@ -931,14 +1314,14 @@ export default function HRLocationAndVacancyManager({
             </div>
 
             {/* Quick Exclusion Pickers */}
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
               <select
                 value={exclusionDistrict}
                 onChange={e => {
                   setExclusionDistrict(e.target.value);
                   setExclusionTaluka('');
                 }}
-                className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:border-primary-500"
+                className="w-full sm:w-auto text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:border-primary-500"
               >
                 <option value="">— Select District to Exclude From —</option>
                 {selectedDistricts.map(d => (
@@ -950,7 +1333,7 @@ export default function HRLocationAndVacancyManager({
                 value={exclusionTaluka}
                 onChange={e => setExclusionTaluka(e.target.value)}
                 disabled={!exclusionDistrict}
-                className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:border-primary-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                className="w-full sm:w-auto text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:border-primary-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
               >
                 <option value="">— Select Taluka —</option>
                 {talukasForExclusion.map(t => (
@@ -962,7 +1345,7 @@ export default function HRLocationAndVacancyManager({
                 type="button"
                 onClick={handleAddQuickExclusion}
                 disabled={!exclusionDistrict || !exclusionTaluka}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="w-full sm:w-auto px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
               >
                 Exclude Taluka
               </button>
@@ -1039,7 +1422,7 @@ export default function HRLocationAndVacancyManager({
                   Showing all {selectedDistricts.length} selected districts. Enter custom headcounts or rates below:
                 </span>
                 <span className="font-mono text-[11px]">
-                  Default: {defaultPerTaluka} / taluka
+                  Default: {vacancyLevel === 'district' ? (defaultPerDistrict != null ? `${defaultPerDistrict} / district` : 'None') : `${defaultPerTaluka} / taluka`}
                 </span>
               </div>
 
@@ -1072,13 +1455,15 @@ export default function HRLocationAndVacancyManager({
                             <div>
                               <span className="text-sm font-bold text-slate-800">{dist}</span>
                               <span className="text-[11px] text-slate-500 ml-2">
-                                ({activeCount} of {talukas.length} talukas active)
+                                {vacancyLevel === 'district'
+                                  ? `(District-wide • ${talukas.length} talukas)`
+                                  : `(${activeCount} of ${talukas.length} talukas active)`}
                               </span>
                             </div>
                           </div>
 
                           {/* District Override Controls */}
-                          <div className="flex items-center gap-3 self-end sm:self-center">
+                          <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-between sm:justify-end w-full sm:w-auto">
                             <div className="flex items-center gap-1.5 text-xs">
                               <span className="text-slate-500 text-[11px]">Dist. Override:</span>
                               <input
@@ -1091,17 +1476,19 @@ export default function HRLocationAndVacancyManager({
                               />
                             </div>
 
-                            <div className="flex items-center gap-1.5 text-xs">
-                              <span className="text-slate-500 text-[11px]">Per Taluka:</span>
-                              <input
-                                type="number"
-                                min="0"
-                                placeholder={String(defaultPerTaluka)}
-                                value={distAlloc?.per_taluka ?? ''}
-                                onChange={e => handleDistrictPerTalukaRate(dist, e.target.value === '' ? null : parseInt(e.target.value) || null)}
-                                className="w-14 border border-slate-200 rounded px-2 py-1 text-xs text-center bg-white focus:outline-none focus:border-primary-500"
-                              />
-                            </div>
+                            {vacancyLevel === 'taluka' ? (
+                              <div className="flex items-center gap-1.5 text-xs">
+                                <span className="text-slate-500 text-[11px]">Per Taluka:</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  placeholder={String(defaultPerTaluka)}
+                                  value={distAlloc?.per_taluka ?? ''}
+                                  onChange={e => handleDistrictPerTalukaRate(dist, e.target.value === '' ? null : parseInt(e.target.value) || null)}
+                                  className="w-14 border border-slate-200 rounded px-2 py-1 text-xs text-center bg-white focus:outline-none focus:border-primary-500"
+                                />
+                              </div>
+                            ) : null}
 
                             <span className="px-2.5 py-1 bg-primary-100 text-primary-900 rounded-lg text-xs font-bold font-mono min-w-[70px] text-center">
                               {distTotal} Vacancies
@@ -1112,7 +1499,7 @@ export default function HRLocationAndVacancyManager({
                               onClick={() => setExpandedDistricts(prev => ({ ...prev, [dist]: !prev[dist] }))}
                               className="text-[11px] font-semibold text-primary-600 hover:text-primary-800"
                             >
-                              {isExpanded ? 'Hide Talukas' : 'Configure Talukas'}
+                              {isExpanded ? 'Hide Talukas' : (vacancyLevel === 'district' ? 'View Talukas' : 'Configure Talukas')}
                             </button>
                           </div>
                         </div>
@@ -1120,50 +1507,68 @@ export default function HRLocationAndVacancyManager({
                         {/* Collapsible Taluka Breakdown Table */}
                         {isExpanded && (
                           <div className="p-4 bg-slate-50/70 border-t border-slate-100">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                              {talukas.map(taluka => {
-                                const talukaAlloc = distAlloc?.taluka_allocations?.[taluka];
-                                const isIncluded = talukaAlloc?.included !== false;
-                                const customCount = talukaAlloc?.override_vacancies;
+                            {vacancyLevel === 'district' ? (
+                              <div className="p-3 bg-white border border-slate-200 rounded-lg text-xs text-slate-600">
+                                <p className="font-semibold text-slate-800 mb-1">
+                                  District-Wide Vacancy Mode:
+                                </p>
+                                <p className="text-slate-500 leading-relaxed">
+                                  Positions are allocated at the district level ({distTotal} vacancies). Candidates from all {talukas.length} talukas in {dist} are eligible to apply:
+                                </p>
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {talukas.map(t => (
+                                    <span key={t} className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[11px]">
+                                      {t}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                                {talukas.map(taluka => {
+                                  const talukaAlloc = distAlloc?.taluka_allocations?.[taluka];
+                                  const isIncluded = talukaAlloc?.included !== false;
+                                  const customCount = talukaAlloc?.override_vacancies;
 
-                                return (
-                                  <div
-                                    key={taluka}
-                                    className={`p-2.5 rounded-lg border flex items-center justify-between gap-2 transition-all ${
-                                      isIncluded
-                                        ? 'bg-white border-slate-200 shadow-2xs'
-                                        : 'bg-slate-100 border-slate-200 opacity-60'
-                                    }`}
-                                  >
-                                    <label className="flex items-center gap-2 cursor-pointer text-xs truncate">
-                                      <input
-                                        type="checkbox"
-                                        checked={isIncluded}
-                                        onChange={e => handleTalukaToggle(dist, taluka, e.target.checked)}
-                                        className="rounded border-slate-300 text-primary-600 focus:ring-primary-500 h-3.5 w-3.5"
-                                      />
-                                      <span className={`truncate ${isIncluded ? 'text-slate-800 font-medium' : 'text-slate-400 line-through'}`}>
-                                        {taluka}
-                                      </span>
-                                    </label>
-
-                                    {isIncluded && (
-                                      <div className="flex items-center gap-1 shrink-0">
+                                  return (
+                                    <div
+                                      key={taluka}
+                                      className={`p-2.5 rounded-lg border flex items-center justify-between gap-2 transition-all ${
+                                        isIncluded
+                                          ? 'bg-white border-slate-200 shadow-2xs'
+                                          : 'bg-slate-100 border-slate-200 opacity-60'
+                                      }`}
+                                    >
+                                      <label className="flex items-center gap-2 cursor-pointer text-xs truncate">
                                         <input
-                                          type="number"
-                                          min="0"
-                                          value={customCount ?? ''}
-                                          placeholder={String(distAlloc?.per_taluka ?? defaultPerTaluka)}
-                                          onChange={e => handleTalukaOverride(dist, taluka, e.target.value === '' ? null : parseInt(e.target.value) || null)}
-                                          className="w-12 border border-slate-200 rounded px-1.5 py-0.5 text-xs text-center font-bold bg-white focus:outline-none focus:border-primary-500"
+                                          type="checkbox"
+                                          checked={isIncluded}
+                                          onChange={e => handleTalukaToggle(dist, taluka, e.target.checked)}
+                                          className="rounded border-slate-300 text-primary-600 focus:ring-primary-500 h-3.5 w-3.5"
                                         />
-                                        <span className="text-[10px] text-slate-400">pos.</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
+                                        <span className={`truncate ${isIncluded ? 'text-slate-800 font-medium' : 'text-slate-400 line-through'}`}>
+                                          {taluka}
+                                        </span>
+                                      </label>
+
+                                      {isIncluded && (
+                                        <div className="flex items-center gap-1 shrink-0">
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            value={customCount ?? ''}
+                                            placeholder={String(distAlloc?.per_taluka ?? defaultPerTaluka)}
+                                            onChange={e => handleTalukaOverride(dist, taluka, e.target.value === '' ? null : parseInt(e.target.value) || null)}
+                                            className="w-12 border border-slate-200 rounded px-1.5 py-0.5 text-xs text-center font-bold bg-white focus:outline-none focus:border-primary-500"
+                                          />
+                                          <span className="text-[10px] text-slate-400">pos.</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

@@ -8,14 +8,18 @@ import {
   ArrowLeft,
   ArrowRight,
   Info,
-  UserCheck,
   Plus,
   Trash2,
   Award,
-  Clock
+  Clock,
+  Compass,
+  Building2,
+  Home
 } from 'lucide-react';
 import { getTalukasForDistrict } from '../../../data/maharashtraGeography';
 import type { RmsJobPosting } from '../../lib/types';
+import { getDefaultLocationQuestions } from '../../lib/constants';
+import { checkResidentialVacancyEligibility, type VacancyEligibilityResult } from '../utils/vacancyEligibility';
 import {
   QUALIFICATION_LEVELS,
   COURSE_OPTIONS_BY_LEVEL,
@@ -96,12 +100,44 @@ export default function Step2JobSpecific({
     return [];
   }, [job.location_districts]);
 
+  const postingLevel = useMemo(() => {
+    if (job.posting_level) return job.posting_level;
+    if (job.vacancy_allocations?.posting_level) return job.vacancy_allocations.posting_level;
+    if (job.vacancy_level === 'district' || job.vacancy_allocations?.vacancy_level === 'district') {
+      return 'District-wise';
+    }
+    return 'Taluka-wise';
+  }, [job.posting_level, job.vacancy_allocations, job.vacancy_level]);
+
+  const isDistrictWise = postingLevel === 'District-wise';
+
   const isDistrictLevel = useMemo(() => {
-    return (
+    return isDistrictWise || (
       job.vacancy_level === 'district' ||
       job.vacancy_allocations?.vacancy_level === 'district'
     );
-  }, [job.vacancy_level, job.vacancy_allocations]);
+  }, [isDistrictWise, job.vacancy_level, job.vacancy_allocations]);
+
+  // Active Location & Mobility Yes/No questions configured by HR
+  const locationQuestions = useMemo(() => {
+    const raw = job.location_questions || job.vacancy_allocations?.location_questions;
+    if (Array.isArray(raw) && raw.length > 0) {
+      return raw.filter(q => q.enabled !== false);
+    }
+    return getDefaultLocationQuestions(postingLevel).filter(q => q.enabled !== false);
+  }, [job.location_questions, job.vacancy_allocations, postingLevel]);
+
+  // Determine if this job has an active, published questionnaire visible to candidates
+  const hasPublishedQuestionnaire = useMemo(() => {
+    const q = (job as any)?.questionnaire || (job?.vacancy_allocations as any)?.questionnaire;
+    return Boolean(
+      q &&
+      q.status !== 'draft' &&
+      q.isVisibleToCandidates !== false &&
+      Array.isArray(q.questions) &&
+      q.questions.some((item: any) => item.isVisible !== false)
+    );
+  }, [job]);
 
   // ── 3. Authoritative Talukas for Selected District ──────────────────────────
   const { availableTalukas, talukaFilterSupported } = useMemo(() => {
@@ -146,39 +182,90 @@ export default function Step2JobSpecific({
     };
   }, [data.preferredDistrict, job.vacancy_allocations, isDistrictLevel]);
 
-  // ── 4. Native Location & Intelligent Prefill ────────────────────────────────
-  const nativeDistrict = masterProfile?.homeDistrict || '';
-  const nativeTaluka = masterProfile?.homeTaluka || '';
-  const isNativeDistrictEligible = Boolean(nativeDistrict && allowedDistricts.includes(nativeDistrict));
+  // ── 4. Residential Location & Vacancy Availability Computation ────────────
+  // Uses strictly existing Candidate Profile fields: Current Address & Permanent Address
+  const currentAddress = useMemo(() => ({
+    line1: masterProfile?.currentAddressLine1 || masterProfile?.addressLine1 || '',
+    district: masterProfile?.currentDistrict || masterProfile?.homeDistrict || '',
+    taluka: masterProfile?.currentTaluka || masterProfile?.homeTaluka || '',
+    pincode: masterProfile?.currentPincode || masterProfile?.pincode || '',
+  }), [masterProfile]);
 
-  useEffect(() => {
-    if (!data.preferredDistrict && isNativeDistrictEligible) {
-      onChange('preferredDistrict', nativeDistrict);
+  const permanentAddress = useMemo(() => {
+    if (masterProfile?.permanentSameAsCurrent) {
+      return currentAddress;
     }
-  }, [data.preferredDistrict, isNativeDistrictEligible, nativeDistrict, onChange]);
+    return {
+      line1: masterProfile?.permanentAddressLine1 || '',
+      district: masterProfile?.permanentDistrict || '',
+      taluka: masterProfile?.permanentTaluka || '',
+      pincode: masterProfile?.permanentPincode || '',
+    };
+  }, [masterProfile?.permanentSameAsCurrent, masterProfile?.permanentAddressLine1, masterProfile?.permanentDistrict, masterProfile?.permanentTaluka, masterProfile?.permanentPincode, currentAddress]);
 
-  useEffect(() => {
-    if (
-      data.preferredDistrict === nativeDistrict &&
-      !data.preferredTaluka &&
-      nativeTaluka &&
-      availableTalukas.includes(nativeTaluka)
-    ) {
-      onChange('preferredTaluka', nativeTaluka);
-    }
-  }, [data.preferredDistrict, data.preferredTaluka, nativeDistrict, nativeTaluka, availableTalukas, onChange]);
-
-  const isDifferentFromNative = useMemo(() => {
-    if (!nativeDistrict) return false;
-    const districtDiffers = Boolean(data.preferredDistrict && data.preferredDistrict !== nativeDistrict);
-    const talukaDiffers = Boolean(
-      data.preferredDistrict === nativeDistrict &&
-      nativeTaluka &&
-      data.preferredTaluka &&
-      data.preferredTaluka !== nativeTaluka
+  const isSameAddress = useMemo(() => {
+    if (masterProfile?.permanentSameAsCurrent) return true;
+    if (!permanentAddress.district && !permanentAddress.taluka && !permanentAddress.line1) return true;
+    return (
+      (currentAddress.district || '').trim().toLowerCase() === (permanentAddress.district || '').trim().toLowerCase() &&
+      (currentAddress.taluka || '').trim().toLowerCase() === (permanentAddress.taluka || '').trim().toLowerCase() &&
+      (currentAddress.line1 || '').trim().toLowerCase() === (permanentAddress.line1 || '').trim().toLowerCase() &&
+      (currentAddress.pincode || '').trim() === (permanentAddress.pincode || '').trim()
     );
-    return districtDiffers || talukaDiffers;
-  }, [data.preferredDistrict, data.preferredTaluka, nativeDistrict, nativeTaluka]);
+  }, [masterProfile?.permanentSameAsCurrent, currentAddress, permanentAddress]);
+
+  const hasAnyResidentialAddress = Boolean(currentAddress.district || permanentAddress.district);
+
+  // Compute vacancy eligibility for Current Address
+  const currentEligibility = useMemo<VacancyEligibilityResult>(() => {
+    return checkResidentialVacancyEligibility(currentAddress.district, currentAddress.taluka, job);
+  }, [currentAddress.district, currentAddress.taluka, job]);
+
+  // Compute vacancy eligibility for Permanent Address (reused if identical)
+  const permanentEligibility = useMemo<VacancyEligibilityResult>(() => {
+    if (isSameAddress) return currentEligibility;
+    return checkResidentialVacancyEligibility(permanentAddress.district, permanentAddress.taluka, job);
+  }, [isSameAddress, currentEligibility, permanentAddress.district, permanentAddress.taluka, job]);
+
+  // Location Difference check: requires confirmation if preferred location differs from residential addresses
+  const isDifferentFromNative = useMemo(() => {
+    if (!data.preferredDistrict) return false;
+
+    // Check match against Current Address
+    const currentMatchesDistrict = Boolean(
+      currentAddress.district &&
+      data.preferredDistrict.trim().toLowerCase() === currentAddress.district.trim().toLowerCase()
+    );
+    const currentMatchesTaluka = isDistrictWise
+      ? true
+      : Boolean(
+          currentAddress.taluka &&
+          data.preferredTaluka &&
+          data.preferredTaluka.trim().toLowerCase() === currentAddress.taluka.trim().toLowerCase()
+        );
+
+    // Check match against Permanent Address
+    const permMatchesDistrict = Boolean(
+      permanentAddress.district &&
+      data.preferredDistrict.trim().toLowerCase() === permanentAddress.district.trim().toLowerCase()
+    );
+    const permMatchesTaluka = isDistrictWise
+      ? true
+      : Boolean(
+          permanentAddress.taluka &&
+          data.preferredTaluka &&
+          data.preferredTaluka.trim().toLowerCase() === permanentAddress.taluka.trim().toLowerCase()
+        );
+
+    const matchesCurrent = currentMatchesDistrict && currentMatchesTaluka;
+    const matchesPermanent = permMatchesDistrict && permMatchesTaluka;
+
+    if (matchesCurrent || matchesPermanent) {
+      return false;
+    }
+
+    return hasAnyResidentialAddress;
+  }, [data.preferredDistrict, data.preferredTaluka, currentAddress, permanentAddress, isDistrictWise, hasAnyResidentialAddress]);
 
   // ── 5. Repeatable Qualifications State & Synchronization ──────────────────
   const rawQualifications = data.qualifications;
@@ -854,7 +941,7 @@ export default function Step2JobSpecific({
         errorFieldKeys.push('preferredDistrict');
       }
 
-      if (!data.preferredTaluka) {
+      if (!isDistrictWise && !data.preferredTaluka) {
         newErrors['preferredTaluka'] = 'Please select your preferred posting taluka.';
         errorFieldKeys.push('preferredTaluka');
       }
@@ -865,6 +952,17 @@ export default function Step2JobSpecific({
       newErrors['locationConfirmed'] = 'Please confirm your willingness to work at the selected posting location.';
       errorFieldKeys.push('locationConfirmed');
     }
+
+    // 5. Validate Location & Mobility Questions
+    locationQuestions.forEach(q => {
+      if (q.required) {
+        const val = data.locationAnswers?.[q.id];
+        if (typeof val !== 'boolean') {
+          newErrors[`loc_q_${q.id}`] = 'Please answer this question (Yes or No).';
+          errorFieldKeys.push(`loc_q_${q.id}`);
+        }
+      }
+    });
 
     setErrors(newErrors);
 
@@ -1594,13 +1692,193 @@ export default function Step2JobSpecific({
         )}
       </div>
 
-      {/* ── SECTION 3: Preferred Posting Location ────────────────────────────── */}
+      {/* ── SECTION 3: Your Residential Location & Vacancy Availability ─────── */}
+      <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-4">
+        <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2 text-[#102a43]">
+          <div className="flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-emerald-600" />
+            <h3 className="text-xs font-bold uppercase tracking-wider">
+              3. Your Residential Location &amp; Vacancy Availability
+            </h3>
+          </div>
+          <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+            {postingLevel} Drive
+          </span>
+        </div>
+
+        <p className="text-xs text-[#486581]">
+          The system checks official vacancies for this job posting based on the residential addresses recorded in your Candidate Profile.
+        </p>
+
+        {/* Incomplete Address Case */}
+        {!hasAnyResidentialAddress ? (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs space-y-2">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-amber-900">Incomplete Residential Address Information</p>
+                <p className="text-amber-800 mt-0.5">
+                  Your profile does not contain a verified district and taluka. Vacancy availability cannot be determined automatically. You may still select an eligible posting location below.
+                </p>
+              </div>
+            </div>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+              <Info className="w-3.5 h-3.5" /> Availability Not Determined
+            </div>
+          </div>
+        ) : isSameAddress ? (
+          /* Single Unified Card (Addresses are identical or one is unspecified) */
+          <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-200/80">
+              <div className="flex items-center gap-2 text-xs font-bold text-[#102a43]">
+                <Home className="w-4 h-4 text-slate-500" />
+                <span>Residential Address (Current &amp; Permanent)</span>
+              </div>
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                currentEligibility.status === 'Vacancy Available'
+                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                  : currentEligibility.status === 'Available in Other Taluka'
+                  ? 'bg-blue-100 text-blue-900 border border-blue-300'
+                  : currentEligibility.status === 'No Vacancy'
+                  ? 'bg-slate-200 text-slate-800 border border-slate-300'
+                  : 'bg-amber-100 text-amber-900 border border-amber-300'
+              }`}>
+                {currentEligibility.status === 'Vacancy Available' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />}
+                {currentEligibility.status === 'Available in Other Taluka' && <Info className="w-3.5 h-3.5 text-blue-700" />}
+                {currentEligibility.status === 'No Vacancy' && <AlertCircle className="w-3.5 h-3.5 text-slate-600" />}
+                {currentEligibility.status === 'Availability Not Determined' && <AlertCircle className="w-3.5 h-3.5 text-amber-700" />}
+                {currentEligibility.status}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div>
+                <span className="text-slate-500 block text-[11px]">District &amp; Taluka:</span>
+                <span className="font-semibold text-[#102a43]">
+                  {currentAddress.taluka ? `${currentAddress.taluka}, ` : ''}{currentAddress.district || 'Not specified'}
+                </span>
+              </div>
+              {currentAddress.pincode && (
+                <div>
+                  <span className="text-slate-500 block text-[11px]">Pincode:</span>
+                  <span className="font-semibold text-[#102a43]">{currentAddress.pincode}</span>
+                </div>
+              )}
+              {currentAddress.line1 && (
+                <div className="sm:col-span-2">
+                  <span className="text-slate-500 block text-[11px]">Address Line:</span>
+                  <span className="text-slate-700">{currentAddress.line1}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between flex-wrap gap-2 text-xs">
+              <p className="text-slate-700 leading-snug">{currentEligibility.message}</p>
+              {currentEligibility.isReliable && currentEligibility.vacancyCount !== null && (
+                <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-white border border-slate-300 text-[#102a43]">
+                  {currentEligibility.vacancyCount} open post{currentEligibility.vacancyCount === 1 ? '' : 's'}
+                </span>
+              )}
+            </div>
+            {currentEligibility.lastUpdatedAt && (
+              <p className="text-[10px] text-slate-400">
+                Quota verified as of {new Date(currentEligibility.lastUpdatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+              </p>
+            )}
+          </div>
+        ) : (
+          /* Separate Address Cards (Current & Permanent differ) */
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Current Residential Address Card */}
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-200/80">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-[#102a43]">
+                  <Home className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Current Residential Address</span>
+                </div>
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  currentEligibility.status === 'Vacancy Available'
+                    ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                    : currentEligibility.status === 'Available in Other Taluka'
+                    ? 'bg-blue-100 text-blue-900 border border-blue-300'
+                    : currentEligibility.status === 'No Vacancy'
+                    ? 'bg-slate-200 text-slate-800 border border-slate-300'
+                    : 'bg-amber-100 text-amber-900 border border-amber-300'
+                }`}>
+                  {currentEligibility.status}
+                </span>
+              </div>
+              <div className="space-y-1 text-xs">
+                <div>
+                  <span className="text-slate-500 block text-[11px]">Location:</span>
+                  <span className="font-semibold text-[#102a43]">
+                    {currentAddress.taluka ? `${currentAddress.taluka}, ` : ''}{currentAddress.district || 'Not specified'}
+                  </span>
+                </div>
+                {currentAddress.line1 && <p className="text-slate-600 text-[11px] truncate">{currentAddress.line1}</p>}
+                <p className="text-slate-700 text-xs pt-1">{currentEligibility.message}</p>
+                {currentEligibility.isReliable && currentEligibility.vacancyCount !== null && (
+                  <p className="font-mono font-bold text-[11px] text-[#102a43]">
+                    Count: {currentEligibility.vacancyCount} post(s)
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Permanent Residential Address Card */}
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-200/80">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-[#102a43]">
+                  <Building2 className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Permanent Residential Address</span>
+                </div>
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  permanentEligibility.status === 'Vacancy Available'
+                    ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                    : permanentEligibility.status === 'Available in Other Taluka'
+                    ? 'bg-blue-100 text-blue-900 border border-blue-300'
+                    : permanentEligibility.status === 'No Vacancy'
+                    ? 'bg-slate-200 text-slate-800 border border-slate-300'
+                    : 'bg-amber-100 text-amber-900 border border-amber-300'
+                }`}>
+                  {permanentEligibility.status}
+                </span>
+              </div>
+              <div className="space-y-1 text-xs">
+                <div>
+                  <span className="text-slate-500 block text-[11px]">Location:</span>
+                  <span className="font-semibold text-[#102a43]">
+                    {permanentAddress.taluka ? `${permanentAddress.taluka}, ` : ''}{permanentAddress.district || 'Not specified'}
+                  </span>
+                </div>
+                {permanentAddress.line1 && <p className="text-slate-600 text-[11px] truncate">{permanentAddress.line1}</p>}
+                <p className="text-slate-700 text-xs pt-1">{permanentEligibility.message}</p>
+                {permanentEligibility.isReliable && permanentEligibility.vacancyCount !== null && (
+                  <p className="font-mono font-bold text-[11px] text-[#102a43]">
+                    Count: {permanentEligibility.vacancyCount} post(s)
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Informational Disclaimer Notice */}
+        <div className="p-3 bg-blue-50/60 border border-blue-200 rounded-xl text-xs text-blue-950 flex items-start gap-2">
+          <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+          <span className="leading-relaxed">
+            <strong>Informational Notice:</strong> Vacancy availability shown above is purely indicative based on current published quotas. It does not disqualify you from applying for this role or any eligible location, nor does it guarantee final appointment.
+          </span>
+        </div>
+      </div>
+
+      {/* ── SECTION 4: Preferred Posting Location ────────────────────────────── */}
       <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-4">
         <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2 text-[#102a43]">
           <div className="flex items-center gap-2">
             <MapPin className="w-4 h-4 text-emerald-600" />
             <h3 className="text-xs font-bold uppercase tracking-wider">
-              3. Preferred Posting Location
+              4. Preferred Posting Location
             </h3>
           </div>
           {isDistrictLevel && (
@@ -1610,27 +1888,6 @@ export default function Step2JobSpecific({
           )}
         </div>
 
-        {/* Candidate Native / Home Location Indicator */}
-        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <UserCheck className="w-4 h-4 text-slate-500" />
-            <span className="text-slate-600">Your Native / Home Location:</span>
-            <span className="font-bold text-[#102a43]">
-              {nativeTaluka ? `${nativeTaluka}, ` : ''}{nativeDistrict || 'Not specified in Step 1'}
-            </span>
-          </div>
-          {isNativeDistrictEligible ? (
-            <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-              Native District is Eligible
-            </span>
-          ) : nativeDistrict ? (
-            <span className="text-[11px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-              Native District not in drive
-            </span>
-          ) : null}
-        </div>
-
-        {/* Validation message if job has no location_districts configured */}
         {allowedDistricts.length === 0 ? (
           <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
             <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
@@ -1643,17 +1900,7 @@ export default function Step2JobSpecific({
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Informative note if native district is not eligible */}
-            {nativeDistrict && !isNativeDistrictEligible && (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2">
-                <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <span>
-                  Notice: Your native district (<strong>{nativeDistrict}</strong>) is not part of the active recruitment drive for this position. Please choose an eligible posting district from the available list below.
-                </span>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className={`grid grid-cols-1 ${isDistrictWise ? '' : 'sm:grid-cols-2'} gap-4`}>
               {/* Preferred District */}
               <div>
                 <label htmlFor="preferredDistrict" className="block text-xs font-semibold text-slate-700 mb-1">
@@ -1672,10 +1919,10 @@ export default function Step2JobSpecific({
                       : 'border-slate-300 focus:ring-[#102a43]/20 focus:border-[#102a43]'
                   }`}
                 >
-                  <option value="">-- Select Eligible District --</option>
+                  <option value="">Select Preferred District</option>
                   {allowedDistricts.map(dist => (
                     <option key={dist} value={dist}>
-                      {dist} {dist === nativeDistrict ? '(Your Native District)' : ''}
+                      {dist} {Boolean(currentAddress.district && dist.toLowerCase() === currentAddress.district.toLowerCase()) ? '(Your Residential District)' : ''}
                     </option>
                   ))}
                 </select>
@@ -1691,57 +1938,59 @@ export default function Step2JobSpecific({
                 )}
               </div>
 
-              {/* Preferred Taluka */}
-              <div>
-                <label htmlFor="preferredTaluka" className="block text-xs font-semibold text-slate-700 mb-1">
-                  Preferred Taluka Cluster <span className="text-red-500">*</span>
-                </label>
+              {/* Preferred Taluka (Rendered only for Taluka-wise posting) */}
+              {!isDistrictWise && (
+                <div>
+                  <label htmlFor="preferredTaluka" className="block text-xs font-semibold text-slate-700 mb-1">
+                    Preferred Taluka Cluster <span className="text-red-500">*</span>
+                  </label>
 
-                {!data.preferredDistrict ? (
-                  <div className="px-3.5 py-2.5 bg-slate-100 border border-slate-300 rounded-xl text-xs text-slate-400 select-none">
-                    -- Select District First --
-                  </div>
-                ) : !talukaFilterSupported || availableTalukas.length === 0 ? (
-                  <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">
-                    No verified taluka quotas found for {data.preferredDistrict}.
-                  </div>
-                ) : (
-                  <>
-                    <select
-                      ref={registerRef('preferredTaluka')}
-                      id="preferredTaluka"
-                      name="preferredTaluka"
-                      value={data.preferredTaluka || ''}
-                      onChange={e => {
-                        onChange('preferredTaluka', e.target.value);
-                        clearFieldError('preferredTaluka');
-                      }}
-                      aria-invalid={Boolean(errors['preferredTaluka'])}
-                      className={`w-full px-3.5 py-2.5 bg-white border rounded-xl text-xs sm:text-sm font-semibold text-[#102a43] focus:outline-none focus:ring-2 transition-all cursor-pointer ${
-                        errors['preferredTaluka']
-                          ? 'border-red-400 bg-red-50/20 focus:ring-red-200 focus:border-red-500'
-                          : 'border-slate-300 focus:ring-[#102a43]/20 focus:border-[#102a43]'
-                      }`}
-                    >
-                      <option value="">-- Select Taluka Cluster --</option>
-                      {availableTalukas.map(tal => (
-                        <option key={tal} value={tal}>
-                          {tal}
-                        </option>
-                      ))}
-                    </select>
-                    {errors['preferredTaluka'] && (
-                      <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3 shrink-0" />
-                        {errors['preferredTaluka']}
-                      </p>
-                    )}
-                  </>
-                )}
-              </div>
+                  {!data.preferredDistrict ? (
+                    <div className="px-3.5 py-2.5 bg-slate-100 border border-slate-300 rounded-xl text-xs text-slate-400 select-none">
+                      Select Preferred District First
+                    </div>
+                  ) : !talukaFilterSupported || availableTalukas.length === 0 ? (
+                    <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">
+                      No verified taluka quotas found for {data.preferredDistrict}.
+                    </div>
+                  ) : (
+                    <>
+                      <select
+                        ref={registerRef('preferredTaluka')}
+                        id="preferredTaluka"
+                        name="preferredTaluka"
+                        value={data.preferredTaluka || ''}
+                        onChange={e => {
+                          onChange('preferredTaluka', e.target.value);
+                          clearFieldError('preferredTaluka');
+                        }}
+                        aria-invalid={Boolean(errors['preferredTaluka'])}
+                        className={`w-full px-3.5 py-2.5 bg-white border rounded-xl text-xs sm:text-sm font-semibold text-[#102a43] focus:outline-none focus:ring-2 transition-all cursor-pointer ${
+                          errors['preferredTaluka']
+                            ? 'border-red-400 bg-red-50/20 focus:ring-red-200 focus:border-red-500'
+                            : 'border-slate-300 focus:ring-[#102a43]/20 focus:border-[#102a43]'
+                        }`}
+                      >
+                        <option value="">Select Preferred Taluka</option>
+                        {availableTalukas.map(tal => (
+                          <option key={tal} value={tal}>
+                            {tal}
+                          </option>
+                        ))}
+                      </select>
+                      {errors['preferredTaluka'] && (
+                        <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3 shrink-0" />
+                          {errors['preferredTaluka']}
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* ── Dynamic Mobility Confirmation Checkbox ────────────────────── */}
+            {/* Location Difference Confirmation Checkbox */}
             {isDifferentFromNative && (
               <div className="pt-2">
                 <label
@@ -1767,7 +2016,7 @@ export default function Step2JobSpecific({
                   />
                   <div className="text-xs text-slate-800 leading-relaxed">
                     <span className="font-bold text-[#102a43] block mb-0.5">Location Difference Confirmation:</span>
-                    I understand that my preferred posting location differs from my native district and/or taluka, and I am willing to work at the selected location, subject to vacancy availability and the organisation’s allocation policy.
+                    I understand that my preferred posting location differs from my residential district and/or taluka, and I am willing to work at the selected location, subject to vacancy availability and the organisation’s allocation policy.
                   </div>
                 </label>
                 {errors['locationConfirmed'] && (
@@ -1782,6 +2031,110 @@ export default function Step2JobSpecific({
         )}
       </div>
 
+      {/* ── SECTION 5: Work Location Flexibility ────────────────────────────── */}
+      {locationQuestions.length > 0 && (
+        <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-4">
+          <div className="flex items-center gap-2 pb-2 border-b border-slate-100 text-[#102a43]">
+            <Compass className="w-4 h-4 text-emerald-600" />
+            <h3 className="text-xs font-bold uppercase tracking-wider">
+              5. Work Location Flexibility
+            </h3>
+          </div>
+          <p className="text-[11px] text-[#627d98]">
+            Please answer the following mobility questions regarding your availability for this {postingLevel} role.
+          </p>
+
+          <div className="space-y-3">
+            {locationQuestions.map((q, idx) => {
+              const ans = data.locationAnswers?.[q.id];
+              const err = errors[`loc_q_${q.id}`];
+
+              return (
+                <div
+                  key={q.id}
+                  ref={registerRef(`loc_q_${q.id}`)}
+                  tabIndex={-1}
+                  className={`p-3.5 rounded-xl border transition-all text-xs space-y-2 ${
+                    err
+                      ? 'border-red-400 bg-red-50/20'
+                      : 'border-slate-200 bg-slate-50/50 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <label className="font-bold text-[#102a43] leading-snug">
+                      <span className="text-slate-500 font-mono mr-1.5">{idx + 1}.</span>
+                      {q.questionText}
+                      {q.required ? (
+                        <span className="text-red-500 ml-1" title="Required question">*</span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 font-normal ml-1.5">(optional)</span>
+                      )}
+                    </label>
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-1">
+                    <label
+                      onClick={() => {
+                        onChange('locationAnswers', { ...(data.locationAnswers || {}), [q.id]: true });
+                        clearFieldError(`loc_q_${q.id}`);
+                      }}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer select-none ${
+                        ans === true
+                          ? 'bg-emerald-50 text-emerald-900 border-emerald-500 shadow-xs ring-1 ring-emerald-500'
+                          : 'bg-white border-slate-300 text-slate-700 hover:border-slate-400'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name={`loc_q_${q.id}`}
+                        checked={ans === true}
+                        onChange={() => {
+                          onChange('locationAnswers', { ...(data.locationAnswers || {}), [q.id]: true });
+                          clearFieldError(`loc_q_${q.id}`);
+                        }}
+                        className="w-4 h-4 text-emerald-600 border-slate-300 focus:ring-emerald-500 cursor-pointer"
+                      />
+                      <span>Yes</span>
+                    </label>
+
+                    <label
+                      onClick={() => {
+                        onChange('locationAnswers', { ...(data.locationAnswers || {}), [q.id]: false });
+                        clearFieldError(`loc_q_${q.id}`);
+                      }}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer select-none ${
+                        ans === false
+                          ? 'bg-slate-100 text-slate-900 border-slate-700 shadow-xs ring-1 ring-slate-700'
+                          : 'bg-white border-slate-300 text-slate-700 hover:border-slate-400'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name={`loc_q_${q.id}`}
+                        checked={ans === false}
+                        onChange={() => {
+                          onChange('locationAnswers', { ...(data.locationAnswers || {}), [q.id]: false });
+                          clearFieldError(`loc_q_${q.id}`);
+                        }}
+                        className="w-4 h-4 text-slate-800 border-slate-300 focus:ring-slate-500 cursor-pointer"
+                      />
+                      <span>No</span>
+                    </label>
+                  </div>
+
+                  {err && (
+                    <p className="text-xs text-red-600 font-medium flex items-center gap-1 mt-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      {err}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Navigation Actions */}
       <div className="flex items-center justify-between pt-5 border-t border-slate-100 flex-wrap gap-3">
         <button
@@ -1795,7 +2148,8 @@ export default function Step2JobSpecific({
           type="submit"
           className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#16a34a] hover:bg-[#15803d] text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all active:scale-98 cursor-pointer"
         >
-          Review Application <ArrowRight className="w-4 h-4" />
+          {hasPublishedQuestionnaire ? 'Continue to Job-Specific Questions' : 'Review Application'}{' '}
+          <ArrowRight className="w-4 h-4" />
         </button>
       </div>
     </form>

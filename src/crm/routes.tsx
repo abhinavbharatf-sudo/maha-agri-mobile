@@ -17,7 +17,9 @@ export default function CRMRoutes() {
       </RequireAuth>
     }>
       <Route path="dashboard" element={<CRMDashboard />} />
-      <Route path="leads" element={<LeadList />} />
+      <Route path="leads" element={<LeadList initialView="all" />} />
+      <Route path="visitors" element={<LeadList initialView="visitors" />} />
+      <Route path="followups" element={<LeadList initialView="followups" />} />
       <Route path="leads/:id" element={<LeadDetail />} />
       <Route path="settings" element={<CRMSettings />} />
     </Route>

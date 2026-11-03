@@ -4,11 +4,13 @@ import type {
   DistrictAllocation,
   TalukaAllocation,
   VacancyAllocationsConfig,
+  VacancyLevel,
   RmsJobPosting,
 } from './types';
 
 export interface CalculationResult {
   config: VacancyAllocationsConfig;
+  vacancyLevel: VacancyLevel;
   districtTotals: Record<string, number>;
   activeTalukaCounts: Record<string, number>;
   totalActiveTalukas: number;
@@ -17,20 +19,30 @@ export interface CalculationResult {
 }
 
 /**
- * Calculates vacancies dynamically based on selected districts, eligible talukas,
- * default rates, district-level overrides, and taluka-specific overrides/exclusions.
+ * Calculates vacancies dynamically based on vacancy level (taluka vs district),
+ * selected districts, eligible talukas, default rates, district-level overrides,
+ * and taluka-specific overrides/exclusions.
  */
 export function calculateVacancies(
   selectedDistricts: string[],
   existingConfig?: VacancyAllocationsConfig | null,
-  globalDefaultPerTaluka: number = 1
+  globalDefaultPerTaluka: number = 1,
+  globalDefaultPerDistrict?: number | null,
+  vacancyLevelOption?: VacancyLevel | null
 ): CalculationResult {
+  const vacancyLevel: VacancyLevel = vacancyLevelOption ?? existingConfig?.vacancy_level ?? 'taluka';
+
   const defaultPerTaluka = Math.max(
-    1,
+    0,
     globalDefaultPerTaluka !== undefined && globalDefaultPerTaluka !== null
       ? globalDefaultPerTaluka
       : (existingConfig?.default_per_taluka ?? 1)
   );
+
+  const defaultPerDistrict = globalDefaultPerDistrict !== undefined && globalDefaultPerDistrict !== null
+    ? Math.max(0, globalDefaultPerDistrict)
+    : (existingConfig?.default_per_district != null ? Math.max(0, existingConfig.default_per_district) : null);
+
   const districtAllocations: Record<string, DistrictAllocation> = {};
   const districtTotals: Record<string, number> = {};
   const activeTalukaCounts: Record<string, number> = {};
@@ -39,6 +51,65 @@ export function calculateVacancies(
   let totalExcludedTalukas = 0;
   let grandTotal = 0;
 
+  // ── District Level Vacancy Mode ──────────────────────────────────────────
+  if (vacancyLevel === 'district') {
+    const fallbackDistrictRate = defaultPerDistrict ?? 1;
+
+    for (const district of selectedDistricts) {
+      const existingDist = existingConfig?.district_allocations?.[district];
+      const isIncluded = existingDist?.included !== false;
+
+      if (!isIncluded) {
+        districtAllocations[district] = {
+          included: false,
+          override_total: existingDist?.override_total ?? null,
+          per_taluka: null,
+          taluka_allocations: existingDist?.taluka_allocations ?? {},
+          calculated_district_total: 0,
+        };
+        districtTotals[district] = 0;
+        activeTalukaCounts[district] = 0;
+        continue;
+      }
+
+      // If district has an explicit override_total, use it; otherwise use defaultPerDistrict
+      const districtFinalTotal = existingDist?.override_total != null
+        ? Math.max(0, existingDist.override_total)
+        : Math.max(0, fallbackDistrictRate);
+
+      districtAllocations[district] = {
+        included: true,
+        override_total: existingDist?.override_total ?? null,
+        per_taluka: null,
+        taluka_allocations: existingDist?.taluka_allocations ?? {},
+        calculated_district_total: districtFinalTotal,
+      };
+
+      districtTotals[district] = districtFinalTotal;
+      activeTalukaCounts[district] = 0;
+      grandTotal += districtFinalTotal;
+    }
+
+    const updatedConfig: VacancyAllocationsConfig = {
+      vacancy_level: 'district',
+      default_per_taluka: defaultPerTaluka,
+      default_per_district: defaultPerDistrict,
+      district_allocations: districtAllocations,
+      calculated_grand_total: grandTotal,
+    };
+
+    return {
+      config: updatedConfig,
+      vacancyLevel: 'district',
+      districtTotals,
+      activeTalukaCounts,
+      totalActiveTalukas: 0,
+      totalExcludedTalukas: 0,
+      grandTotal,
+    };
+  }
+
+  // ── Taluka Level Vacancy Mode (Default) ───────────────────────────────────
   for (const district of selectedDistricts) {
     const existingDist = existingConfig?.district_allocations?.[district];
     const isIncluded = existingDist?.included !== false;
@@ -117,14 +188,16 @@ export function calculateVacancies(
   }
 
   const updatedConfig: VacancyAllocationsConfig = {
+    vacancy_level: 'taluka',
     default_per_taluka: defaultPerTaluka,
-    default_per_district: existingConfig?.default_per_district ?? null,
+    default_per_district: defaultPerDistrict,
     district_allocations: districtAllocations,
     calculated_grand_total: grandTotal,
   };
 
   return {
     config: updatedConfig,
+    vacancyLevel: 'taluka',
     districtTotals,
     activeTalukaCounts,
     totalActiveTalukas,
@@ -238,9 +311,11 @@ export function validateVacancyAllocations(job: Partial<RmsJobPosting>): {
   }
 
   if (approvedTotal !== calculatedTotal) {
+    const isDistrictLevel = job.vacancy_level === 'district' || job.vacancy_allocations?.vacancy_level === 'district';
+    const scopeName = isDistrictLevel ? 'district' : 'taluka';
     return {
       isValid: false,
-      error: `Cannot publish: Approved vacancies (${approvedTotal}) does not match calculated taluka allocation (${calculatedTotal}). Difference: ${diff > 0 ? `+${diff}` : diff}. Please reconcile before publishing.`,
+      error: `Cannot publish: Approved vacancies (${approvedTotal}) does not match calculated ${scopeName} allocation (${calculatedTotal}). Difference: ${diff > 0 ? `+${diff}` : diff}. Please reconcile before publishing.`,
       warning: `Discrepancy detected: Approved total (${approvedTotal}) != Calculated (${calculatedTotal}).`,
       diff,
     };
