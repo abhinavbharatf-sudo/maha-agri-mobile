@@ -1,12 +1,13 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
-import { supabase } from '../../lib/supabase/client';
+import { candidateSupabase } from '../../lib/supabase/client';
 import { normalizeMobileNumber } from '../../lib/utils';
 import type { RmsCandidateProfile } from '../lib/types';
 import { getCandidateProfile } from '../lib/api';
 import { ensureLeadExists } from '../../crm/lib/api';
 import { sendOTP, verifyCustomOtp } from '../../services/whatapi';
 import { sendWelcomeTemplate, isWelcomeMessageInCooldown } from '../../services/whatsappService';
+import { isDummyOtpMode } from './dummyOtp';
 
 interface CandidateAuthContextValue {
   session: Session | null;
@@ -111,60 +112,85 @@ export function CandidateAuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    supabase.auth.getSession().then(({ data }) => {
+    candidateSupabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
       const sess = data.session;
       const sessPhone = (sess?.user?.phone || '').replace(/\D/g, '').slice(-10);
-      const cleanStored = (storedMobile || '').replace(/\D/g, '').slice(-10);
 
-      // If storedMobile exists and session's phone does not match, sign out stale session!
-      if (cleanStored && sessPhone && sessPhone !== cleanStored) {
-        supabase.auth.signOut().catch(() => {});
+      // Strict Candidate Session Isolation:
+      // A candidate session MUST have a verified 10-digit phone number, confirmed via WhatsApp OTP
+      // (phone_confirmed_at is set), and MUST NOT be an email-based admin/staff account.
+      // Admin/staff email sessions MUST NEVER leak into the candidate portal.
+      const isCandidatePhoneSession = Boolean(
+        sess?.user &&
+        sessPhone &&
+        sessPhone.length === 10 &&
+        sess.user.phone_confirmed_at &&
+        !sess.user.email
+      );
+
+      if (!isCandidatePhoneSession) {
         setSession(null);
         setProfile(null);
-        loadProfile(`dummy-candidate-${cleanStored}`, cleanStored).finally(() => {
-          if (mounted) setLoading(false);
-        });
+        if (isDummyOtpMode() && storedMobile) {
+          loadProfile(`dummy-candidate-${storedMobile}`, storedMobile).finally(() => {
+            if (mounted) setLoading(false);
+          });
+        } else {
+          setLoading(false);
+        }
         return;
       }
 
-      setSession(sess);
-      if (sess?.user) {
-        loadProfile(sess.user.id, sessPhone).finally(() => {
-          if (mounted) setLoading(false);
-        });
-      } else if (cleanStored) {
-        loadProfile(`dummy-candidate-${cleanStored}`, cleanStored).finally(() => {
-          if (mounted) setLoading(false);
-        });
-      } else {
-        setLoading(false);
+      // Valid candidate phone session: synchronize stored mobile and hydrate profile
+      if (storedMobile !== sessPhone) {
+        setStoredMobile(sessPhone);
+        if (typeof window !== 'undefined') {
+          try {
+            sessionStorage.setItem('maha_candidate_verified_mobile', sessPhone);
+            localStorage.setItem('maha_candidate_verified_mobile', sessPhone);
+          } catch {}
+        }
       }
+
+      setSession(sess);
+      loadProfile(sess.user.id, sessPhone).finally(() => {
+        if (mounted) setLoading(false);
+      });
     });
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: sub } = candidateSupabase.auth.onAuthStateChange((_event, newSession) => {
       (async () => {
         const sessPhone = (newSession?.user?.phone || '').replace(/\D/g, '').slice(-10);
-        const cleanStored = (storedMobile || '').replace(/\D/g, '').slice(-10);
 
-        if (cleanStored && sessPhone && sessPhone !== cleanStored) {
-          // Reject cross-account session
+        const isCandidatePhoneSession = Boolean(
+          newSession?.user &&
+          sessPhone &&
+          sessPhone.length === 10 &&
+          newSession.user.phone_confirmed_at &&
+          !newSession.user.email
+        );
+
+        if (!isCandidatePhoneSession) {
           setSession(null);
           setProfile(null);
-          if (cleanStored) {
-            await loadProfile(`dummy-candidate-${cleanStored}`, cleanStored);
-          }
           if (mounted) setLoading(false);
           return;
+        }
+
+        if (storedMobile !== sessPhone) {
+          setStoredMobile(sessPhone);
+          if (typeof window !== 'undefined') {
+            try {
+              sessionStorage.setItem('maha_candidate_verified_mobile', sessPhone);
+              localStorage.setItem('maha_candidate_verified_mobile', sessPhone);
+            } catch {}
+          }
         }
 
         setSession(newSession);
         if (newSession?.user) {
           await loadProfile(newSession.user.id, sessPhone);
-        } else if (cleanStored) {
-          await loadProfile(`dummy-candidate-${cleanStored}`, cleanStored);
-        } else {
-          setProfile(null);
         }
         if (mounted) setLoading(false);
       })();
@@ -206,8 +232,8 @@ export function CandidateAuthProvider({ children }: { children: ReactNode }) {
 
     console.log(`[${new Date().toISOString()}] 1. OTP Verified`);
       
-    // 2. Establish Supabase Session using the cryptographically secure password
-    const { data, error } = await supabase.auth.signInWithPassword({ 
+    // 2. Establish isolated Supabase Candidate Session using the cryptographically secure password
+    const { data, error } = await candidateSupabase.auth.signInWithPassword({ 
       phone, 
       password: verifyRes.password 
     });
@@ -264,18 +290,31 @@ export function CandidateAuthProvider({ children }: { children: ReactNode }) {
   }, [setVerifiedMobile]);
 
   const verifiedMobile = useMemo(() => {
-    // If storedMobile is explicitly set (e.g. via OTP verification), it is authoritative
-    if (storedMobile) {
+    // 1. Authoritative: Authenticated Supabase candidate phone session
+    if (session?.user?.phone) {
+      return normalizeMobileNumber(session.user.phone);
+    }
+    // 2. Local test simulation fallback: only in DEV dummy mode
+    if (isDummyOtpMode() && storedMobile) {
       return normalizeMobileNumber(storedMobile);
     }
-    const raw = (
-      (session?.user?.phone ? normalizeMobileNumber(session.user.phone) : '') ||
-      ((session?.user?.user_metadata?.phone as string | undefined) ? normalizeMobileNumber(session?.user?.user_metadata?.phone as string) : '') ||
-      ((session?.user?.user_metadata?.mobile as string | undefined) ? normalizeMobileNumber(session?.user?.user_metadata?.mobile as string) : '') ||
-      (profile?.mobile ? normalizeMobileNumber(profile.mobile) : '')
-    );
-    return raw ? normalizeMobileNumber(raw) : '';
-  }, [session?.user, profile?.mobile, storedMobile]);
+    return '';
+  }, [session?.user?.phone, storedMobile]);
+
+  const effectiveUser = useMemo<User | null>(() => {
+    if (session?.user) return session.user;
+    if (isDummyOtpMode() && storedMobile) {
+      return {
+        id: `dummy-candidate-${storedMobile}`,
+        phone: `+91${storedMobile}`,
+        app_metadata: { provider: 'phone' },
+        user_metadata: { phone: `+91${storedMobile}` },
+        aud: 'authenticated',
+        created_at: new Date().toISOString(),
+      } as unknown as User;
+    }
+    return null;
+  }, [session?.user, storedMobile]);
 
   useEffect(() => {
     if (verifiedMobile && typeof window !== 'undefined') {
@@ -302,14 +341,23 @@ export function CandidateAuthProvider({ children }: { children: ReactNode }) {
       // storage fallback
     }
 
-    // 2. Terminate Supabase Auth session cleanly
-    await supabase.auth.signOut().catch(() => {});
+    // 2. Terminate isolated Candidate Supabase Auth session cleanly
+    await candidateSupabase.auth.signOut().catch(() => {});
   }, []);
 
   const value = useMemo<CandidateAuthContextValue>(() => ({
-    session, user: session?.user ?? null, profile, verifiedMobile, loading, profileLoading,
-    requestOtp, verifyOtp, setVerifiedMobile, signOut, refreshProfile,
-  }), [session, profile, verifiedMobile, loading, profileLoading, requestOtp, verifyOtp, setVerifiedMobile, signOut, refreshProfile]);
+    session,
+    user: effectiveUser,
+    profile,
+    verifiedMobile,
+    loading,
+    profileLoading,
+    requestOtp,
+    verifyOtp,
+    setVerifiedMobile,
+    signOut,
+    refreshProfile,
+  }), [session, effectiveUser, profile, verifiedMobile, loading, profileLoading, requestOtp, verifyOtp, setVerifiedMobile, signOut, refreshProfile]);
 
   return (
     <CandidateAuthContext.Provider value={value}>

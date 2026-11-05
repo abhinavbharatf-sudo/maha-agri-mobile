@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { User, MapPin, Calendar, CheckCircle2, AlertCircle, Loader2, ArrowRight, ArrowLeft, Phone, Mail, Shield, Eye, EyeOff } from 'lucide-react';
+import { User, MapPin, Calendar, CheckCircle2, AlertCircle, Loader2, ArrowRight, ArrowLeft, Phone, Mail, Shield, Eye, EyeOff, Info } from 'lucide-react';
 import { MAHARASHTRA_DISTRICTS, getTalukasForDistrict } from '../../../data/maharashtraGeography';
 import { upsertCandidateProfile } from '../../lib/api';
 import { CASTE_CATEGORIES, type MasterProfileFormData } from '../types';
-import { validateVerhoeff, computeAadhaarHmac, checkAadhaarDuplicateServer, registerAadhaarHash, formatAadhaarDisplay } from '../utils/verhoeff';
+import { validateVerhoeff, computeAadhaarHmac, checkAadhaarDuplicateServer, registerAadhaarHash, formatAadhaarDisplay, getLocalTodayIso } from '../utils/verhoeff';
 
 interface Step1MasterProfileProps {
   data: MasterProfileFormData;
@@ -11,6 +11,8 @@ interface Step1MasterProfileProps {
   verifiedMobile: string;
   isCasteRequired?: boolean;
   submitButtonLabel?: string;
+  cancelButtonLabel?: string;
+  returnToReview?: boolean;
   onChange: (field: keyof MasterProfileFormData, value: any) => void;
   onNext: () => void;
   onBack?: () => void;
@@ -25,6 +27,8 @@ export default function Step1MasterProfile({
   verifiedMobile,
   isCasteRequired = false,
   submitButtonLabel,
+  cancelButtonLabel,
+  returnToReview,
   onChange,
   onNext,
   onBack,
@@ -183,9 +187,7 @@ export default function Step1MasterProfile({
         if (!validIndianMobileRegex.test(cleanDigits)) {
           return 'Enter a valid 10-digit alternate mobile number.';
         }
-        if (cleanVerifiedMobile && cleanDigits === cleanVerifiedMobile) {
-          return 'Alternate mobile number must differ from the verified WhatsApp number.';
-        }
+        // Alternate number may be identical to WhatsApp verified number
         return null;
       }
 
@@ -632,6 +634,11 @@ export default function Step1MasterProfile({
       return;
     }
 
+    if (!userId || userId === 'profile-user') {
+      setFormError('Authentication required. Please log in with your verified WhatsApp mobile number.');
+      return;
+    }
+
     // 2. If Errors Exist: Highlight, Auto-Focus, and Smooth Scroll to First Invalid
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -652,9 +659,8 @@ export default function Step1MasterProfile({
     try {
       // Server-side Aadhaar Duplicate Check across mobile numbers
       const cleanAadhaar = (data.aadhaarNumber || '').replace(/\D/g, '').slice(0, 12);
-      const aadhaarHash = await computeAadhaarHmac(cleanAadhaar);
       const dupCheck = await checkAadhaarDuplicateServer({
-        aadhaarHash,
+        aadhaarNumber: cleanAadhaar,
         userId,
         mobile: cleanVerifiedMobile,
       });
@@ -671,6 +677,8 @@ export default function Step1MasterProfile({
         return;
       }
 
+      const aadhaarHash = await computeAadhaarHmac(cleanAadhaar);
+
       const normalizedGender = (data.gender || '').toLowerCase() === 'transgender' ? 'other' : (data.gender || '').toLowerCase();
       const payload: Record<string, unknown> = {
         user_id: userId,
@@ -681,6 +689,7 @@ export default function Step1MasterProfile({
         district: currentDistrictVal,
         taluka: currentTalukaVal,
         state: 'Maharashtra',
+        profile_complete: true,
       };
 
       if (aadhaarHash) {
@@ -692,8 +701,15 @@ export default function Step1MasterProfile({
       if (data.casteCategory?.trim()) {
         payload.caste_category = data.casteCategory.trim();
       }
-      if (data.alternateMobile?.trim()) {
-        const cleanAlt = data.alternateMobile.trim().replace(/\D/g, '');
+      const rawAlt = data.alternateMobile?.trim().replace(/\D/g, '') || '';
+      const cleanAlt = (
+        rawAlt.length === 12 && rawAlt.startsWith('91')
+          ? rawAlt.slice(2)
+          : rawAlt.length === 11 && rawAlt.startsWith('0')
+          ? rawAlt.slice(1)
+          : rawAlt
+      ) || null;
+      if (cleanAlt) {
         payload.emergency_mobile = cleanAlt;
         payload.alternate_mobile = cleanAlt;
       }
@@ -726,7 +742,7 @@ export default function Step1MasterProfile({
           setErrors(prev => ({ ...prev, aadhaarNumber: dupMsg }));
           setFormError(dupMsg);
         } else {
-          setFormError('Failed to save profile. Please verify your details and try again.');
+          setFormError((saveErr as any)?.message || 'Failed to save profile. Please verify your details and try again.');
         }
         setSaving(false);
         return;
@@ -743,7 +759,7 @@ export default function Step1MasterProfile({
   };
 
   const getFieldClass = (hasError: boolean) =>
-    `w-full px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all focus:outline-none ${
+    `w-full min-h-[44px] px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all focus:outline-none ${
       hasError
         ? 'border-2 border-red-500 bg-red-50/40 text-red-950 focus:ring-2 focus:ring-red-500/20'
         : 'border border-slate-300 bg-white text-[#102a43] focus:ring-2 focus:ring-[#102a43]/20 focus:border-[#102a43]'
@@ -762,7 +778,7 @@ export default function Step1MasterProfile({
             <User className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-base font-bold text-[#102a43]">Step 2: Basic Information</h2>
+            <h2 className="text-base font-bold text-[#102a43]">Step 2: Identity &amp; Address Details</h2>
             <p className="text-xs text-[#627d98]">
               Official demographic identity and residential addresses. Saved to your profile and securely reused across applications.
             </p>
@@ -774,6 +790,24 @@ export default function Step1MasterProfile({
         </span>
       </div>
 
+      {returnToReview && (
+        <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl flex items-center justify-between gap-3 text-xs text-blue-900">
+          <div className="flex items-center gap-2">
+            <Info className="w-4 h-4 text-blue-600 shrink-0" />
+            <span>
+              <strong>Editing from Review:</strong> Update your address/identity details below and save to return directly to Step 4 Review &amp; Submit.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="text-xs font-bold text-blue-700 hover:text-blue-900 hover:underline shrink-0"
+          >
+            Cancel &amp; Return
+          </button>
+        </div>
+      )}
+
       {/* Global Form Error Banner */}
       {formError && (
         <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2.5 text-xs text-red-800">
@@ -783,10 +817,10 @@ export default function Step1MasterProfile({
       )}
 
       {/* Form Fields Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
 
         {/* 1. Full Name (English Letters Only, Auto-Uppercase) */}
-        <div className="md:col-span-2">
+        <div className="sm:col-span-2">
           <label htmlFor="field-fullName" className="block text-xs font-bold text-[#102a43] uppercase tracking-wider mb-1.5">
             Full Name as per Aadhaar Card <span className="text-red-500">*</span>
           </label>
@@ -816,7 +850,7 @@ export default function Step1MasterProfile({
         </div>
 
         {/* 2. Aadhaar Number (Mandatory, 12 Digits, Verhoeff Checksum) */}
-        <div className="md:col-span-2">
+        <div className="sm:col-span-2">
           <label htmlFor="field-aadhaarNumber" className="block text-xs font-bold text-[#102a43] uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
             <Shield className="w-3.5 h-3.5 text-emerald-700" />
             Aadhaar Number <span className="text-red-500">*</span>
@@ -840,7 +874,7 @@ export default function Step1MasterProfile({
             <button
               type="button"
               onClick={() => setShowAadhaar(prev => !prev)}
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer"
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:outline-none rounded-sm p-1 cursor-pointer"
               tabIndex={-1}
               title={showAadhaar ? 'Hide Aadhaar' : 'Show Aadhaar'}
             >
@@ -870,7 +904,7 @@ export default function Step1MasterProfile({
             ref={fieldRefs.dateOfBirth}
             type="date"
             required
-            max={new Date().toISOString().split('T')[0]}
+            max={getLocalTodayIso()}
             min="1940-01-01"
             value={data.dateOfBirth || ''}
             onChange={e => handleInputChange('dateOfBirth', e.target.value)}
@@ -976,7 +1010,7 @@ export default function Step1MasterProfile({
             </p>
           ) : (
             <p className="text-[11px] text-[#627d98] mt-1">
-              Must differ from verified WhatsApp mobile.
+              Secondary contact for critical updates. Can be the same as your verified WhatsApp number.
             </p>
           )}
         </div>
@@ -1059,15 +1093,15 @@ export default function Step1MasterProfile({
         </div>
 
         {/* ── Section A: Current Residential Address ──────────────────────────── */}
-        <div className="md:col-span-2 p-5 bg-slate-50/70 border border-slate-200 rounded-2xl space-y-4">
+        <div className="sm:col-span-2 p-5 bg-slate-50/70 border border-slate-200 rounded-2xl space-y-4">
           <div className="flex items-center gap-2 pb-2 border-b border-slate-200 text-[#102a43]">
             <MapPin className="w-4 h-4 text-emerald-700" />
             <h3 className="text-xs font-bold uppercase tracking-wider">A. Current Residential Address</h3>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Current Address Line */}
-            <div className="md:col-span-2">
+            <div className="sm:col-span-2">
               <label htmlFor="field-currentAddressLine1" className="block text-xs font-bold text-[#102a43] uppercase tracking-wider mb-1.5 flex items-center justify-between">
                 <span>Address Line <span className="text-red-500">*</span></span>
                 <span className="text-[10px] font-medium text-slate-400">English capital letters only</span>
@@ -1200,7 +1234,7 @@ export default function Step1MasterProfile({
         </div>
 
         {/* ── Section B: Permanent Residential Address ────────────────────────── */}
-        <div className="md:col-span-2 p-5 bg-slate-50/70 border border-slate-200 rounded-2xl space-y-4">
+        <div className="sm:col-span-2 p-5 bg-slate-50/70 border border-slate-200 rounded-2xl space-y-4">
           <div className="flex items-center justify-between pb-2 border-b border-slate-200 text-[#102a43] flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <MapPin className="w-4 h-4 text-blue-700" />
@@ -1219,9 +1253,9 @@ export default function Step1MasterProfile({
             </label>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Permanent Address Line */}
-            <div className="md:col-span-2">
+            <div className="sm:col-span-2">
               <label htmlFor="field-permanentAddressLine1" className="block text-xs font-bold text-[#102a43] uppercase tracking-wider mb-1.5 flex items-center justify-between">
                 <span>Address Line <span className="text-red-500">*</span></span>
                 {isSameAddress ? (
@@ -1369,7 +1403,7 @@ export default function Step1MasterProfile({
             disabled={saving}
             className="px-4 py-2.5 border border-slate-300 text-slate-700 text-xs font-semibold rounded-xl hover:bg-slate-50 transition-colors disabled:opacity-50 cursor-pointer"
           >
-            Cancel Application
+            {cancelButtonLabel || 'Cancel Application'}
           </button>
           {onBack && (
             <button
@@ -1378,14 +1412,14 @@ export default function Step1MasterProfile({
               disabled={saving}
               className="inline-flex items-center gap-1.5 px-4 py-2.5 border border-slate-300 text-slate-700 text-xs font-semibold rounded-xl hover:bg-slate-50 transition-colors disabled:opacity-50 cursor-pointer"
             >
-              <ArrowLeft className="w-3.5 h-3.5" /> Back to Profile
+              <ArrowLeft className="w-3.5 h-3.5" /> Back to Personal Details
             </button>
           )}
         </div>
         <button
           type="submit"
           disabled={saving}
-          className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#16a34a] hover:bg-[#15803d] text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all active:scale-98 disabled:opacity-60 cursor-pointer"
+          className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#16a34a] hover:bg-[#15803d] text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all active:scale-98 motion-reduce:transform-none motion-reduce:transition-none disabled:opacity-60 cursor-pointer"
         >
           {saving ? (
             <>
@@ -1394,7 +1428,7 @@ export default function Step1MasterProfile({
             </>
           ) : (
             <>
-              {submitButtonLabel || 'Save & Proceed to Position Details'} <ArrowRight className="w-4 h-4" />
+              {submitButtonLabel || 'Save & Continue →'}
             </>
           )}
         </button>

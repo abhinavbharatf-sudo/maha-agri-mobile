@@ -11,11 +11,12 @@ import {
   Lock,
   X,
   Clock,
-  Check
+  Check,
+  Info
 } from 'lucide-react';
 import { upsertCandidateProfile } from '../../lib/api';
 import type { MasterProfileFormData } from '../types';
-import { calculateAgeWithMonths } from '../utils/verhoeff';
+import { calculateAgeWithMonths, getLocalTodayIso } from '../utils/verhoeff';
 
 interface Step1CreateProfileProps {
   data: MasterProfileFormData;
@@ -24,6 +25,8 @@ interface Step1CreateProfileProps {
   candidateId?: string;
   profileCreatedDate?: string;
   isCasteRequired?: boolean;
+  cancelButtonLabel?: string;
+  returnToReview?: boolean;
   onChange: (field: keyof MasterProfileFormData, value: any) => void;
   onNext: () => void;
   onCancel: () => void;
@@ -42,6 +45,8 @@ export default function Step1CreateProfile({
   verifiedMobile,
   candidateId,
   profileCreatedDate,
+  cancelButtonLabel,
+  returnToReview,
   onChange,
   onNext,
   onCancel,
@@ -144,14 +149,17 @@ export default function Step1CreateProfile({
       }
 
       case 'alternateMobile': {
-        const trimmed = (value || '').trim().replace(/\D/g, '');
-        if (!trimmed) {
-          return 'Alternate mobile number is required.';
-        }
-        if (trimmed.length !== 10) {
+        const raw = (value || '').trim().replace(/\D/g, '');
+        if (!raw) return null; // Optional
+        const cleanDigits = raw.length === 12 && raw.startsWith('91')
+          ? raw.slice(2)
+          : raw.length === 11 && raw.startsWith('0')
+          ? raw.slice(1)
+          : raw;
+        if (cleanDigits.length !== 10) {
           return 'Alternate mobile number must be exactly 10 digits.';
         }
-        if (!/^[6-9]\d{9}$/.test(trimmed)) {
+        if (!/^[6-9]\d{9}$/.test(cleanDigits)) {
           return 'Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.';
         }
         // Alternate number may be identical to WhatsApp verified number
@@ -269,6 +277,12 @@ export default function Step1CreateProfile({
         return;
       }
 
+      if (!userId || userId === 'profile-user') {
+        setFormError('Authentication required. Please log in with your verified WhatsApp mobile number.');
+        setSaving(false);
+        return;
+      }
+
       // Format gender for database enum/check compatibility
       let dbGender: 'male' | 'female' | 'other' | 'prefer_not_to_say' = 'other';
       const normalizedGender = (data.gender || '').toLowerCase();
@@ -276,7 +290,14 @@ export default function Step1CreateProfile({
       else if (normalizedGender === 'female') dbGender = 'female';
       else dbGender = 'other';
 
-      const cleanAlt = data.alternateMobile?.trim().replace(/\D/g, '') || null;
+      const rawAlt = data.alternateMobile?.trim().replace(/\D/g, '') || '';
+      const cleanAlt = (
+        rawAlt.length === 12 && rawAlt.startsWith('91')
+          ? rawAlt.slice(2)
+          : rawAlt.length === 11 && rawAlt.startsWith('0')
+          ? rawAlt.slice(1)
+          : rawAlt
+      ) || null;
       const payload: Record<string, unknown> = {
         user_id: userId,
         mobile: cleanMobile,
@@ -286,19 +307,7 @@ export default function Step1CreateProfile({
         emergency_mobile: cleanAlt,
         alternate_mobile: cleanAlt,
         email: data.email?.trim() || null,
-        profile_complete: true,
       };
-
-      if (data.casteCategory) payload.caste_category = data.casteCategory;
-      if (data.homeDistrict || data.currentDistrict) payload.district = data.currentDistrict || data.homeDistrict;
-      if (data.homeTaluka || data.currentTaluka) payload.taluka = data.currentTaluka || data.homeTaluka;
-      if (data.addressLine1 || data.currentAddressLine1) payload.address_line1 = data.currentAddressLine1 || data.addressLine1;
-      if (data.pincode || data.currentPincode) payload.pincode = data.currentPincode || data.pincode;
-      if (data.permanentSameAsCurrent !== undefined) payload.permanent_same_as_current = data.permanentSameAsCurrent;
-      if (data.permanentAddressLine1) payload.permanent_address_line1 = data.permanentAddressLine1;
-      if (data.permanentDistrict) payload.permanent_district = data.permanentDistrict;
-      if (data.permanentTaluka) payload.permanent_taluka = data.permanentTaluka;
-      if (data.permanentPincode) payload.permanent_pincode = data.permanentPincode;
 
       const { data: savedProfile, error: saveErr } = await upsertCandidateProfile(payload as any);
 
@@ -394,7 +403,8 @@ export default function Step1CreateProfile({
       const firstInvalidKey = fieldOrder.find(k => newErrors[k]);
       if (firstInvalidKey && (fieldRefs as Record<string, any>)[firstInvalidKey]?.current) {
         const el = (fieldRefs as Record<string, any>)[firstInvalidKey].current;
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const scrollBehavior = (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) ? 'auto' : 'smooth';
+        el.scrollIntoView({ behavior: scrollBehavior, block: 'center' });
         setTimeout(() => el.focus(), 150);
       }
       return;
@@ -411,7 +421,7 @@ export default function Step1CreateProfile({
   };
 
   const getFieldClass = (hasError: boolean, isReadOnly = false) =>
-    `w-full px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all focus:outline-none ${
+    `w-full min-h-[44px] px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all focus:outline-none ${
       isReadOnly
         ? 'bg-slate-100 text-slate-700 border border-slate-300 cursor-not-allowed select-none'
         : hasError
@@ -428,12 +438,30 @@ export default function Step1CreateProfile({
             <User className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-base font-bold text-[#102a43]">Step 1: Create Candidate Profile</h2>
+            <h2 className="text-base font-bold text-[#102a43]">Step 1: Personal Details &amp; Contact</h2>
             <p className="text-xs text-[#627d98]">
               Essential personal and contact details. Reusable across all your job applications.
             </p>
           </div>
         </div>
+
+        {returnToReview && (
+          <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl flex items-center justify-between gap-3 text-xs text-blue-900">
+            <div className="flex items-center gap-2">
+              <Info className="w-4 h-4 text-blue-600 shrink-0" />
+              <span>
+                <strong>Editing from Review:</strong> Make your updates below and save to return directly to Step 4 Review &amp; Submit.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={onCancel}
+              className="text-xs font-bold text-blue-700 hover:text-blue-900 hover:underline shrink-0"
+            >
+              Cancel &amp; Return
+            </button>
+          </div>
+        )}
 
         {formError && (
           <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 text-xs text-red-800">
@@ -455,25 +483,27 @@ export default function Step1CreateProfile({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Field 1: Full Name as per Aadhaar Card */}
             <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label htmlFor="field-fullName" className="block text-xs font-bold text-[#102a43] uppercase tracking-wider mb-1.5">
                 Full Name as per Aadhaar Card <span className="text-red-500">*</span>
               </label>
               <input
+                id="field-fullName"
                 ref={fieldRefs.fullName}
                 type="text"
                 placeholder="E.G. RAMESH SAKHARAM PATIL"
                 value={data.fullName || ''}
                 onChange={e => handleFieldChange('fullName', e.target.value)}
                 aria-invalid={Boolean(errors.fullName)}
+                aria-describedby={errors.fullName ? 'fullName-error' : 'fullName-hint'}
                 className={getFieldClass(Boolean(errors.fullName))}
               />
               {errors.fullName ? (
-                <p className="mt-1 text-[11px] text-red-600 flex items-center gap-1 font-medium">
+                <p id="fullName-error" className="mt-1 text-[11px] text-red-600 flex items-center gap-1 font-medium">
                   <AlertCircle className="w-3 h-3 shrink-0" />
                   {errors.fullName}
                 </p>
               ) : (
-                <p className="mt-1 text-[11px] text-slate-500">
+                <p id="fullName-hint" className="mt-1 text-[11px] text-slate-500">
                   Enter your full name in English exactly as shown on your official identity document.
                 </p>
               )}
@@ -481,8 +511,8 @@ export default function Step1CreateProfile({
 
             {/* Field 2: Date of Birth & Dynamic Age Display (Format: XX Years XX Months) */}
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-semibold text-slate-700">
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="field-dateOfBirth" className="block text-xs font-bold text-[#102a43] uppercase tracking-wider">
                   Date of Birth <span className="text-red-500">*</span>
                 </label>
                 {ageDetails !== null && (
@@ -496,22 +526,24 @@ export default function Step1CreateProfile({
                 )}
               </div>
               <input
+                id="field-dateOfBirth"
                 ref={fieldRefs.dateOfBirth}
                 type="date"
-                max={new Date().toISOString().split('T')[0]}
+                max={getLocalTodayIso()}
                 min="1940-01-01"
                 value={data.dateOfBirth || ''}
                 onChange={e => handleFieldChange('dateOfBirth', e.target.value)}
                 aria-invalid={Boolean(errors.dateOfBirth)}
+                aria-describedby={errors.dateOfBirth ? 'dateOfBirth-error' : 'dateOfBirth-hint'}
                 className={getFieldClass(Boolean(errors.dateOfBirth))}
               />
               {errors.dateOfBirth ? (
-                <p className="mt-1 text-[11px] text-red-600 flex items-center gap-1 font-medium">
+                <p id="dateOfBirth-error" className="mt-1 text-[11px] text-red-600 flex items-center gap-1 font-medium">
                   <AlertCircle className="w-3 h-3 shrink-0" />
                   {errors.dateOfBirth}
                 </p>
               ) : (
-                <p className="mt-1 text-[11px] text-slate-500">
+                <p id="dateOfBirth-hint" className="mt-1 text-[11px] text-slate-500">
                   Age is dynamically calculated based on your selected date of birth. Minimum 18 years required.
                 </p>
               )}
@@ -519,14 +551,16 @@ export default function Step1CreateProfile({
 
             {/* Field 3: Gender Dropdown */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label htmlFor="field-gender" className="block text-xs font-bold text-[#102a43] uppercase tracking-wider mb-1.5">
                 Gender <span className="text-red-500">*</span>
               </label>
               <select
+                id="field-gender"
                 ref={fieldRefs.gender}
                 value={data.gender || ''}
                 onChange={e => handleFieldChange('gender', e.target.value)}
                 aria-invalid={Boolean(errors.gender)}
+                aria-describedby={errors.gender ? 'gender-error' : 'gender-hint'}
                 className={`${getFieldClass(Boolean(errors.gender))} cursor-pointer`}
               >
                 <option value="">-- Select Gender --</option>
@@ -535,12 +569,12 @@ export default function Step1CreateProfile({
                 <option value="Transgender">Transgender</option>
               </select>
               {errors.gender ? (
-                <p className="mt-1 text-[11px] text-red-600 flex items-center gap-1 font-medium">
+                <p id="gender-error" className="mt-1 text-[11px] text-red-600 flex items-center gap-1 font-medium">
                   <AlertCircle className="w-3 h-3 shrink-0" />
                   {errors.gender}
                 </p>
               ) : (
-                <p className="mt-1 text-[11px] text-slate-500">Select your official gender identity.</p>
+                <p id="gender-hint" className="mt-1 text-[11px] text-slate-500">Select your official gender identity.</p>
               )}
             </div>
           </div>
@@ -557,7 +591,7 @@ export default function Step1CreateProfile({
             {/* Field 4: WhatsApp Verified Mobile Number (Read-Only) */}
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-semibold text-slate-700">
+                <label htmlFor="field-verifiedMobile" className="block text-xs font-bold text-[#102a43] uppercase tracking-wider mb-1.5">
                   WhatsApp Verified Mobile Number <span className="text-red-500">*</span>
                 </label>
                 <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
@@ -570,24 +604,26 @@ export default function Step1CreateProfile({
                 </span>
                 <div className="relative flex-1">
                   <input
+                    id="field-verifiedMobile"
                     type="text"
                     readOnly
                     disabled
                     value={cleanVerifiedMobile || '—'}
+                    aria-describedby="verifiedMobile-hint"
                     className={`${getFieldClass(false, true)} rounded-l-none`}
                   />
                   <Lock className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
                 </div>
               </div>
-              <p className="mt-1 text-[11px] text-slate-500">
+              <p id="verifiedMobile-hint" className="mt-1 text-[11px] text-slate-500">
                 Bound strictly to your authenticated WhatsApp session. Non-editable.
               </p>
             </div>
 
-            {/* Field 5: Alternate Mobile Number (Mandatory, can be same as WhatsApp) */}
+            {/* Field 5: Alternate Mobile Number (Optional, can be same as WhatsApp) */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Alternate Mobile Number <span className="text-red-500">*</span>
+              <label htmlFor="field-alternateMobile" className="block text-xs font-bold text-[#102a43] uppercase tracking-wider mb-1.5">
+                Alternate Mobile Number <span className="text-slate-400 font-normal text-[11px] normal-case tracking-normal">(Optional)</span>
               </label>
               <div className="flex">
                 <span className="inline-flex items-center px-3.5 rounded-l-xl border border-r-0 border-slate-300 bg-slate-100 text-slate-600 font-semibold text-xs sm:text-sm select-none">
@@ -595,6 +631,7 @@ export default function Step1CreateProfile({
                 </span>
                 <div className="relative flex-1">
                   <input
+                    id="field-alternateMobile"
                     ref={fieldRefs.alternateMobile}
                     type="tel"
                     maxLength={10}
@@ -605,18 +642,19 @@ export default function Step1CreateProfile({
                       handleFieldChange('alternateMobile', cleanDigits);
                     }}
                     aria-invalid={Boolean(errors.alternateMobile)}
+                    aria-describedby={errors.alternateMobile ? "alternateMobile-error" : "alternateMobile-hint"}
                     className={`${getFieldClass(Boolean(errors.alternateMobile))} rounded-l-none`}
                   />
                   <Phone className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
                 </div>
               </div>
               {errors.alternateMobile ? (
-                <p className="mt-1 text-[11px] text-red-600 flex items-center gap-1 font-medium">
+                <p id="alternateMobile-error" className="mt-1 text-[11px] text-red-600 flex items-center gap-1 font-medium">
                   <AlertCircle className="w-3 h-3 shrink-0" />
                   {errors.alternateMobile}
                 </p>
               ) : (
-                <p className="mt-1 text-[11px] text-slate-500">
+                <p id="alternateMobile-hint" className="mt-1 text-[11px] text-slate-500">
                   Secondary contact for recruitment updates. May be identical to your WhatsApp verified number.
                 </p>
               )}
@@ -624,11 +662,12 @@ export default function Step1CreateProfile({
 
             {/* Field 6: Email Address (Optional) - Full width (100%) on separate row below mobile fields */}
             <div className="sm:col-span-2 w-full">
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Email Address <span className="text-slate-400 font-normal text-[11px]">(Optional)</span>
+              <label htmlFor="field-email" className="block text-xs font-bold text-[#102a43] uppercase tracking-wider mb-1.5">
+                Email Address <span className="text-slate-400 font-normal text-[11px] normal-case tracking-normal">(Optional)</span>
               </label>
               <div className="relative w-full">
                 <input
+                  id="field-email"
                   ref={fieldRefs.email}
                   type="email"
                   autoCapitalize="none"
@@ -638,17 +677,18 @@ export default function Step1CreateProfile({
                   value={data.email || ''}
                   onChange={e => handleFieldChange('email', e.target.value)}
                   aria-invalid={Boolean(errors.email)}
+                  aria-describedby={errors.email ? "email-error" : "email-hint"}
                   className={`${getFieldClass(Boolean(errors.email))} pr-10 lowercase font-normal`}
                 />
                 <Mail className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
               {errors.email ? (
-                <p className="mt-1 text-[11px] text-red-600 flex items-center gap-1 font-medium">
+                <p id="email-error" className="mt-1 text-[11px] text-red-600 flex items-center gap-1 font-medium">
                   <AlertCircle className="w-3 h-3 shrink-0" />
                   {errors.email}
                 </p>
               ) : (
-                <p className="mt-1 text-[11px] text-slate-500">
+                <p id="email-hint" className="mt-1 text-[11px] text-slate-500">
                   English small letters only. Used for interview call letters and official communications.
                 </p>
               )}
@@ -670,12 +710,14 @@ export default function Step1CreateProfile({
 
           {/* Mandatory Checkbox - Exact label */}
           <div>
-            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+            <label htmlFor="field-consent" className="flex items-center gap-2.5 cursor-pointer select-none">
               <input
+                id="field-consent"
                 ref={fieldRefs.consent}
                 type="checkbox"
                 checked={Boolean(data.consentGiven)}
                 onChange={e => handleConsentCheckboxChange(e.target.checked)}
+                aria-describedby={errors.consent ? "consent-error" : undefined}
                 className="w-4 h-4 rounded border-slate-300 text-[#102a43] focus:ring-[#102a43] cursor-pointer"
               />
               <span className="text-xs sm:text-[13px] font-semibold text-[#102a43]">
@@ -683,31 +725,11 @@ export default function Step1CreateProfile({
               </span>
             </label>
             {errors.consent && (
-              <p className="mt-1 text-[11px] text-red-600 flex items-center gap-1 font-medium">
+              <p id="consent-error" className="mt-1 text-[11px] text-red-600 flex items-center gap-1 font-medium">
                 <AlertCircle className="w-3 h-3 shrink-0" />
                 {errors.consent}
               </p>
             )}
-          </div>
-        </div>
-
-        {/* ── System-Generated Identity (Compact Metadata at Bottom) ──────────── */}
-        <div className="px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs space-y-1.5">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-[11px] sm:text-xs">
-            <div className="flex items-center gap-1.5 text-slate-500 font-medium">
-              <Shield className={`w-3.5 h-3.5 shrink-0 ${isPermanentId ? 'text-emerald-600' : 'text-slate-400'}`} />
-              <span>Candidate ID:</span>
-              <span className={isPermanentId ? 'font-mono font-bold text-[#102a43]' : 'text-slate-500 italic'}>
-                {isPermanentId ? displayCandidateId : 'Will be generated after profile creation'}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 text-slate-500 font-medium">
-              <Clock className={`w-3.5 h-3.5 shrink-0 ${isPermanentId ? 'text-blue-600' : 'text-slate-400'}`} />
-              <span>Profile Created:</span>
-              <span className={isPermanentId ? 'font-semibold text-[#102a43]' : 'text-slate-500 italic'}>
-                {isPermanentId ? displayCreatedDate : 'Will be recorded upon profile creation'}
-              </span>
-            </div>
           </div>
         </div>
 
@@ -719,13 +741,13 @@ export default function Step1CreateProfile({
             disabled={saving}
             className="w-full sm:w-auto px-5 py-2.5 border border-slate-300 text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-50 transition-colors cursor-pointer text-center disabled:opacity-50"
           >
-            Cancel
+            {cancelButtonLabel || 'Cancel Application'}
           </button>
 
           <button
             type="submit"
             disabled={saving}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-[#16a34a] hover:bg-[#15803d] disabled:bg-slate-400 text-white rounded-xl text-xs sm:text-sm font-bold transition-all shadow-sm active:scale-98 cursor-pointer disabled:cursor-not-allowed"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-[#16a34a] hover:bg-[#15803d] disabled:bg-slate-400 text-white rounded-xl text-xs sm:text-sm font-bold transition-all shadow-sm active:scale-98 motion-reduce:transform-none motion-reduce:transition-none cursor-pointer disabled:cursor-not-allowed"
           >
             {saving ? (
               saveSuccess ? (
@@ -741,8 +763,7 @@ export default function Step1CreateProfile({
               )
             ) : (
               <>
-                <span>SAVE &amp; CONTINUE TO BASIC INFORMATION</span>
-                <ArrowRight className="w-4 h-4 shrink-0" />
+                <span>Save &amp; Continue &rarr;</span>
               </>
             )}
           </button>

@@ -17,6 +17,7 @@ import HRFlowManager from './HRFlowManager';
 import HRFaqManager from './HRFaqManager';
 import HRLocationAndVacancyManager from './components/HRLocationAndVacancyManager';
 import HRQuestionnaireBuilder from './components/HRQuestionnaireBuilder';
+import { broadcastJobUpdate } from '../lib/jobEvents';
 import { supabase } from '../../lib/supabase/client';
 import {
   listAllJobs, upsertJob, listWorkflowTemplates, archiveJob, duplicateJob,
@@ -76,6 +77,7 @@ const EMPTY_JOB: Partial<RmsJobPosting> = {
   show_city_publicly: true,
   city_name: '',
   vacancy_allocations: {},
+  multiple_locations_config: null,
   auto_calculate_vacancies: false,
   questionnaire: null,
 };
@@ -281,6 +283,41 @@ export default function HRJobPostingEditor() {
       return setError('Job Title is required in Position Setup.');
     }
 
+    // Validate City-specific configuration
+    if (formData.location_type === 'City-specific') {
+      const mode = formData.vacancy_allocations?.city_selection_mode || 'single';
+      if (mode === 'single') {
+        if (!formData.city_name?.trim()) {
+          setActiveTab('position');
+          return setError('City / Headquarters Name is required for City-specific positions.');
+        }
+      } else {
+        const cities = formData.vacancy_allocations?.cities || [];
+        if (cities.length === 0) {
+          setActiveTab('position');
+          return setError('Please configure at least one city in Position Setup.');
+        }
+        const seenCombinations = new Set<string>();
+        for (let i = 0; i < cities.length; i++) {
+          const c = cities[i];
+          if (!c.cityName?.trim()) {
+            setActiveTab('position');
+            return setError(`City Location #${i + 1} is missing a City Name.`);
+          }
+          if (!c.parentDistrict?.trim()) {
+            setActiveTab('position');
+            return setError(`City Location #${i + 1} (${c.cityName}) is missing a Parent District.`);
+          }
+          const combo = `${c.cityName.trim().toLowerCase()}::${c.parentDistrict.trim().toLowerCase()}`;
+          if (seenCombinations.has(combo)) {
+            setActiveTab('position');
+            return setError(`Duplicate City and Parent District detected for "${c.cityName}". Each city location must be unique.`);
+          }
+          seenCombinations.add(combo);
+        }
+      }
+    }
+
     // Validate vacancy allocation consistency before publishing or on save & close
     if (formData.status === 'published' || (formData.auto_calculate_vacancies && mode === 'close')) {
       const validation = validateVacancyAllocations(formData);
@@ -357,6 +394,13 @@ export default function HRJobPostingEditor() {
       };
       delete payload.location_questions;
     }
+    if (payload.multiple_locations_config !== undefined) {
+      payload.vacancy_allocations = {
+        ...(payload.vacancy_allocations ?? {}),
+        multiple_locations_config: payload.multiple_locations_config,
+      };
+      delete (payload as any).multiple_locations_config;
+    }
     const { data: savedJob, error: err } = await upsertJob(payload);
     setSaving(false);
     if (err) return setError(err.message || 'Failed to save position. Please try again.');
@@ -365,6 +409,7 @@ export default function HRJobPostingEditor() {
     if (savedJob) {
       setFormData(savedJob);
       setIsSlugManuallyEdited(Boolean(savedJob.slug && savedJob.title && savedJob.slug !== generateSlug(savedJob.title)));
+      broadcastJobUpdate(savedJob);
     }
     load();
 
@@ -441,6 +486,7 @@ export default function HRJobPostingEditor() {
       ),
       location_questions: job.location_questions || job.vacancy_allocations?.location_questions || null,
       auto_calculate_vacancies: !!job.auto_calculate_vacancies,
+      multiple_locations_config: job.multiple_locations_config || job.vacancy_allocations?.multiple_locations_config || null,
       vacancy_allocations: job.vacancy_allocations || {},
       questionnaire: job.questionnaire || (job.vacancy_allocations as any)?.questionnaire || null,
     });
@@ -860,7 +906,7 @@ export default function HRJobPostingEditor() {
           </div>
 
           {/* 5-Tab Bar */}
-          <div className="flex overflow-x-auto border-b border-primary-100 bg-slate-50/60 scrollbar-hide px-1 sm:px-2">
+          <div className="flex overflow-x-auto border-b border-primary-100 bg-slate-50/60 px-1 sm:px-2 scrollbar-thin scrollbar-thumb-primary-200">
             {FORM_TABS.map(tab => {
               const active = activeTab === tab.id;
               const Icon = tab.icon;
@@ -1048,6 +1094,53 @@ export default function HRJobPostingEditor() {
                       <input value={formData.salary_package_custom ?? ''} placeholder="Enter custom package description"
                         onChange={e => set('salary_package_custom', e.target.value)}
                         className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white" />
+                    </div>
+                  )}
+                </div>
+
+                {/* ── POSITION STATUS & SCHEDULING (ORIGINAL CORE LOCATION) ── */}
+                <div className="pt-6 border-t border-primary-200/60 space-y-4">
+                  <div className="border-b border-primary-100 pb-3">
+                    <h4 className="text-sm font-bold text-primary-900 flex items-center gap-2">
+                      <CalendarClock className="w-4 h-4 text-primary-600" /> Position Status, Scheduling & Application Validity
+                    </h4>
+                    <p className="text-xs text-primary-500 mt-0.5">
+                      Configure publishing schedule, application deadlines, and position visibility.
+                    </p>
+                  </div>
+
+                  {/* Status Selector & Badges */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-primary-700 mb-1.5">Position Status</label>
+                      <select value={formData.status} onChange={e => set('status', e.target.value)}
+                        className="w-full border border-primary-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-white font-medium">
+                        {JOB_STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3 sm:gap-4 pt-1 sm:pt-6">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={formData.is_featured ?? false}
+                          onChange={e => set('is_featured', e.target.checked)} className="rounded border-amber-300" />
+                        <Star className="w-4 h-4 text-amber-500" />
+                        <span className="text-xs font-bold text-amber-900">Featured Job</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={formData.is_urgent ?? false}
+                          onChange={e => set('is_urgent', e.target.checked)} className="rounded border-red-300" />
+                        <Flame className="w-4 h-4 text-red-500" />
+                        <span className="text-xs font-bold text-red-900">Urgent Hiring</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Job Scheduling Component */}
+                  <SchedulingSection formData={formData as FormDataType} set={set} />
+
+                  {/* Job Health Card (if editing) */}
+                  {formData.id && (
+                    <div className="mt-4">
+                      <JobHealth jobId={formData.id} />
                     </div>
                   )}
                 </div>

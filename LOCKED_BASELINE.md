@@ -1,7 +1,7 @@
 # MAHA-AGRI Candidate Portal — Locked Baseline & Frozen Specifications
 
 **Status:** APPROVED, LOCKED & FROZEN  
-**Baseline Date:** 04 November 2026  
+**Baseline Date:** 06 November 2026  
 **System:** MAHA-AGRI Government Digital Operations Platform  
 
 ---
@@ -143,8 +143,12 @@ The automated test suites in `project/src/careers/portal/__tests__/` enforce thi
 * **Suite 4:** `pincodeStrictValidation.test.mjs` (14 tests: 6-digit English restriction, Marathi digit rejection, mixed-content paste protection, 0-start rejection).
 * **Suite 5:** `candidateProfileUnification.test.mjs` (6 tests: Unified master profile mapping, dual address sync, caste category, immutable snapshots).
 * **Suite 6:** `postImplementationVerification.test.mjs` (11 tests: Complete elimination of legacy MyProfile handlers, Step 1 & 2 reuse).
-* **All Suites:** 41 test suites total across candidate portal, draft lifecycle, questionnaire, and vacancy eligibility.
-* **Total Passing Tests:** **230 / 230 PASS** (0 failures, 100% pass rate).
+* **Suite 7:** `smartLocationRestructuring.test.mjs` (8 tests: 5 geographic scopes, single/multiple city allocations, parent district mapping, sanitization).
+* **Suite 8:** `jobSchedulingValidityRecovery.test.mjs` (10 tests: Recovered job validity, status selectors, schedule dates, health check).
+* **Suite 9:** `candidateExperienceOptimization.test.mjs` (9 tests: Application header, Save & Exit, candidate dropdown trigger, step progress bar, Department / Project alignment).
+* **Suite 10:** `jobDetailsModal.test.mjs` (5 tests: Job details modal trigger, Section A specifications, Section B sticky Application Summary, Open for Applications status, sticky footer actions).
+* **All Suites:** 44 test suites total across candidate portal, draft lifecycle, questionnaire, and vacancy eligibility.
+* **Total Passing Tests:** **384 / 384 PASS** (0 failures, 100% pass rate).
 
 ---
 

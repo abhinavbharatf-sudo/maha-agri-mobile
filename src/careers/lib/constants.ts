@@ -80,10 +80,14 @@ export type MaharashtraDistrict = typeof MAHARASHTRA_DISTRICTS[number];
 export const JOB_LOCATION_TYPES = [
   { value: 'State-wide', label: 'State-wide', desc: 'All 36 districts across Maharashtra' },
   { value: 'Regional', label: 'Regional', desc: 'Specific administrative divisions / zones' },
-  { value: 'District-wise', label: 'District-wise', desc: 'Targeted district selection' },
-  { value: 'City-specific', label: 'City-specific', desc: 'Single city / HQ hub' },
-  { value: 'Multiple Locations', label: 'Multiple Locations', desc: 'Custom combination of locations' },
+  { value: 'District-wise', label: 'District-wise', desc: 'Single or multi-district selection' },
+  { value: 'City-specific', label: 'City-specific', desc: 'Single or multiple cities / HQ hubs' },
   { value: 'Remote', label: 'Remote', desc: 'Work from Home / Virtual' },
+] as const;
+
+export const ALL_JOB_LOCATION_TYPES = [
+  ...JOB_LOCATION_TYPES,
+  { value: 'Multiple Locations', label: 'Multiple Locations', desc: 'Legacy custom combination of locations' },
 ] as const;
 
 export interface MaharashtraRegionDef {

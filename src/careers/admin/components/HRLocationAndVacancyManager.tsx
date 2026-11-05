@@ -7,7 +7,7 @@ import {
   HelpCircle, ChevronUp, AlertTriangle,
 } from 'lucide-react';
 import type {
-  RmsJobPosting, JobLocationType, VacancyAllocationsConfig, VacancyLevel, PostingLevel, JobLocationQuestion,
+  RmsJobPosting, JobLocationType, VacancyAllocationsConfig, VacancyLevel, PostingLevel, JobLocationQuestion, CityLocationAllocation,
 } from '../../lib/types';
 import {
   JOB_LOCATION_TYPES, MAHARASHTRA_REGIONS, MAHARASHTRA_DISTRICTS, getDefaultLocationQuestions,
@@ -268,6 +268,33 @@ export default function HRLocationAndVacancyManager({
   };
 
   // ── Handler: City Specific Fields ──────────────────────────────────────────
+  const citySelectionMode: 'single' | 'multiple' = useMemo(() => {
+    if (formData.vacancy_allocations?.city_selection_mode) {
+      return formData.vacancy_allocations.city_selection_mode;
+    }
+    if (Array.isArray(formData.vacancy_allocations?.cities) && formData.vacancy_allocations!.cities.length > 1) {
+      return 'multiple';
+    }
+    return 'single';
+  }, [formData.vacancy_allocations?.city_selection_mode, formData.vacancy_allocations?.cities]);
+
+  const configuredCities: CityLocationAllocation[] = useMemo(() => {
+    if (Array.isArray(formData.vacancy_allocations?.cities) && formData.vacancy_allocations!.cities.length > 0) {
+      return formData.vacancy_allocations!.cities;
+    }
+    return [
+      {
+        id: 'city-1',
+        cityName: formData.city_name || '',
+        parentDistrict: selectedDistricts[0] || 'Pune',
+        vacancies: formData.total_vacancies ?? 1,
+        showCityPublicly: formData.show_city_publicly !== false,
+        publicLocationString: '',
+        internalNotes: formData.internal_location || '',
+      },
+    ];
+  }, [formData.vacancy_allocations?.cities, formData.city_name, selectedDistricts, formData.total_vacancies, formData.show_city_publicly, formData.internal_location]);
+
   const handleCityDetailsUpdate = (cityName: string, showPublicly: boolean, district?: string) => {
     const targetDistrict = district || selectedDistricts[0] || 'Pune';
     const updatedDistricts = [targetDistrict];
@@ -288,8 +315,164 @@ export default function HRLocationAndVacancyManager({
       show_city_publicly: showPublicly,
       location_districts: updatedDistricts,
       location: newPublicLoc,
-      vacancy_allocations: calcResult.config,
+      vacancy_allocations: {
+        ...calcResult.config,
+        city_selection_mode: 'single',
+      },
       total_vacancies: prev.auto_calculate_vacancies ? calcResult.grandTotal : prev.total_vacancies,
+    }));
+  };
+
+  const handleCitySelectionModeChange = (mode: 'single' | 'multiple') => {
+    if (mode === 'single') {
+      const firstCity = configuredCities[0] || {
+        cityName: formData.city_name || '',
+        parentDistrict: selectedDistricts[0] || 'Pune',
+        showCityPublicly: formData.show_city_publicly !== false,
+        internalNotes: formData.internal_location || '',
+      };
+      const updatedDistricts = [firstCity.parentDistrict || 'Pune'];
+      const newPublicLoc = generatePublicLocationString({
+        locationType: 'City-specific',
+        cityName: firstCity.cityName,
+        showCityPublicly: firstCity.showCityPublicly,
+        selectedDistricts: updatedDistricts,
+        selectedRegions: [],
+        currentLocation: formData.location,
+      });
+      const calcResult = calculateVacancies(updatedDistricts, formData.vacancy_allocations, defaultPerTaluka, defaultPerDistrict, vacancyLevel);
+      setFormData(prev => ({
+        ...prev,
+        city_name: firstCity.cityName,
+        show_city_publicly: firstCity.showCityPublicly,
+        internal_location: firstCity.internalNotes || prev.internal_location,
+        location_districts: updatedDistricts,
+        location: newPublicLoc,
+        vacancy_allocations: {
+          ...calcResult.config,
+          city_selection_mode: 'single',
+          cities: configuredCities,
+        },
+        total_vacancies: prev.auto_calculate_vacancies ? calcResult.grandTotal : prev.total_vacancies,
+      }));
+    } else {
+      const uniqueDistricts = Array.from(new Set(configuredCities.map(c => c.parentDistrict).filter(Boolean)));
+      const totalFromCities = configuredCities.reduce((sum, c) => sum + (Number(c.vacancies) || 0), 0);
+      const newPublicLoc = generatePublicLocationString({
+        locationType: 'City-specific',
+        cityName: configuredCities.map(c => c.cityName).filter(Boolean).join(', '),
+        showCityPublicly: true,
+        selectedDistricts: uniqueDistricts,
+        selectedRegions: [],
+        currentLocation: formData.location,
+        cities: configuredCities,
+      });
+      const calcResult = calculateVacancies(uniqueDistricts, formData.vacancy_allocations, defaultPerTaluka, defaultPerDistrict, vacancyLevel);
+      setFormData(prev => ({
+        ...prev,
+        location_districts: uniqueDistricts,
+        location: newPublicLoc,
+        vacancy_allocations: {
+          ...calcResult.config,
+          city_selection_mode: 'multiple',
+          cities: configuredCities,
+        },
+        total_vacancies: totalFromCities > 0 ? totalFromCities : prev.total_vacancies,
+      }));
+    }
+  };
+
+  const handleAddCity = () => {
+    const nextNum = configuredCities.length + 1;
+    const newCity: CityLocationAllocation = {
+      id: `city-${Date.now()}-${nextNum}`,
+      cityName: '',
+      parentDistrict: 'Pune',
+      vacancies: 1,
+      showCityPublicly: true,
+      publicLocationString: '',
+      internalNotes: '',
+    };
+    const updated = [...configuredCities, newCity];
+    const uniqueDistricts = Array.from(new Set(updated.map(c => c.parentDistrict).filter(Boolean)));
+    const totalFromCities = updated.reduce((sum, c) => sum + (Number(c.vacancies) || 0), 0);
+    const newPublicLoc = generatePublicLocationString({
+      locationType: 'City-specific',
+      cityName: updated.map(c => c.cityName).filter(Boolean).join(', '),
+      showCityPublicly: true,
+      selectedDistricts: uniqueDistricts,
+      selectedRegions: [],
+      currentLocation: formData.location,
+      cities: updated,
+    });
+    const calcResult = calculateVacancies(uniqueDistricts, formData.vacancy_allocations, defaultPerTaluka, defaultPerDistrict, vacancyLevel);
+    setFormData(prev => ({
+      ...prev,
+      location_districts: uniqueDistricts,
+      location: newPublicLoc,
+      vacancy_allocations: {
+        ...calcResult.config,
+        city_selection_mode: 'multiple',
+        cities: updated,
+      },
+      total_vacancies: totalFromCities > 0 ? totalFromCities : prev.total_vacancies,
+    }));
+  };
+
+  const handleUpdateCity = (idx: number, updates: Partial<CityLocationAllocation>) => {
+    const updated = configuredCities.map((c, i) => (i === idx ? { ...c, ...updates } : c));
+    const uniqueDistricts = Array.from(new Set(updated.map(c => c.parentDistrict).filter(Boolean)));
+    const totalFromCities = updated.reduce((sum, c) => sum + (Number(c.vacancies) || 0), 0);
+    const newPublicLoc = generatePublicLocationString({
+      locationType: 'City-specific',
+      cityName: updated.map(c => c.cityName).filter(Boolean).join(', '),
+      showCityPublicly: true,
+      selectedDistricts: uniqueDistricts,
+      selectedRegions: [],
+      currentLocation: formData.location,
+      cities: updated,
+    });
+    const calcResult = calculateVacancies(uniqueDistricts, formData.vacancy_allocations, defaultPerTaluka, defaultPerDistrict, vacancyLevel);
+    setFormData(prev => ({
+      ...prev,
+      city_name: updated[0]?.cityName || prev.city_name,
+      location_districts: uniqueDistricts,
+      location: newPublicLoc,
+      vacancy_allocations: {
+        ...calcResult.config,
+        city_selection_mode: 'multiple',
+        cities: updated,
+      },
+      total_vacancies: totalFromCities > 0 ? totalFromCities : prev.total_vacancies,
+    }));
+  };
+
+  const handleRemoveCity = (idx: number) => {
+    if (configuredCities.length <= 1) return;
+    const updated = configuredCities.filter((_, i) => i !== idx);
+    const uniqueDistricts = Array.from(new Set(updated.map(c => c.parentDistrict).filter(Boolean)));
+    const totalFromCities = updated.reduce((sum, c) => sum + (Number(c.vacancies) || 0), 0);
+    const newPublicLoc = generatePublicLocationString({
+      locationType: 'City-specific',
+      cityName: updated.map(c => c.cityName).filter(Boolean).join(', '),
+      showCityPublicly: true,
+      selectedDistricts: uniqueDistricts,
+      selectedRegions: [],
+      currentLocation: formData.location,
+      cities: updated,
+    });
+    const calcResult = calculateVacancies(uniqueDistricts, formData.vacancy_allocations, defaultPerTaluka, defaultPerDistrict, vacancyLevel);
+    setFormData(prev => ({
+      ...prev,
+      city_name: updated[0]?.cityName || '',
+      location_districts: uniqueDistricts,
+      location: newPublicLoc,
+      vacancy_allocations: {
+        ...calcResult.config,
+        city_selection_mode: 'multiple',
+        cities: updated,
+      },
+      total_vacancies: totalFromCities > 0 ? totalFromCities : prev.total_vacancies,
     }));
   };
 
@@ -379,6 +562,52 @@ export default function HRLocationAndVacancyManager({
   const handleResetQuestionsToDefault = () => {
     const defaults = getDefaultLocationQuestions(postingLevel);
     updateLocationQuestions(defaults);
+  };
+
+  // ── Handler: Multiple Preferred Locations Configuration ───────────────────
+  const multipleLocsConfig = useMemo(() => {
+    return (
+      formData.multiple_locations_config ||
+      formData.vacancy_allocations?.multiple_locations_config || {
+        enabled: false,
+        maxDistricts: 3,
+        maxTalukasPerDistrict: 2,
+      }
+    );
+  }, [formData.multiple_locations_config, formData.vacancy_allocations?.multiple_locations_config]);
+
+  const handleToggleMultipleLocations = (enabled: boolean) => {
+    const updated = {
+      ...multipleLocsConfig,
+      enabled,
+      maxDistricts: multipleLocsConfig.maxDistricts || 3,
+      maxTalukasPerDistrict: 2,
+    };
+    set('multiple_locations_config', updated);
+    setFormData(prev => ({
+      ...prev,
+      multiple_locations_config: updated,
+      vacancy_allocations: {
+        ...(prev.vacancy_allocations ?? {}),
+        multiple_locations_config: updated,
+      },
+    }));
+  };
+
+  const handleMaxDistrictsChange = (maxDistricts: number) => {
+    const updated = {
+      ...multipleLocsConfig,
+      maxDistricts: Math.min(3, Math.max(1, maxDistricts)),
+    };
+    set('multiple_locations_config', updated);
+    setFormData(prev => ({
+      ...prev,
+      multiple_locations_config: updated,
+      vacancy_allocations: {
+        ...(prev.vacancy_allocations ?? {}),
+        multiple_locations_config: updated,
+      },
+    }));
   };
 
   // ── Handler: Vacancy Level Change (Taluka vs District) ─────────────────────
@@ -615,12 +844,22 @@ export default function HRLocationAndVacancyManager({
           </span>
         </div>
 
+        {/* Legacy Multiple Locations Compatibility Banner */}
+        {locationType === 'Multiple Locations' && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span><strong>Legacy Location Type:</strong> This job posting was configured using legacy "Multiple Locations". You can edit it seamlessly or migrate to <strong>District-wise</strong> or <strong>City-specific (Multiple Cities)</strong>.</span>
+            </div>
+          </div>
+        )}
+
         {/* Location Type Selector Grid */}
         <div>
           <label className="block text-xs font-bold text-primary-800 uppercase tracking-wide mb-2.5">
             Geographic Scope / Location Type
           </label>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
             {JOB_LOCATION_TYPES.map(t => {
               const active = locationType === t.value;
               return (
@@ -720,56 +959,295 @@ export default function HRLocationAndVacancyManager({
         {/* City-Specific Configuration (when City-specific is active) */}
         {locationType === 'City-specific' && (
           <div className="p-4 bg-primary-50/40 rounded-xl border border-primary-200 space-y-4">
-            <div className="grid sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-primary-800 mb-1">
-                  City / Headquarters Name *
-                </label>
-                <input
-                  type="text"
-                  value={formData.city_name ?? ''}
-                  placeholder="e.g. Pune, Mumbai, Nashik"
-                  onChange={e => handleCityDetailsUpdate(e.target.value, formData.show_city_publicly ?? true)}
-                  className="w-full border border-primary-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-primary-500"
-                />
+            {/* Mode Selector: Single City vs Multiple Cities */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-primary-200">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-primary-700" />
+                <span className="text-xs font-bold text-primary-900 uppercase tracking-wide">
+                  City Selection Mode
+                </span>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-primary-800 mb-1">
-                  Parent District *
-                </label>
-                <select
-                  value={selectedDistricts[0] ?? ''}
-                  onChange={e => handleCityDetailsUpdate(formData.city_name ?? '', formData.show_city_publicly ?? true, e.target.value)}
-                  className="w-full border border-primary-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-primary-500"
+              <div className="inline-flex rounded-lg border border-primary-300 p-0.5 bg-white shadow-2xs self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => handleCitySelectionModeChange('single')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                    citySelectionMode === 'single'
+                      ? 'bg-primary-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
                 >
-                  <option value="">— Select District —</option>
-                  {MAHARASHTRA_DISTRICTS.map(d => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
+                  Single City
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCitySelectionModeChange('multiple')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                    citySelectionMode === 'multiple'
+                      ? 'bg-primary-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Multiple Cities ({configuredCities.length})
+                </button>
               </div>
             </div>
 
-            {/* City Public Visibility Toggle */}
-            <div className="p-3 bg-white rounded-lg border border-primary-100 flex items-start gap-3">
-              <input
-                type="checkbox"
-                id="show_city_toggle"
-                checked={formData.show_city_publicly !== false}
-                onChange={e => handleCityDetailsUpdate(formData.city_name ?? '', e.target.checked)}
-                className="mt-1 rounded border-slate-300 text-primary-600 focus:ring-primary-500 h-4 w-4"
-              />
-              <div className="text-xs">
-                <label htmlFor="show_city_toggle" className="font-bold text-slate-800 cursor-pointer block">
-                  Show Exact City Name on Public Careers Portal
-                </label>
-                <p className="text-slate-500 mt-0.5">
-                  {formData.show_city_publicly !== false
-                    ? 'Candidates will see the exact city name (e.g. "' + (formData.city_name || 'City') + ', Maharashtra") on job listings and details.'
-                    : '🔒 Confidential: City name is hidden from candidates. Public job details will show regional district only; operational facility is disclosed only to shortlisted candidates.'}
-                </p>
+            {/* SINGLE CITY MODE */}
+            {citySelectionMode === 'single' && (
+              <div className="space-y-4">
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-primary-800 mb-1">
+                      City / Headquarters Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.city_name ?? ''}
+                      placeholder="e.g. Pune, Mumbai, Nashik"
+                      onChange={e => handleCityDetailsUpdate(e.target.value, formData.show_city_publicly !== false)}
+                      className="w-full border border-primary-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-primary-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-primary-800 mb-1">
+                      Parent District *
+                    </label>
+                    <select
+                      value={selectedDistricts[0] ?? ''}
+                      onChange={e => handleCityDetailsUpdate(formData.city_name ?? '', formData.show_city_publicly !== false, e.target.value)}
+                      className="w-full border border-primary-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-primary-500"
+                    >
+                      <option value="">— Select District —</option>
+                      {MAHARASHTRA_DISTRICTS.map(d => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* City Public Visibility Toggle */}
+                <div className="p-3 bg-white rounded-lg border border-primary-100 flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    id="show_city_toggle"
+                    checked={formData.show_city_publicly !== false}
+                    onChange={e => handleCityDetailsUpdate(formData.city_name ?? '', e.target.checked)}
+                    className="mt-1 rounded border-slate-300 text-primary-600 focus:ring-primary-500 h-4 w-4"
+                  />
+                  <div className="text-xs">
+                    <label htmlFor="show_city_toggle" className="font-bold text-slate-800 cursor-pointer block">
+                      Show Exact City Name on Public Careers Portal
+                    </label>
+                    <p className="text-slate-500 mt-0.5">
+                      {formData.show_city_publicly !== false
+                        ? 'Candidates will see the exact city name (e.g. "' + (formData.city_name || 'City') + ', Maharashtra") on job listings and details.'
+                        : '🔒 Confidential: City name is hidden from candidates. Public job details will show regional district only; operational facility is disclosed only to shortlisted candidates.'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Public Location String Preview */}
+                <div className="p-3 bg-white/70 rounded-lg border border-primary-100">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Public Location String (Preview)
+                  </label>
+                  <p className="text-xs text-primary-900 font-medium font-mono">
+                    {formData.location || 'Maharashtra / Specified Facility'}
+                  </p>
+                </div>
+
+                {/* Internal Operational Facility / Office Notes (Admin Only) */}
+                <div>
+                  <label className="block text-xs font-semibold text-primary-800 mb-1">
+                    Internal Operational Facility / Office Notes (Admin Only)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={formData.internal_location ?? ''}
+                    placeholder="e.g. Office Suite 402, AgriTech Tower, Shivajinagar Hub (Internal only)"
+                    onChange={e => set('internal_location', e.target.value)}
+                    className="w-full border border-primary-200 rounded-lg px-3 py-2 text-xs bg-white focus:outline-none focus:border-primary-500"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    🔒 Admin Only: Never exposed on public job listings, job details, or candidate application portal.
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* MULTIPLE CITIES MODE */}
+            {citySelectionMode === 'multiple' && (
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <p className="text-xs text-slate-600">
+                    Configure multiple independent city hubs. Each city has its own independent vacancies and public visibility settings.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleAddCity}
+                    className="px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-xs shrink-0 self-start sm:self-auto"
+                  >
+                    <span>+ Add City</span>
+                  </button>
+                </div>
+
+                {/* City Cards List */}
+                <div className="space-y-3">
+                  {configuredCities.map((city, idx) => {
+                    const isDuplicate = configuredCities.some(
+                      (other, oIdx) =>
+                        oIdx !== idx &&
+                        other.cityName?.trim().toLowerCase() === city.cityName?.trim().toLowerCase() &&
+                        other.parentDistrict === city.parentDistrict &&
+                        Boolean(city.cityName?.trim())
+                    );
+
+                    return (
+                      <div
+                        key={city.id || `city-${idx}`}
+                        className={`p-3.5 bg-white rounded-xl border transition-all ${
+                          isDuplicate ? 'border-red-300 ring-1 ring-red-400' : 'border-primary-200 shadow-2xs'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
+                          <div className="flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-full bg-primary-100 text-primary-800 text-[11px] font-bold flex items-center justify-center">
+                              {idx + 1}
+                            </span>
+                            <span className="text-xs font-bold text-slate-800">
+                              {city.cityName?.trim() ? city.cityName : `City Location #${idx + 1}`}
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">
+                              District: {city.parentDistrict || 'Not selected'}
+                            </span>
+                          </div>
+                          {configuredCities.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveCity(idx)}
+                              className="text-slate-400 hover:text-red-600 p-1 rounded-md transition-colors text-xs flex items-center gap-1"
+                              title="Remove City"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                              <span className="text-[11px]">Remove</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {isDuplicate && (
+                          <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
+                            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                            <span>Duplicate City & Parent District combination detected. Please specify unique locations.</span>
+                          </div>
+                        )}
+
+                        <div className="grid sm:grid-cols-2 gap-3 mb-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">
+                              City / Headquarters Name *
+                            </label>
+                            <input
+                              type="text"
+                              value={city.cityName}
+                              placeholder="e.g. Pune, Nagpur, Aurangabad"
+                              onChange={e => handleUpdateCity(idx, { cityName: e.target.value })}
+                              className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs bg-white focus:outline-none focus:border-primary-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">
+                              Parent District *
+                            </label>
+                            <select
+                              value={city.parentDistrict}
+                              onChange={e => handleUpdateCity(idx, { parentDistrict: e.target.value })}
+                              className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs bg-white focus:outline-none focus:border-primary-500"
+                            >
+                              <option value="">— Select District —</option>
+                              {MAHARASHTRA_DISTRICTS.map(d => (
+                                <option key={d} value={d}>{d}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid sm:grid-cols-2 gap-3 mb-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">
+                              Independent Vacancy Allocation *
+                            </label>
+                            <input
+                              type="number"
+                              min={1}
+                              value={city.vacancies ?? 1}
+                              onChange={e => handleUpdateCity(idx, { vacancies: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                              className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs bg-white focus:outline-none focus:border-primary-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">
+                              Public Location String (Optional Custom)
+                            </label>
+                            <input
+                              type="text"
+                              value={city.publicLocationString ?? ''}
+                              placeholder={city.showCityPublicly !== false ? `${city.cityName || 'City'}, ${city.parentDistrict} (Maharashtra)` : `${city.parentDistrict} Region (Confidential)`}
+                              onChange={e => handleUpdateCity(idx, { publicLocationString: e.target.value })}
+                              className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs bg-white focus:outline-none focus:border-primary-500"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Public Visibility Toggle per city */}
+                        <div className="mb-3 p-2 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between">
+                          <label className="text-xs font-medium text-slate-700 flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={city.showCityPublicly !== false}
+                              onChange={e => handleUpdateCity(idx, { showCityPublicly: e.target.checked })}
+                              className="rounded border-slate-300 text-primary-600 focus:ring-primary-500 h-3.5 w-3.5"
+                            />
+                            <span>Show Exact City Name on Public Careers Portal</span>
+                          </label>
+                          <span className="text-[10px] text-slate-500">
+                            {city.showCityPublicly !== false ? 'Public' : '🔒 Confidential'}
+                          </span>
+                        </div>
+
+                        {/* Internal Notes per city */}
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">
+                            Internal Operational Facility / Office Notes (Admin Only)
+                          </label>
+                          <input
+                            type="text"
+                            value={city.internalNotes ?? ''}
+                            placeholder="e.g. Regional Processing Unit, MIDC Phase 2"
+                            onChange={e => handleUpdateCity(idx, { internalNotes: e.target.value })}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs bg-white focus:outline-none focus:border-primary-500"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Multiple Cities Summary Banner */}
+                <div className="p-3 bg-primary-100/60 rounded-xl border border-primary-200 flex flex-wrap items-center justify-between gap-3 text-xs text-primary-900">
+                  <div className="flex items-center gap-3">
+                    <span className="font-bold">Total Configured Cities: {configuredCities.length}</span>
+                    <span>•</span>
+                    <span className="font-bold">
+                      Total Allocated Vacancies: {configuredCities.reduce((sum, c) => sum + (Number(c.vacancies) || 0), 0)}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-primary-800">
+                    Parent Districts: {Array.from(new Set(configuredCities.map(c => c.parentDistrict).filter(Boolean))).join(', ') || 'None'}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -955,6 +1433,73 @@ export default function HRLocationAndVacancyManager({
               Taluka-wise
             </button>
           </div>
+        </div>
+
+        {/* Multiple Preferred Posting Locations Configuration Panel */}
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-primary-600" />
+                Multiple Preferred Posting Locations
+              </span>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Allow candidates to express priority-based preferences across multiple districts and talukas.
+              </p>
+            </div>
+            <label className="inline-flex items-center gap-2 cursor-pointer self-start sm:self-center">
+              <input
+                type="checkbox"
+                checked={Boolean(multipleLocsConfig.enabled)}
+                onChange={e => handleToggleMultipleLocations(e.target.checked)}
+                className="rounded border-slate-300 text-primary-600 focus:ring-primary-500 h-4 w-4"
+              />
+              <span className="text-xs font-bold text-slate-700">
+                {multipleLocsConfig.enabled ? 'Enabled' : 'Disabled (Single Location)'}
+              </span>
+            </label>
+          </div>
+
+          {multipleLocsConfig.enabled && (
+            <div className="pt-3 border-t border-slate-200/80 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Maximum Preferred Districts (Priority 1 to {multipleLocsConfig.maxDistricts || 3})
+                </label>
+                <div className="flex items-center gap-2">
+                  {[1, 2, 3].map(num => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => handleMaxDistrictsChange(num)}
+                      className={`px-3 py-1.5 rounded-lg font-bold border transition-all cursor-pointer ${
+                        (multipleLocsConfig.maxDistricts || 3) === num
+                          ? 'bg-primary-600 text-white border-primary-600 shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      {num} {num === 1 ? 'District' : 'Districts'}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Candidates may optionally select up to this number of preferred districts in priority order.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Maximum Preferred Talukas per District
+                </label>
+                <div className="px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-slate-700 font-bold inline-block">
+                  2 Talukas (Equal Priority within District)
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Candidates may select up to 2 talukas under each selected district (Taluka-wise drive only).
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Candidate Work Location Preferences Configuration Panel */}

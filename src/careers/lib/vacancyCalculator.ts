@@ -6,6 +6,7 @@ import type {
   VacancyAllocationsConfig,
   VacancyLevel,
   RmsJobPosting,
+  CityLocationAllocation,
 } from './types';
 
 export interface CalculationResult {
@@ -217,8 +218,9 @@ export function generatePublicLocationString(params: {
   selectedDistricts?: string[];
   selectedRegions?: string[];
   currentLocation?: string | null;
+  cities?: CityLocationAllocation[] | null;
 }): string {
-  const { locationType, cityName, showCityPublicly = true, selectedDistricts = [], selectedRegions = [] } = params;
+  const { locationType, cityName, showCityPublicly = true, selectedDistricts = [], selectedRegions = [], cities } = params;
 
   switch (locationType) {
     case 'State-wide':
@@ -243,6 +245,18 @@ export function generatePublicLocationString(params: {
       return 'District-wise, Maharashtra';
 
     case 'City-specific': {
+      if (cities && Array.isArray(cities) && cities.length > 0) {
+        const publicCities = cities.filter(c => c.showCityPublicly !== false && c.cityName?.trim());
+        if (publicCities.length > 0) {
+          const names = publicCities.map(c => c.cityName.trim());
+          if (names.length <= 3) {
+            return `${names.join(', ')}, Maharashtra`;
+          }
+          return `${names.slice(0, 3).join(', ')} & ${names.length - 3} more cities, Maharashtra`;
+        }
+        return 'Maharashtra (Specific locations disclosed to shortlisted candidates)';
+      }
+
       const city = cityName?.trim();
       const firstDistrict = selectedDistricts[0];
       if (showCityPublicly && city) {

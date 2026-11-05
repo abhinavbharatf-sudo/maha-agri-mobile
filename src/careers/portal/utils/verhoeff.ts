@@ -172,49 +172,34 @@ export function calculateAge(dobStr: string): number | null {
 }
 
 /**
- * Computes a cryptographically secure HMAC-SHA-256 hash of an Aadhaar number with an internal pepper.
- * Ensures server-side uniqueness without storing or exposing plaintext Aadhaar numbers.
+ * Secure Server-Side Aadhaar HMAC Tokenization.
+ *
+ * All secret-based HMAC generation occurs EXCLUSIVELY on the PostgreSQL server
+ * inside SECURITY DEFINER functions. No secret pepper or encryption key exists
+ * in the client bundle.
  */
 export async function computeAadhaarHmac(
-  aadhaar: string,
-  pepper = 'MAHA_AGRI_RMS_PEPPER_2026'
+  aadhaar: string
 ): Promise<string> {
   const clean = (aadhaar || '').replace(/\D/g, '').trim();
   if (!clean || clean.length !== 12) return '';
 
-  const cryptoObj = typeof window !== 'undefined' ? window.crypto : (globalThis as any).crypto;
-  if (cryptoObj && cryptoObj.subtle) {
-    try {
-      const encoder = new TextEncoder();
-      const keyData = encoder.encode(pepper);
-      const key = await cryptoObj.subtle.importKey(
-        'raw',
-        keyData,
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign']
-      );
-      const signature = await cryptoObj.subtle.sign(
-        'HMAC',
-        key,
-        encoder.encode(`maha_aadhaar_${clean}`)
-      );
-      const hashArray = Array.from(new Uint8Array(signature));
-      return hashArray.map((b: number) => b.toString(16).padStart(2, '0')).join('');
-    } catch {}
-  }
+  try {
+    const { supabase, candidateSupabase } = await import('../../../lib/supabase/client');
+    const client = (await candidateSupabase.auth.getSession()).data.session ? candidateSupabase : supabase;
+    const { data, error } = await (client.rpc as any)('rms_secure_get_aadhaar_hmac', {
+      p_aadhaar: clean,
+    });
+    if (!error && data) {
+      return String(data);
+    }
+  } catch {}
 
-  // Pure fallback
-  let hash = 0;
-  for (let i = 0; i < clean.length; i++) {
-    hash = ((hash << 5) - hash) + clean.charCodeAt(i);
-    hash |= 0;
-  }
-  return `hmac_${Math.abs(hash)}`;
+  return '';
 }
 
 /**
- * Computes a SHA-256 hash of an Aadhaar number to ensure uniqueness
+ * Computes a server-derived tokenized hash of an Aadhaar number to ensure uniqueness
  * without storing or exposing plaintext Aadhaar numbers.
  */
 export async function hashAadhaarNumber(aadhaar: string): Promise<string> {
@@ -266,25 +251,36 @@ export function checkAadhaarDuplicate(
  */
 export async function checkAadhaarDuplicateServer({
   aadhaarHash,
+  aadhaarNumber,
   userId,
   mobile,
 }: {
-  aadhaarHash: string;
+  aadhaarHash?: string;
+  aadhaarNumber?: string;
   userId?: string;
   mobile?: string;
 }): Promise<{ isDuplicate: boolean; message?: string }> {
-  if (!aadhaarHash) return { isDuplicate: false };
+  const queryParam = (aadhaarNumber || '').replace(/\D/g, '').slice(0, 12) || aadhaarHash || '';
+  if (!queryParam) return { isDuplicate: false };
 
   const cleanMobile = (mobile || '').replace(/\D/g, '').slice(-10);
 
   // 1. Check via PostgreSQL RPC if available
   try {
-    const { supabase } = await import('../../../lib/supabase/client');
-    const { data, error } = await (supabase.rpc as any)('rms_check_aadhaar_duplicate', {
-      p_aadhaar_hash: aadhaarHash,
-      p_user_id: userId || null,
-      p_mobile: cleanMobile || null,
+    const { supabase, candidateSupabase } = await import('../../../lib/supabase/client');
+    const client = (await candidateSupabase.auth.getSession()).data.session ? candidateSupabase : supabase;
+    const { data, error } = await (client.rpc as any)('rms_check_aadhaar_duplicate', {
+      p_aadhaar_hash: queryParam,
     });
+
+    if (error) {
+      if (error.message?.includes('Too many') || error.message?.includes('wait')) {
+        return {
+          isDuplicate: true,
+          message: error.message,
+        };
+      }
+    }
 
     if (!error && data) {
       if (data.is_duplicate) {
@@ -299,11 +295,12 @@ export async function checkAadhaarDuplicateServer({
 
   // 2. Direct table lookup fallback (if client session has access)
   try {
-    const { supabase } = await import('../../../lib/supabase/client');
-    const { data: rows, error } = await supabase
+    const { supabase, candidateSupabase } = await import('../../../lib/supabase/client');
+    const client = (await candidateSupabase.auth.getSession()).data.session ? candidateSupabase : supabase;
+    const { data: rows, error } = await client
       .from('rms_candidate_profiles' as never)
       .select('id, user_id, mobile' as never)
-      .eq('aadhaar_hash' as never, aadhaarHash)
+      .eq('aadhaar_hash' as never, queryParam)
       .limit(5);
 
     if (!error && Array.isArray(rows) && rows.length > 0) {
@@ -321,7 +318,7 @@ export async function checkAadhaarDuplicateServer({
   } catch {}
 
   // 3. Client & Cross-Tab Registry fallback
-  const localCheck = checkAadhaarDuplicate(aadhaarHash, cleanMobile || userId || '');
+  const localCheck = checkAadhaarDuplicate(queryParam, cleanMobile || userId || '');
   if (localCheck.isDuplicate) {
     return {
       isDuplicate: true,

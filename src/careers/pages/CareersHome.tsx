@@ -10,6 +10,7 @@ import {
   AlertCircle, RefreshCw, User,
 } from 'lucide-react';
 import { listPublicCampaigns, listPublicDrives, listPublishedJobs } from '../lib/api';
+import { subscribeToJobUpdates } from '../lib/jobEvents';
 import type { RmsCampaign, RmsRecruitmentDrive, RmsJobPosting, JobStatus } from '../lib/types';
 import { DRIVE_TYPE_LABELS, MAHARASHTRA_DISTRICTS, formatSalaryDisplay, formatSalaryPackage, parseSalaryValue } from '../lib/constants';
 import { useCandidateAuth } from '../lib/CandidateAuthContext';
@@ -207,6 +208,28 @@ export default function CareersHome() {
 
   useEffect(() => {
     loadData();
+
+    // Invalidate & refresh immediately when any job is updated in Admin (same-tab or cross-tab)
+    const unsubscribe = subscribeToJobUpdates(() => {
+      loadData();
+    });
+
+    // Invalidate & refresh whenever user switches back to this tab
+    const handleFocus = () => loadData();
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        loadData();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [loadData]);
 
   // Group jobs by department

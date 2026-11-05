@@ -18,13 +18,13 @@ export const PORTAL_STEPS: PortalStepItem[] = [
   {
     id: 'create_profile',
     stepNumber: 1,
-    label: 'Create Candidate Profile',
+    label: 'Personal Details & Contact',
     shortDescription: 'Candidate Registration',
   },
   {
     id: 'master_profile',
     stepNumber: 2,
-    label: 'Basic Information',
+    label: 'Identity & Address Details',
     shortDescription: 'Demographics & Addresses',
   },
   {
@@ -272,6 +272,28 @@ export const COURSE_OPTIONS_BY_LEVEL: Record<string, string[]> = {
   ],
 };
 
+export type LocationVacancyStatus = 'AVAILABLE' | 'NO VACANCY' | 'NOT DETERMINED';
+
+export interface DistrictPreference {
+  id: string; // e.g. 'pref-1'
+  priority: number; // 1, 2, 3
+  district: string;
+  talukas?: string[]; // up to 2 talukas
+  vacancyStatus?: LocationVacancyStatus;
+  talukaVacancyStatuses?: Record<string, LocationVacancyStatus>;
+}
+
+export interface MobilityConsentRecord {
+  required?: boolean;
+  accepted?: boolean;
+  consented?: boolean;
+  consentedAt?: string | null;
+  acceptedAt?: string | null;
+  outsideDistricts: string[];
+  consentText: string;
+  consentVersion?: string;
+}
+
 export interface JobSpecificFormData {
   highestQualification: string;
   passingYear: string;
@@ -286,6 +308,8 @@ export interface JobSpecificFormData {
   jobResponsibilities?: string;
   preferredDistrict: string;
   preferredTaluka: string;
+  preferredDistricts?: DistrictPreference[];
+  mobilityConsent?: MobilityConsentRecord;
   locationConfirmed?: boolean;
   drivingLicence?: DrivingLicenceType;
   marathiFluent?: boolean;
@@ -380,6 +404,23 @@ export const INITIAL_JOB_SPECIFIC: JobSpecificFormData = {
   questionnaireVersion: '',
   locationAnswers: {},
 };
+
+export interface FinalDeclarationData {
+  statutory_declaration_accepted: boolean;
+  statutory_declaration_text: string;
+  statutory_declaration_accepted_at: string;
+  statutory_declaration_version: string;
+
+  final_acknowledgement_accepted: boolean;
+  final_acknowledgement_text: string;
+  final_acknowledgement_accepted_at: string;
+  final_acknowledgement_version: string;
+
+  // Backward compatibility fields
+  acknowledged: boolean;
+  declaration_text: string;
+  acknowledged_at: string;
+}
 
 export const INITIAL_WIZARD_STATE: PortalWizardState = {
   currentStep: 'create_profile',

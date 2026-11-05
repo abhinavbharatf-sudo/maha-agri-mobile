@@ -218,6 +218,13 @@ export default function HRCandidateProfile({ applicationId, onClose, onStatusCha
   const highestQualIndex = appQualifications.length > 0 ? determineHighestQualificationIndex(appQualifications) : -1;
   const candidateEducation = Array.isArray(candidate?.education) ? (candidate.education as Record<string, any>[]) : [];
 
+  const preferredDistrictsList: any[] = Array.isArray(jobSpecific?.preferredDistricts) && jobSpecific.preferredDistricts.length > 0
+    ? jobSpecific.preferredDistricts
+    : Array.isArray(appData?.preferred_locations)
+    ? appData.preferred_locations
+    : [];
+  const mobilityConsent = jobSpecific?.mobilityConsent || appData?.mobility_consent;
+
   // Determine timeline step
   const currentStepIndex = app
     ? TIMELINE_STEPS.findIndex(s => s.statuses.includes(app.status as ApplicationStatus))
@@ -477,6 +484,62 @@ export default function HRCandidateProfile({ applicationId, onClose, onStatusCha
                       <Field label="Current Status" value={APPLICATION_STATUS_CONFIG[app!.status]?.label ?? app!.status} />
                     </Grid2>
                   </Section>
+
+                  {/* Preferred Posting Locations & Mobility Consent Section */}
+                  {preferredDistrictsList.length > 0 && (
+                    <Section title={`Preferred Posting Locations (${preferredDistrictsList.length})`}>
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                          {preferredDistrictsList.map((p: any, idx: number) => {
+                            const isCandidateDist = candidate?.district && p.district &&
+                              String(candidate.district).trim().toLowerCase() === String(p.district).trim().toLowerCase();
+                            return (
+                              <div
+                                key={p.id || idx}
+                                className={`p-3 rounded-xl border text-xs space-y-1.5 ${
+                                  p.priority === 1
+                                    ? 'border-emerald-300 bg-emerald-50/30'
+                                    : 'border-primary-100 bg-primary-50/30'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="font-bold text-primary-900 text-xs">
+                                    Priority {p.priority || idx + 1}
+                                  </span>
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                    isCandidateDist
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : 'bg-blue-100 text-blue-800'
+                                  }`}>
+                                    {isCandidateDist ? 'Residential' : 'Outside'}
+                                  </span>
+                                </div>
+                                <p className="font-semibold text-primary-900">District: {p.district}</p>
+                                {Array.isArray(p.talukas) && p.talukas.length > 0 && p.talukas[0] && (
+                                  <p className="text-primary-700 text-[11px]">
+                                    Talukas: <span className="font-semibold">{p.talukas.filter(Boolean).join(', ')}</span>
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {mobilityConsent?.consented && (
+                          <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center justify-between flex-wrap gap-2">
+                            <span>
+                              <strong>Mobility Consent Verified:</strong> Candidate consented to work in outside districts ({mobilityConsent.outsideDistricts?.join(', ') || 'selected districts'}).
+                            </span>
+                            {mobilityConsent.consentedAt && (
+                              <span className="font-mono text-[11px] text-emerald-800">
+                                Consented: {new Date(mobilityConsent.consentedAt).toLocaleDateString('en-IN')}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </Section>
+                  )}
 
                   {/* Educational Qualifications Section — Displays ALL records with Highest Qualification highlighted */}
                   <Section title={`Educational Qualifications (${appQualifications.length > 0 ? appQualifications.length : (jobSpecific?.highestQualification ? 1 : candidateEducation.length)})`}>

@@ -282,3 +282,95 @@ export function checkResidentialVacancyEligibility(
     isReliable: false,
   };
 }
+
+/**
+ * Resolves the 3-state vacancy status ('AVAILABLE' | 'NO VACANCY' | 'NOT DETERMINED')
+ * for any selected preferred district or taluka.
+ */
+export function getLocationVacancyStatus(
+  district: string | undefined | null,
+  taluka: string | undefined | null,
+  job: RmsJobPosting | null | undefined
+): { status: 'AVAILABLE' | 'NO VACANCY' | 'NOT DETERMINED'; count: number | null; message: string } {
+  const cleanDistrict = (district || '').trim();
+  const cleanTaluka = (taluka || '').trim();
+
+  if (!cleanDistrict || !job || !Array.isArray(job.location_districts) || job.location_districts.length === 0) {
+    return { status: 'NOT DETERMINED', count: null, message: 'Vacancy quota information is not published' };
+  }
+
+  // 1. Is district in allowed job districts?
+  const isDistrictInJob = job.location_districts.some(
+    d => d.trim().toLowerCase() === cleanDistrict.toLowerCase()
+  );
+  if (!isDistrictInJob) {
+    return { status: 'NO VACANCY', count: 0, message: 'District is not included in this recruitment drive' };
+  }
+
+  const distAllocMap = job.vacancy_allocations?.district_allocations;
+  const matchedDistKey = distAllocMap
+    ? Object.keys(distAllocMap).find(k => k.trim().toLowerCase() === cleanDistrict.toLowerCase())
+    : undefined;
+  const distAlloc = matchedDistKey ? distAllocMap![matchedDistKey] : undefined;
+
+  if (distAlloc && distAlloc.included === false) {
+    return { status: 'NO VACANCY', count: 0, message: `${cleanDistrict} district is excluded from this drive` };
+  }
+
+  // 2. Taluka-level check if taluka specified
+  if (cleanTaluka) {
+    const talukaAllocMap = distAlloc?.taluka_allocations;
+    const matchedTalukaKey = talukaAllocMap
+      ? Object.keys(talukaAllocMap).find(k => k.trim().toLowerCase() === cleanTaluka.toLowerCase())
+      : undefined;
+    const talukaAlloc = matchedTalukaKey ? talukaAllocMap![matchedTalukaKey] : undefined;
+
+    if (talukaAlloc && talukaAlloc.included === false) {
+      return { status: 'NO VACANCY', count: 0, message: `${cleanTaluka} taluka is excluded` };
+    }
+
+    if (talukaAlloc && talukaAlloc.vacancies != null) {
+      const v = Number(talukaAlloc.vacancies);
+      if (v > 0) return { status: 'AVAILABLE', count: v, message: `${v} open post${v === 1 ? '' : 's'}` };
+      return { status: 'NO VACANCY', count: 0, message: '0 open posts' };
+    }
+
+    // Default rate per taluka
+    const defaultTaluka =
+      distAlloc?.per_taluka != null
+        ? Number(distAlloc.per_taluka)
+        : job.vacancy_allocations?.default_per_taluka != null
+        ? Number(job.vacancy_allocations.default_per_taluka)
+        : job.vacancies_per_taluka != null
+        ? Number(job.vacancies_per_taluka)
+        : null;
+
+    if (defaultTaluka != null) {
+      if (defaultTaluka > 0) return { status: 'AVAILABLE', count: defaultTaluka, message: `${defaultTaluka} open post${defaultTaluka === 1 ? '' : 's'}` };
+      return { status: 'NO VACANCY', count: 0, message: '0 open posts' };
+    }
+
+    return { status: 'NOT DETERMINED', count: null, message: 'Taluka quota not determined' };
+  }
+
+  // 3. District-level check (when taluka is not specified)
+  const explicitDistrictCount =
+    distAlloc?.calculated_district_total != null
+      ? Number(distAlloc.calculated_district_total)
+      : distAlloc?.override_total != null
+      ? Number(distAlloc.override_total)
+      : job.vacancy_allocations?.default_per_district != null
+      ? Number(job.vacancy_allocations.default_per_district)
+      : job.vacancies_per_district != null
+      ? Number(job.vacancies_per_district)
+      : null;
+
+  if (explicitDistrictCount != null) {
+    if (explicitDistrictCount > 0) {
+      return { status: 'AVAILABLE', count: explicitDistrictCount, message: `${explicitDistrictCount} open post${explicitDistrictCount === 1 ? '' : 's'}` };
+    }
+    return { status: 'NO VACANCY', count: 0, message: '0 open posts' };
+  }
+
+  return { status: 'NOT DETERMINED', count: null, message: 'District quota not determined' };
+}

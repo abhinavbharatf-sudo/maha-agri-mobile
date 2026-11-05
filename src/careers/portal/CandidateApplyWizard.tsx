@@ -3,7 +3,8 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   CheckCircle2, ArrowLeft, ArrowRight, AlertCircle,
   CheckCircle, Loader2, Lock,
-  Building2, ExternalLink, User, LogOut, ChevronDown, LayoutDashboard, FileText
+  Building2, ExternalLink, User, LogOut, ChevronDown, LayoutDashboard, FileText,
+  MapPin, X, UserCheck
 } from 'lucide-react';
 import { useCandidateAuth } from '../lib/CandidateAuthContext';
 import { getJob, getJobBySlug, getExistingApplication } from '../lib/api';
@@ -19,6 +20,7 @@ import {
   type JobSpecificFormData,
   type PortalWizardState,
   type JobQuestionnaire,
+  type FinalDeclarationData,
 } from './types';
 import Step1CreateProfile from './steps/Step1CreateProfile';
 import Step2MasterProfile from './steps/Step2MasterProfile';
@@ -26,6 +28,7 @@ import Step2JobSpecific from './steps/Step2JobSpecific';
 import Step4Questionnaire from './steps/Step4Questionnaire';
 import Step3ReviewSubmit from './steps/Step3ReviewSubmit';
 import Step4Confirmation from './steps/Step4Confirmation';
+import JobDetailsModal from './JobDetailsModal';
 import { submitCandidateApplication, saveCandidateDraft, loadCandidateDraft } from './api';
 
 interface CandidateApplyWizardProps {
@@ -37,7 +40,7 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
   const activeJobId = propJobId || routeJobId;
   const navigate = useNavigate();
 
-  const { user, profile, loading: authLoading, verifiedMobile, signOut, setVerifiedMobile, refreshProfile } = useCandidateAuth();
+  const { user, profile, loading: authLoading, profileLoading, verifiedMobile, signOut, setVerifiedMobile, refreshProfile } = useCandidateAuth();
 
   const [job, setJob] = useState<RmsJobPosting | null>(null);
   const [jobLoading, setJobLoading] = useState(true);
@@ -45,6 +48,11 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
   const [state, setState] = useState<PortalWizardState>(INITIAL_WIZARD_STATE);
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
+  const [showJobDetailsModal, setShowJobDetailsModal] = useState(false);
+
+  // Direct return to Review & Submit after editing from Step 4
+  const [returnToReview, setReturnToReview] = useState(false);
+  const [targetSection, setTargetSection] = useState<string | null>(null);
 
   // Draft persistence tracking states
   const [draftSaveStatus, setDraftSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -402,12 +410,21 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
         setDraftSaveStatus('saved');
         setDraftSavedAt(res.savedAt || new Date().toISOString());
         if (exitAfter) {
+          try {
+            await refreshProfile();
+          } catch {}
+          if (typeof window !== 'undefined') {
+            sessionStorage.setItem(
+              'maha_flash_message',
+              'Your application has been saved as a draft. You can continue anytime from My Applications.'
+            );
+          }
           navigate('/candidate/applications');
         }
         return true;
       } else {
         setDraftSaveStatus('error');
-        setDraftSaveError(res.error || 'Failed to save draft');
+        setDraftSaveError(res.error || 'Failed to save draft. Please check your connection and try again.');
         return false;
       }
     },
@@ -426,7 +443,7 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
   }, [state.jobSpecific, state.currentStep, effectiveUser, job, saveDraft]);
 
   // ── Final Transactional Submission Handler ─────────────────────────────────
-  const handleReviewSubmit = useCallback(async () => {
+  const handleReviewSubmit = useCallback(async (declarationData?: FinalDeclarationData) => {
     if (!effectiveUser || !job) return;
     if (state.submitting) return; // Prevent duplicate clicks
 
@@ -438,7 +455,9 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
         userId: effectiveUser.id,
         masterProfile: state.masterProfile,
         jobSpecific: state.jobSpecific,
+        declarationData,
         declarationText:
+          declarationData?.statutory_declaration_text ||
           job.acknowledgement_text?.trim() ||
           'I hereby declare that all the information provided in this application form is true, complete, and correct to the best of my knowledge and belief.',
       });
@@ -514,6 +533,18 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
       goToStep('review');
     }
   }, [state.currentStep, activeQuestionnaire, jobLoading, goToStep]);
+
+  // Dynamic Project Name resolution (aligned with Admin Department / Project field: job.department; declared before early returns)
+  const rawProjectName = job?.department || null;
+  const projectName = useMemo(() => {
+    if (!rawProjectName || typeof rawProjectName !== 'string') return null;
+    const trimmed = rawProjectName.trim();
+    const lower = trimmed.toLowerCase();
+    if (!trimmed || lower === 'n/a' || lower === 'no project' || lower === 'none' || lower === 'null') {
+      return null;
+    }
+    return trimmed;
+  }, [rawProjectName]);
 
   // ── Loading State ──────────────────────────────────────────────────────────
   if (authLoading || jobLoading) {
@@ -667,13 +698,19 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
             )}
             <button
               type="button"
-              onClick={() => navigate(job.slug ? `/careers/jobs/${job.slug}` : '/careers')}
-              className="px-4 py-2.5 border border-slate-300 text-slate-700 text-xs font-semibold rounded-xl hover:bg-slate-50 transition-colors"
+              onClick={() => setShowJobDetailsModal(true)}
+              className="px-4 py-2.5 border border-slate-300 text-slate-700 text-xs font-semibold rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
             >
               Job Details
             </button>
           </div>
         </div>
+
+        <JobDetailsModal
+          job={job}
+          isOpen={showJobDetailsModal}
+          onClose={() => setShowJobDetailsModal(false)}
+        />
       </div>
     );
   }
@@ -687,17 +724,21 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
 
         {/* ── Header Card ───────────────────────────────────────────────────── */}
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
-          <div className="flex items-center justify-between flex-wrap gap-3 pb-4 border-b border-slate-100">
-            <div>
-              <div className="flex items-center gap-2 text-[11px] text-[#627d98] font-bold uppercase tracking-wider mb-0.5">
-                <Building2 className="w-3.5 h-3.5" />
-                <span>{job.department || 'MAHA-AGRI Digital Operations'}</span>
-              </div>
-              <h1 className="text-lg sm:text-xl font-bold text-[#102a43]">{job.title}</h1>
+          <div className="flex items-center justify-between flex-wrap gap-4 pb-4 border-b border-slate-100">
+            {/* Left: Job Title & Conditional Project Name */}
+            <div className="space-y-0.5 min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold text-[#102a43] leading-tight tracking-tight">
+                {job.title}
+              </h1>
+              {projectName && (
+                <p className="text-xs sm:text-sm font-bold text-[#0b69a3] uppercase tracking-wider">
+                  {projectName}
+                </p>
+              )}
             </div>
 
-            {/* Save Status & Header Controls */}
-            <div className="flex items-center gap-2.5">
+            {/* Right: Actions */}
+            <div className="flex items-center gap-2.5 flex-wrap">
               {draftSaveStatus === 'saving' && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-[11px] font-semibold">
                   <Loader2 className="w-3 h-3 animate-spin text-slate-500" />
@@ -717,33 +758,55 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
                 </span>
               )}
 
+              {/* View Job Details Modal */}
+              <button
+                type="button"
+                onClick={() => setShowJobDetailsModal(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-[#102a43] rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                title="View position specifications and application summary"
+              >
+                <FileText className="w-3.5 h-3.5 text-[#0b69a3]" />
+                <span>Job Details</span>
+              </button>
+
+              {/* Save & Exit Button */}
               {state.currentStep !== 'confirmation' && (
                 <button
                   type="button"
                   onClick={() => saveDraft(state.currentStep, true)}
                   disabled={draftSaveStatus === 'saving'}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 cursor-pointer"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 cursor-pointer shadow-2xs"
                   title="Save current progress and return to candidate applications"
                 >
                   Save &amp; Exit
                 </button>
               )}
 
+              {/* Candidate Account Dropdown Menu */}
               {effectiveUser && (
                 <div className="relative">
                   <button
                     type="button"
                     onClick={() => setShowAccountDropdown(prev => !prev)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-[#102a43] rounded-lg text-xs font-semibold transition-colors cursor-pointer border border-slate-200"
+                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-[#102a43] rounded-lg text-xs font-semibold transition-colors cursor-pointer border border-slate-200"
                     title="Candidate account menu"
                   >
-                    <User className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                    <span className="max-w-[120px] truncate hidden sm:inline">
-                      {isCandidateProfileMatching && profile?.full_name
-                        ? profile.full_name
-                        : (verifiedMobile ? `+91 ${verifiedMobile.slice(-10)}` : 'Account')}
-                    </span>
-                    <ChevronDown className="w-3 h-3 text-slate-500 shrink-0" />
+                    <div className="w-6 h-6 rounded-full bg-[#102a43] text-white flex items-center justify-center font-bold text-[11px] shrink-0">
+                      {profile?.full_name ? profile.full_name.trim().charAt(0).toUpperCase() : 'C'}
+                    </div>
+                    {profileLoading ? (
+                      <span className="inline-flex items-center gap-1 text-slate-500 text-xs">
+                        <Loader2 className="w-3 h-3 animate-spin text-blue-600" />
+                        <span className="hidden sm:inline">Loading...</span>
+                      </span>
+                    ) : (
+                      <span className="max-w-[150px] truncate font-bold text-[#102a43]">
+                        {profile?.full_name
+                          ? profile.full_name
+                          : (verifiedMobile ? `+91 ${verifiedMobile.slice(-10)}` : 'Account')}
+                      </span>
+                    )}
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                   </button>
 
                   {showAccountDropdown && (
@@ -752,52 +815,103 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
                         className="fixed inset-0 z-40"
                         onClick={() => setShowAccountDropdown(false)}
                       />
-                      <div className="absolute right-0 mt-1 w-52 bg-white rounded-xl shadow-lg border border-slate-200 py-1.5 z-50 text-xs">
-                        <div className="px-3.5 py-2 border-b border-slate-100">
-                          <p className="font-bold text-[#102a43] truncate">
-                            {isCandidateProfileMatching && profile?.full_name ? profile.full_name : 'Candidate'}
-                          </p>
-                          <p className="text-[11px] text-slate-500 font-mono">
-                            +91 {verifiedMobile ? verifiedMobile.slice(-10) : ''}
-                          </p>
+                      <div className="absolute right-0 mt-1 w-60 bg-white rounded-xl shadow-lg border border-slate-200 py-1.5 z-50 text-xs animate-in fade-in zoom-in-95">
+                        {/* 1. Candidate Identity Section */}
+                        <div className="px-3.5 py-2.5 border-b border-slate-100 bg-slate-50/70">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-[#102a43] text-white flex items-center justify-center font-bold text-xs shrink-0">
+                              {profile?.full_name ? profile.full_name.charAt(0).toUpperCase() : 'C'}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-bold text-[#102a43] truncate text-xs">
+                                {profile?.full_name || 'Candidate'}
+                              </p>
+                              {profile?.candidate_id && (
+                                <p
+                                  className="text-[11px] font-mono text-slate-700 font-bold mt-0.5"
+                                  title="Authoritative Candidate ID"
+                                >
+                                  ID: {profile.candidate_id}
+                                </p>
+                              )}
+                              <p className="text-[11px] text-slate-500 font-mono">
+                                +91 {verifiedMobile ? verifiedMobile.slice(-10) : ''}
+                              </p>
+                            </div>
+                          </div>
                         </div>
-                        <Link
-                          to="/candidate/applications"
-                          onClick={() => setShowAccountDropdown(false)}
-                          className="flex items-center gap-2 px-3.5 py-2 text-slate-700 hover:bg-slate-50 font-medium"
-                        >
-                          <FileText className="w-3.5 h-3.5 text-slate-500" />
-                          My Applications
-                        </Link>
-                        <Link
-                          to="/candidate/dashboard"
-                          onClick={() => setShowAccountDropdown(false)}
-                          className="flex items-center gap-2 px-3.5 py-2 text-slate-700 hover:bg-slate-50 font-medium"
-                        >
-                          <LayoutDashboard className="w-3.5 h-3.5 text-slate-500" />
-                          Candidate Dashboard
-                        </Link>
+
+                        {/* 2. Navigation Menu */}
+                        <div className="py-1">
+                          <Link
+                            to="/candidate/dashboard"
+                            onClick={() => setShowAccountDropdown(false)}
+                            className="flex items-center gap-2.5 px-3.5 py-2 text-slate-700 hover:bg-slate-50 font-medium transition-colors"
+                          >
+                            <LayoutDashboard className="w-4 h-4 text-slate-500 shrink-0" />
+                            <span>Dashboard</span>
+                          </Link>
+
+                          <Link
+                            to="/candidate/profile"
+                            onClick={() => setShowAccountDropdown(false)}
+                            className="flex items-center gap-2.5 px-3.5 py-2 text-slate-700 hover:bg-slate-50 font-medium transition-colors"
+                          >
+                            <UserCheck className="w-4 h-4 text-slate-500 shrink-0" />
+                            <span>My Profile</span>
+                          </Link>
+
+                          <Link
+                            to="/candidate/applications"
+                            onClick={() => setShowAccountDropdown(false)}
+                            className="flex items-center gap-2.5 px-3.5 py-2 text-slate-700 hover:bg-slate-50 font-medium transition-colors"
+                          >
+                            <FileText className="w-4 h-4 text-slate-500 shrink-0" />
+                            <span>My Applications</span>
+                          </Link>
+                        </div>
+
+                        {/* Divider */}
                         <div className="my-1 border-t border-slate-100" />
+
+                        {/* 3. Sign Out */}
                         <button
                           type="button"
-                          onClick={handleSignOut}
-                          className="w-full flex items-center gap-2 px-3.5 py-2 text-red-600 hover:bg-red-50 font-medium cursor-pointer text-left"
+                          onClick={() => {
+                            setShowAccountDropdown(false);
+                            handleSignOut();
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 text-red-600 hover:bg-red-50 font-semibold cursor-pointer text-left transition-colors"
                         >
-                          <LogOut className="w-3.5 h-3.5 text-red-500" />
-                          Sign Out
+                          <LogOut className="w-4 h-4 text-red-500 shrink-0" />
+                          <span>Sign Out</span>
                         </button>
                       </div>
                     </>
                   )}
                 </div>
               )}
+            </div>
+          </div>
 
-              <Link
-                to={job.slug ? `/careers/jobs/${job.slug}` : '/careers'}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#102a43] hover:underline"
-              >
-                <ExternalLink className="w-3.5 h-3.5" /> Details
-              </Link>
+          {/* Progress Indicator Counter */}
+          <div className="pt-4 pb-1">
+            <div className="flex items-center justify-between text-xs font-semibold text-[#102a43] mb-1.5">
+              <span>
+                Step {currentStepIndex + 1} of {visibleSteps.length}:{' '}
+                <span className="font-bold text-[#0b69a3]">{visibleSteps[currentStepIndex]?.label}</span>
+              </span>
+              <span className="text-slate-500 font-mono font-bold">
+                {Math.round(((currentStepIndex + 1) / visibleSteps.length) * 100)}% Completed
+              </span>
+            </div>
+
+            {/* Continuous Visual Progress Bar */}
+            <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-[#0b69a3] transition-all duration-300 rounded-full"
+                style={{ width: `${Math.round(((currentStepIndex + 1) / visibleSteps.length) * 100)}%` }}
+              />
             </div>
           </div>
 
@@ -889,12 +1003,30 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
               verifiedMobile={verifiedMobile || effectiveUser?.phone?.replace('+91', '').trim() || state.masterProfile.mobile}
               candidateId={isCandidateProfileMatching ? (profile?.candidate_id || state.masterProfile.candidateId) : state.masterProfile.candidateId}
               profileCreatedDate={isCandidateProfileMatching ? (state.masterProfile.profileCreatedDate || (profile?.created_at ? new Date(profile.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : undefined)) : state.masterProfile.profileCreatedDate}
+              cancelButtonLabel="Cancel Application"
+              returnToReview={returnToReview}
               onChange={updateMasterProfile}
               onNext={() => {
-                goToStep('master_profile');
-                saveDraft('master_profile', false);
+                refreshProfile?.();
+                if (returnToReview) {
+                  setReturnToReview(false);
+                  setTargetSection(null);
+                  goToStep('review');
+                  saveDraft('review', false);
+                } else {
+                  goToStep('master_profile');
+                  saveDraft('master_profile', false);
+                }
               }}
-              onCancel={() => navigate(job.slug ? `/careers/jobs/${job.slug}` : '/careers')}
+              onCancel={() => {
+                if (returnToReview) {
+                  setReturnToReview(false);
+                  setTargetSection(null);
+                  goToStep('review');
+                } else {
+                  navigate(job.slug ? `/careers/jobs/${job.slug}` : '/careers');
+                }
+              }}
             />
           )}
 
@@ -905,16 +1037,40 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
               userId={effectiveUser.id}
               verifiedMobile={verifiedMobile || effectiveUser?.phone?.replace('+91', '').trim() || state.masterProfile.mobile}
               isCasteRequired={Boolean(job?.vacancy_allocations?.category_allocations && Object.keys(job.vacancy_allocations.category_allocations).length > 0)}
+              cancelButtonLabel="Cancel Application"
+              returnToReview={returnToReview}
               onChange={updateMasterProfile}
               onNext={() => {
-                goToStep('job_specific');
-                saveDraft('job_specific', false);
+                refreshProfile?.();
+                if (returnToReview) {
+                  setReturnToReview(false);
+                  setTargetSection(null);
+                  goToStep('review');
+                  saveDraft('review', false);
+                } else {
+                  goToStep('job_specific');
+                  saveDraft('job_specific', false);
+                }
               }}
               onBack={() => {
-                goToStep('create_profile');
-                saveDraft('create_profile', false);
+                if (returnToReview) {
+                  setReturnToReview(false);
+                  setTargetSection(null);
+                  goToStep('review');
+                } else {
+                  goToStep('create_profile');
+                  saveDraft('create_profile', false);
+                }
               }}
-              onCancel={() => navigate(job.slug ? `/careers/jobs/${job.slug}` : '/careers')}
+              onCancel={() => {
+                if (returnToReview) {
+                  setReturnToReview(false);
+                  setTargetSection(null);
+                  goToStep('review');
+                } else {
+                  navigate(job.slug ? `/careers/jobs/${job.slug}` : '/careers');
+                }
+              }}
             />
           )}
 
@@ -925,9 +1081,16 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
               masterProfile={state.masterProfile}
               onMasterProfileChange={updateMasterProfile}
               job={job}
+              returnToReview={returnToReview}
+              targetSection={targetSection}
               onChange={updateJobSpecific}
               onNext={() => {
-                if (activeQuestionnaire) {
+                if (returnToReview) {
+                  setReturnToReview(false);
+                  setTargetSection(null);
+                  goToStep('review');
+                  saveDraft('review', false);
+                } else if (activeQuestionnaire) {
                   goToStep('questionnaire');
                   saveDraft('questionnaire', false);
                 } else {
@@ -936,8 +1099,14 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
                 }
               }}
               onBack={() => {
-                goToStep('master_profile');
-                saveDraft('master_profile', false);
+                if (returnToReview) {
+                  setReturnToReview(false);
+                  setTargetSection(null);
+                  goToStep('review');
+                } else {
+                  goToStep('master_profile');
+                  saveDraft('master_profile', false);
+                }
               }}
             />
           )}
@@ -956,12 +1125,20 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
                   }
                 }}
                 onNext={() => {
+                  setReturnToReview(false);
+                  setTargetSection(null);
                   goToStep('review');
                   saveDraft('review', false);
                 }}
                 onBack={() => {
-                  goToStep('job_specific');
-                  saveDraft('job_specific', false);
+                  if (returnToReview) {
+                    setReturnToReview(false);
+                    setTargetSection(null);
+                    goToStep('review');
+                  } else {
+                    goToStep('job_specific');
+                    saveDraft('job_specific', false);
+                  }
                 }}
               />
             ) : null
@@ -983,8 +1160,41 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
                   saveDraft('job_specific', false);
                 }
               }}
+              onEditBasicInfo={() => {
+                setReturnToReview(true);
+                setTargetSection('basic_info');
+                goToStep('create_profile');
+                saveDraft('create_profile', false);
+              }}
+              onEditAddresses={() => {
+                setReturnToReview(true);
+                setTargetSection('addresses');
+                goToStep('master_profile');
+                saveDraft('master_profile', false);
+              }}
+              onEditPosition={() => {
+                setReturnToReview(true);
+                setTargetSection('posting_location');
+                goToStep('job_specific');
+                saveDraft('job_specific', false);
+              }}
+              onEditQualifications={() => {
+                setReturnToReview(true);
+                setTargetSection('qualifications');
+                goToStep('job_specific');
+                saveDraft('job_specific', false);
+              }}
+              onEditExperience={() => {
+                setReturnToReview(true);
+                setTargetSection('experience');
+                goToStep('job_specific');
+                saveDraft('job_specific', false);
+              }}
               onEditQuestionnaire={activeQuestionnaire ? () => {
+                setReturnToReview(true);
+                setTargetSection('questionnaire');
                 goToStep('questionnaire');
+                saveDraft('questionnaire', false);
               } : undefined}
               onSubmit={handleReviewSubmit}
             />
@@ -1007,6 +1217,13 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
         </div>
 
       </div>
+
+      {/* ── JOB DETAILS MODAL ──────────────────────────────────────────────── */}
+      <JobDetailsModal
+        job={job}
+        isOpen={showJobDetailsModal}
+        onClose={() => setShowJobDetailsModal(false)}
+      />
     </div>
   );
 }

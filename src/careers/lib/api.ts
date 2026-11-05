@@ -2,10 +2,11 @@
 // RMS API — typed wrappers for all Supabase calls
 // ============================================================
 
-import { supabase } from '../../lib/supabase/client';
+import { supabase, candidateSupabase } from '../../lib/supabase/client';
 import { sendInterviewConfirmedTemplate } from '../../services/whatsappService';
 import { syncProfileToLead } from '../../crm/lib/api';
 import { isDummyOtpMode } from './dummyOtp';
+import { broadcastJobUpdate } from './jobEvents';
 import type {
   RmsCandidateProfile,
   RmsCampaign,
@@ -52,7 +53,9 @@ export async function getCandidateProfile(userId: string) {
     return { data: null, error: null };
   }
 
-  const { data, error } = await supabase
+  const candidateSession = (await candidateSupabase.auth.getSession()).data.session;
+  const client = candidateSession ? candidateSupabase : supabase;
+  const { data, error } = await client
     .from('rms_candidate_profiles' as never)
     .select('*')
     .eq('user_id', userId)
@@ -66,31 +69,50 @@ export async function upsertCandidateProfile(profile: Partial<RmsCandidateProfil
 
   // Local Dummy Mode: Safe simulation in developer session without PostgreSQL 22P02 UUID syntax crash
   if (profile.user_id.startsWith('dummy-')) {
+    // Strictly disallow dummy candidate writes in production builds
+    if (!isDummyOtpMode()) {
+      return {
+        data: null,
+        error: {
+          code: 'AUTH_REQUIRED',
+          message: 'Authentication required. A verified candidate session is required to save your profile in production.',
+        } as any,
+      };
+    }
+
+    let existingDummy: Partial<RmsCandidateProfile> = {};
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = sessionStorage.getItem(`maha_dummy_profile_${cleanMobile}`) || localStorage.getItem(`maha_dummy_profile_${cleanMobile}`);
+        if (raw) existingDummy = JSON.parse(raw);
+      } catch {}
+    }
+
     const dummyProfile: RmsCandidateProfile = {
       id: profile.user_id,
       user_id: profile.user_id,
-      candidate_id: profile.candidate_id || `ABF-CAND-${cleanMobile.slice(-6)}`,
+      candidate_id: profile.candidate_id || existingDummy.candidate_id || `ABF-CAND-${cleanMobile.slice(-6)}`,
       mobile: cleanMobile,
       full_name: profile.full_name,
-      date_of_birth: profile.date_of_birth || null,
-      gender: profile.gender || null,
-      caste_category: profile.caste_category || null,
-      alternate_mobile: altMobile,
-      emergency_mobile: altMobile,
-      district: profile.district || null,
-      taluka: profile.taluka || null,
-      address_line1: (profile as any).address_line1 || null,
-      pincode: (profile as any).pincode || null,
-      permanent_same_as_current: (profile as any).permanent_same_as_current ?? false,
-      permanent_address_line1: (profile as any).permanent_address_line1 || null,
-      permanent_district: (profile as any).permanent_district || null,
-      permanent_taluka: (profile as any).permanent_taluka || null,
-      permanent_pincode: (profile as any).permanent_pincode || null,
-      state: profile.state || 'Maharashtra',
-      email: profile.email || null,
-      aadhaar_hash: (profile as any).aadhaar_hash || null,
-      profile_complete: true,
-      created_at: profile.created_at || new Date().toISOString(),
+      date_of_birth: profile.date_of_birth !== undefined ? profile.date_of_birth : (existingDummy.date_of_birth || null),
+      gender: profile.gender !== undefined ? profile.gender : (existingDummy.gender || null),
+      caste_category: profile.caste_category !== undefined ? profile.caste_category : (existingDummy.caste_category || null),
+      alternate_mobile: altMobile !== null ? altMobile : (existingDummy.alternate_mobile || null),
+      emergency_mobile: altMobile !== null ? altMobile : (existingDummy.emergency_mobile || null),
+      district: profile.district !== undefined ? profile.district : (existingDummy.district || null),
+      taluka: profile.taluka !== undefined ? profile.taluka : (existingDummy.taluka || null),
+      address_line1: (profile as any).address_line1 !== undefined ? (profile as any).address_line1 : ((existingDummy as any).address_line1 || null),
+      pincode: (profile as any).pincode !== undefined ? (profile as any).pincode : ((existingDummy as any).pincode || null),
+      permanent_same_as_current: (profile as any).permanent_same_as_current !== undefined ? (profile as any).permanent_same_as_current : ((existingDummy as any).permanent_same_as_current ?? false),
+      permanent_address_line1: (profile as any).permanent_address_line1 !== undefined ? (profile as any).permanent_address_line1 : ((existingDummy as any).permanent_address_line1 || null),
+      permanent_district: (profile as any).permanent_district !== undefined ? (profile as any).permanent_district : ((existingDummy as any).permanent_district || null),
+      permanent_taluka: (profile as any).permanent_taluka !== undefined ? (profile as any).permanent_taluka : ((existingDummy as any).permanent_taluka || null),
+      permanent_pincode: (profile as any).permanent_pincode !== undefined ? (profile as any).permanent_pincode : ((existingDummy as any).permanent_pincode || null),
+      state: profile.state || existingDummy.state || 'Maharashtra',
+      email: profile.email !== undefined ? profile.email : (existingDummy.email || null),
+      aadhaar_hash: (profile as any).aadhaar_hash !== undefined ? (profile as any).aadhaar_hash : ((existingDummy as any).aadhaar_hash || null),
+      profile_complete: (profile as any).profile_complete !== undefined ? Boolean((profile as any).profile_complete) : Boolean((existingDummy as any).profile_complete ?? false),
+      created_at: profile.created_at || existingDummy.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString(),
     } as any;
 
@@ -119,82 +141,80 @@ export async function upsertCandidateProfile(profile: Partial<RmsCandidateProfil
     delete payload.candidate_id;
   }
 
-  let { data, error } = await supabase
+  const candidateSession = (await candidateSupabase.auth.getSession()).data.session;
+  const client = candidateSession ? candidateSupabase : supabase;
+
+  let { data, error } = await client
     .from('rms_candidate_profiles' as never)
     .upsert(payload as never, { onConflict: 'user_id' })
     .select()
     .single();
 
-  // Graceful schema resilience: if remote Postgres table doesn't have permanent_* columns yet, retry without them
-  if (error && (error.message?.includes('permanent_') || (error as any).code === '42703')) {
-    console.warn('[upsertCandidateProfile] PostgREST indicated permanent address column missing; retrying with core columns:', error.message);
-    const safePayload = { ...payload };
-    delete safePayload.permanent_same_as_current;
-    delete safePayload.permanent_address_line1;
-    delete safePayload.permanent_district;
-    delete safePayload.permanent_taluka;
-    delete safePayload.permanent_pincode;
+  // Identify database schema mismatch errors (e.g. unmigrated columns: aadhaar_hash, permanent_*)
+  const isSchemaMismatch = Boolean(
+    error && (
+      error.code === 'PGRST204' ||
+      (error as any).code === '42703' ||
+      error.message?.includes('schema cache') ||
+      error.message?.includes('does not exist') ||
+      error.message?.includes('permanent_') ||
+      error.message?.includes('aadhaar_hash')
+    )
+  );
 
-    const retryRes = await supabase
-      .from('rms_candidate_profiles' as never)
-      .upsert(safePayload as never, { onConflict: 'user_id' })
-      .select()
-      .single();
+  // If Supabase returned an error for a real authenticated user, NEVER swallow it or fake success with localStorage.
+  // Return a clear, actionable error indicating whether a migration is pending or RLS rejected the write.
+  if (error) {
+    console.error('[upsertCandidateProfile] Supabase write failed:', error);
+    let userFriendlyMessage = error.message;
 
-    if (!retryRes.error && retryRes.data) {
-      data = {
-        ...(retryRes.data as any),
-        permanent_same_as_current: (payload as any).permanent_same_as_current,
-        permanent_address_line1: (payload as any).permanent_address_line1,
-        permanent_district: (payload as any).permanent_district,
-        permanent_taluka: (payload as any).permanent_taluka,
-        permanent_pincode: (payload as any).permanent_pincode,
-      };
-      error = null;
-    }
-  }
-
-  if (error && isDummyOtpMode()) {
-    console.warn('[upsertCandidateProfile] Supabase upsert returned error in local test mode. Gracefully persisting to local storage:', error);
-    const fallbackProfile: RmsCandidateProfile = {
-      id: profile.user_id,
-      user_id: profile.user_id,
-      candidate_id: profile.candidate_id || `ABF-CAND-${cleanMobile.slice(-6)}`,
-      mobile: cleanMobile,
-      full_name: profile.full_name,
-      date_of_birth: profile.date_of_birth || null,
-      gender: profile.gender || null,
-      caste_category: profile.caste_category || null,
-      alternate_mobile: altMobile,
-      emergency_mobile: altMobile,
-      district: profile.district || null,
-      taluka: profile.taluka || null,
-      address_line1: (profile as any).address_line1 || null,
-      pincode: (profile as any).pincode || null,
-      permanent_same_as_current: (profile as any).permanent_same_as_current ?? false,
-      permanent_address_line1: (profile as any).permanent_address_line1 || null,
-      permanent_district: (profile as any).permanent_district || null,
-      permanent_taluka: (profile as any).permanent_taluka || null,
-      permanent_pincode: (profile as any).permanent_pincode || null,
-      state: profile.state || 'Maharashtra',
-      email: profile.email || null,
-      aadhaar_hash: (profile as any).aadhaar_hash || null,
-      profile_complete: true,
-      created_at: profile.created_at || new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    } as any;
-
-    if (typeof window !== 'undefined') {
-      try {
-        sessionStorage.setItem(`maha_dummy_profile_${cleanMobile}`, JSON.stringify(fallbackProfile));
-        localStorage.setItem(`maha_dummy_profile_${cleanMobile}`, JSON.stringify(fallbackProfile));
-      } catch {}
+    if (isSchemaMismatch) {
+      userFriendlyMessage = 'Database schema update pending: one or more required profile columns (e.g. Aadhaar hash or permanent address) have not been applied to PostgreSQL. Please apply the pending database migration.';
+    } else if (error.code === '42501') {
+      userFriendlyMessage = 'Permission denied: Your authenticated session is not authorized to update this profile record (RLS check failed).';
+    } else if (error.code === '23505') {
+      userFriendlyMessage = error.message.includes('mobile')
+        ? 'This mobile number is already associated with another profile.'
+        : 'This profile contains duplicate values that conflict with an existing record.';
     }
 
-    return { data: fallbackProfile, error: null };
+    return {
+      data: null,
+      error: {
+        code: error.code || 'UPSERT_FAILED',
+        message: userFriendlyMessage,
+        details: error.details,
+        hint: error.hint,
+      } as any,
+    };
   }
 
-  if (!error && data) {
+  // Read-after-write verification for authenticated candidate:
+  // Ensure the row was confirmed written to PostgreSQL and matches the caller's user_id.
+  if (data) {
+    const writtenUserId = (data as any).user_id;
+    if (!writtenUserId || writtenUserId !== profile.user_id) {
+      // Re-verify directly from PostgreSQL
+      const { data: verifiedRow, error: verifyErr } = await client
+        .from('rms_candidate_profiles' as never)
+        .select('*')
+        .eq('user_id', profile.user_id)
+        .maybeSingle();
+
+      if (verifyErr || !verifiedRow) {
+        console.error('[upsertCandidateProfile] Read-after-write verification failed:', verifyErr);
+        return {
+          data: null,
+          error: {
+            code: 'VERIFY_FAILED',
+            message: 'Profile update could not be verified in the database. Please try again.',
+            details: verifyErr,
+          } as any,
+        };
+      }
+      data = verifiedRow as any;
+    }
+
     // Non-blocking sync to linked CRM lead record with explicit reporting
     syncProfileToLead(data as RmsCandidateProfile)
       .then(syncRes => {
@@ -209,7 +229,7 @@ export async function upsertCandidateProfile(profile: Partial<RmsCandidateProfil
       });
   }
 
-  return { data: data as RmsCandidateProfile | null, error };
+  return { data: data as RmsCandidateProfile | null, error: null };
 }
 
 // ===== Campaigns =====
@@ -268,7 +288,25 @@ function hydrateJob(job: any): RmsJobPosting {
         : 'Taluka-wise'
     ),
     location_questions: job.location_questions || job.vacancy_allocations?.location_questions || null,
+    multiple_locations_config: job.multiple_locations_config || job.vacancy_allocations?.multiple_locations_config || null,
   };
+}
+
+export function sanitizePublicJob(job: RmsJobPosting | null): RmsJobPosting | null {
+  if (!job) return null;
+  const sanitized = { ...job };
+  // Confidential admin-only notes are strictly omitted from public views
+  sanitized.internal_location = null;
+  if (sanitized.vacancy_allocations?.cities) {
+    sanitized.vacancy_allocations = {
+      ...sanitized.vacancy_allocations,
+      cities: sanitized.vacancy_allocations.cities.map(c => {
+        const { internalNotes, ...safeCity } = c;
+        return safeCity as any;
+      }),
+    };
+  }
+  return sanitized;
 }
 
 export async function listPublishedJobs() {
@@ -277,13 +315,15 @@ export async function listPublishedJobs() {
   const { data, error } = await supabase
     .from('rms_job_postings' as never)
     .select('*')
+    .setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+    .setHeader('Pragma', 'no-cache')
     .in('status', ['published', 'coming_soon', 'applications_closed', 'filled'])
     .or('is_trashed.is.null,is_trashed.eq.false')
     .order('is_featured', { ascending: false })
     .order('is_urgent',   { ascending: false })
     .order('sort_order', { ascending: false })
     .order('created_at',  { ascending: false });
-  return { data: ((data ?? []) as any[]).map(hydrateJob), error };
+  return { data: ((data ?? []) as any[]).map(hydrateJob).map(sanitizePublicJob) as RmsJobPosting[], error };
 }
 
 export async function listAllJobs() {
@@ -320,6 +360,7 @@ export async function archiveJob(id: string): Promise<{ error: string | null }> 
   if (!data || (data as unknown[]).length === 0) {
     return { error: 'Action failed: Could not move job to trash. Please verify administrative write permissions.' };
   }
+  broadcastJobUpdate({ id, is_trashed: true });
   return { error: null };
 }
 
@@ -339,6 +380,7 @@ export async function restoreJob(id: string): Promise<{ error: string | null }> 
   if (!data || (data as unknown[]).length === 0) {
     return { error: 'Action failed: Could not restore job. Please verify administrative write permissions.' };
   }
+  broadcastJobUpdate({ id, is_trashed: false });
   return { error: null };
 }
 
@@ -351,7 +393,19 @@ export async function duplicateJob(id: string): Promise<{ data: RmsJobPosting | 
   if (error) return { data: null, error: error.message };
   const src = data as RmsJobPosting;
   // Copy every field except id, applications, status, created_at
-  const { id: _id, created_at: _ca, updated_at: _ua, vacancy_level, experience_details, jd_pdf_enabled, ...rest } = src;
+  const {
+    id: _id,
+    created_at: _ca,
+    updated_at: _ua,
+    vacancy_level,
+    experience_details,
+    jd_pdf_enabled,
+    questionnaire,
+    posting_level,
+    location_questions,
+    multiple_locations_config,
+    ...rest
+  } = src;
   const payload: any = {
     ...rest,
     title: `${src.title} (Copy)`,
@@ -366,14 +420,22 @@ export async function duplicateJob(id: string): Promise<{ data: RmsJobPosting | 
     closing_date: null,
     application_close_date: null,
   };
-  if (vacancy_level || experience_details || jd_pdf_enabled !== undefined) {
-    payload.vacancy_allocations = {
-      ...(payload.vacancy_allocations ?? {}),
-      ...(vacancy_level ? { vacancy_level } : {}),
-      ...(experience_details ? { experience_details } : {}),
-      ...(jd_pdf_enabled !== undefined ? { jd_pdf_enabled } : {}),
-    };
-  }
+  delete payload.multiple_locations_config;
+  delete payload.questionnaire;
+  delete payload.posting_level;
+  delete payload.location_questions;
+  delete payload.vacancy_level;
+
+  payload.vacancy_allocations = {
+    ...(payload.vacancy_allocations ?? {}),
+    ...(vacancy_level ? { vacancy_level } : {}),
+    ...(experience_details ? { experience_details } : {}),
+    ...(jd_pdf_enabled !== undefined ? { jd_pdf_enabled } : {}),
+    ...(questionnaire !== undefined ? { questionnaire } : {}),
+    ...(posting_level !== undefined ? { posting_level } : {}),
+    ...(location_questions !== undefined ? { location_questions } : {}),
+    ...(multiple_locations_config !== undefined ? { multiple_locations_config } : {}),
+  };
   const { data: inserted, error: insErr } = await supabase
     .from('rms_job_postings' as never)
     .insert(payload as never)
@@ -399,7 +461,9 @@ export async function setJobStatus(id: string, status: string): Promise<{ data: 
   if (!data || (data as unknown[]).length === 0) {
     return { data: null, error: 'Action failed: No job record was updated. You may not have administrative write permissions or your session has expired.' };
   }
-  return { data: (data as RmsJobPosting[])[0], error: null };
+  const updated = (data as RmsJobPosting[])[0];
+  broadcastJobUpdate(updated);
+  return { data: updated, error: null };
 }
 
 export async function toggleJobFeatured(id: string, featured: boolean): Promise<{ error: string | null }> {
@@ -418,6 +482,7 @@ export async function toggleJobFeatured(id: string, featured: boolean): Promise<
   if (!data || (data as unknown[]).length === 0) {
     return { error: 'Action failed: No job record was updated. You may not have administrative write permissions.' };
   }
+  broadcastJobUpdate({ id, is_featured: featured });
   return { error: null };
 }
 
@@ -437,6 +502,7 @@ export async function toggleJobUrgent(id: string, urgent: boolean): Promise<{ er
   if (!data || (data as unknown[]).length === 0) {
     return { error: 'Action failed: No job record was updated. You may not have administrative write permissions.' };
   }
+  broadcastJobUpdate({ id, is_urgent: urgent });
   return { error: null };
 }
 
@@ -456,6 +522,7 @@ export async function updateJobOrder(id: string, sortOrder: number): Promise<{ e
   if (!data || (data as unknown[]).length === 0) {
     return { error: 'Action failed: Could not update job sort order. Please verify administrative write permissions.' };
   }
+  broadcastJobUpdate({ id, sort_order: sortOrder });
   return { error: null };
 }
 
@@ -656,16 +723,20 @@ export async function getJobBySlug(slug: string) {
   const { data, error } = await supabase
     .from('rms_job_postings' as never)
     .select('*')
+    .setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+    .setHeader('Pragma', 'no-cache')
     .eq('slug', slug)
     .or('is_trashed.is.null,is_trashed.eq.false')
     .maybeSingle();
-  return { data: hydrateJob(data), error };
+  return { data: sanitizePublicJob(hydrateJob(data)), error };
 }
 
 export async function getJob(id: string) {
   const { data, error } = await supabase
     .from('rms_job_postings' as never)
     .select('*')
+    .setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+    .setHeader('Pragma', 'no-cache')
     .eq('id', id)
     .single();
   return { data: hydrateJob(data), error };
@@ -682,10 +753,15 @@ export async function upsertJob(job: Partial<RmsJobPosting>) {
     };
   }
 
-  // Ensure vacancy_level, experience_details, jd_pdf_enabled, questionnaire, posting_level, and location_questions are stored inside vacancy_allocations JSONB
-  // and not sent as unmapped top-level columns if the remote column does not exist yet
-  const { vacancy_level, experience_details, jd_pdf_enabled, questionnaire, posting_level, location_questions, ...rest } = job;
+  // Ensure vacancy_level, experience_details, jd_pdf_enabled, questionnaire, posting_level, location_questions, and multiple_locations_config
+  // are stored inside vacancy_allocations JSONB and not sent as unmapped top-level columns if the remote column does not exist yet
+  const { vacancy_level, experience_details, jd_pdf_enabled, questionnaire, posting_level, location_questions, multiple_locations_config, ...rest } = job;
   const payload: any = { ...rest };
+  delete payload.multiple_locations_config;
+  delete payload.questionnaire;
+  delete payload.posting_level;
+  delete payload.location_questions;
+  delete payload.vacancy_level;
   payload.vacancy_allocations = {
     ...(payload.vacancy_allocations ?? {}),
     ...(vacancy_level ? { vacancy_level } : {}),
@@ -694,6 +770,7 @@ export async function upsertJob(job: Partial<RmsJobPosting>) {
     ...(questionnaire !== undefined ? { questionnaire } : {}),
     ...(posting_level !== undefined ? { posting_level } : {}),
     ...(location_questions !== undefined ? { location_questions } : {}),
+    ...(multiple_locations_config !== undefined ? { multiple_locations_config } : {}),
   };
 
   const { data, error } = await supabase
@@ -701,7 +778,12 @@ export async function upsertJob(job: Partial<RmsJobPosting>) {
     .upsert(payload)
     .select()
     .single();
-  return { data: hydrateJob(data), error };
+
+  const hydrated = hydrateJob(data);
+  if (!error && hydrated) {
+    broadcastJobUpdate(hydrated);
+  }
+  return { data: hydrated, error };
 }
 
 export async function deleteJob(id: string) {
@@ -714,7 +796,9 @@ export async function deleteJob(id: string) {
 
 // ===== Applications =====
 export async function getMyApplications(candidateId: string) {
-  const { data, error } = await supabase
+  const candidateSession = (await candidateSupabase.auth.getSession()).data.session;
+  const client = candidateSession ? candidateSupabase : supabase;
+  const { data, error } = await client
     .from('rms_applications' as never)
     .select(`
       *,

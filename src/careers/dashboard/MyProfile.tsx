@@ -34,19 +34,15 @@ export default function MyProfile() {
   const [activeStep, setActiveStep] = useState<1 | 2>(1);
   const [data, setData] = useState<MasterProfileFormData>(INITIAL_MASTER_PROFILE);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const initializedProfileIdRef = useRef<string | null>(null);
+  const lastProfileSignatureRef = useRef<string | null>(null);
 
-  // Authoritative mobile resolution across context, profile, and session storage
+  // Authoritative mobile resolution derived strictly from authenticated candidate identity
   const authoritativeMobile = useMemo(() => {
+    const fromUser = user?.phone ? normalizeMobileNumber(user.phone) : '';
     const fromCtx = contextMobile ? normalizeMobileNumber(contextMobile) : '';
     const fromProfile = profile?.mobile ? normalizeMobileNumber(profile.mobile) : '';
-    const fromUser = user?.phone ? normalizeMobileNumber(user.phone) : '';
-    const fromMeta = user?.user_metadata?.phone ? normalizeMobileNumber(user.user_metadata.phone as string) : '';
-    const fromStorage = typeof window !== 'undefined'
-      ? normalizeMobileNumber(sessionStorage.getItem('maha_candidate_verified_mobile') || localStorage.getItem('maha_candidate_verified_mobile') || '')
-      : '';
-    return fromCtx || fromProfile || fromUser || fromMeta || fromStorage || '';
-  }, [contextMobile, profile?.mobile, user?.phone, user?.user_metadata?.phone]);
+    return fromUser || fromCtx || fromProfile || '';
+  }, [user?.phone, contextMobile, profile?.mobile]);
 
   const cleanVerifiedMobile = authoritativeMobile.replace(/\D/g, '').slice(-10);
 
@@ -62,9 +58,10 @@ export default function MyProfile() {
       return;
     }
 
-    const profileId = profile.id;
-    if (initializedProfileIdRef.current === profileId) return;
-    initializedProfileIdRef.current = profileId;
+    // Rehydrate when profile is first loaded or when updated data is returned from server
+    const profileSignature = `${profile.id}:${profile.updated_at || profile.created_at || ''}:${profile.full_name || ''}:${profile.mobile || ''}`;
+    if (lastProfileSignatureRef.current === profileSignature) return;
+    lastProfileSignatureRef.current = profileSignature;
 
     const formattedCreatedDate = profile.created_at
       ? new Date(profile.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -126,7 +123,8 @@ export default function MyProfile() {
   const handleFinalSave = useCallback(async () => {
     await refreshProfile();
     setSaveSuccess(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const scrollBehavior = (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) ? 'auto' : 'smooth';
+    window.scrollTo({ top: 0, behavior: scrollBehavior });
 
     if (redirectUrl) {
       setTimeout(() => {
@@ -148,7 +146,7 @@ export default function MyProfile() {
               <span>MAHA-AGRI Recruitment Management System</span>
             </div>
             <h1 className="text-xl sm:text-2xl font-bold text-[#102a43]">
-              Master Candidate Profile
+              Candidate Master Profile
             </h1>
             <p className="text-xs sm:text-sm text-slate-600 mt-1">
               Official verified demographic identity and residential addresses. Automatically synchronized across all job applications.
@@ -173,8 +171,12 @@ export default function MyProfile() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4">
           <button
             type="button"
-            onClick={() => setActiveStep(1)}
-            className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+            onClick={() => {
+              setActiveStep(1);
+              const scrollBehavior = (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) ? 'auto' : 'smooth';
+              window.scrollTo({ top: 0, behavior: scrollBehavior });
+            }}
+            className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:outline-none focus-visible:ring-offset-2 ${
               activeStep === 1
                 ? 'bg-[#102a43] text-white border-[#102a43] shadow-xs'
                 : 'bg-slate-50 hover:bg-slate-100/80 text-slate-700 border-slate-200'
@@ -189,7 +191,7 @@ export default function MyProfile() {
                 1
               </span>
               <span className="text-xs sm:text-sm font-bold">
-                Step 1: Personal Demographics &amp; Contact
+                Step 1: Personal Details &amp; Contact
               </span>
             </div>
             <p className={`text-[11px] pl-8.5 ${activeStep === 1 ? 'text-slate-200' : 'text-slate-500'}`}>
@@ -199,8 +201,12 @@ export default function MyProfile() {
 
           <button
             type="button"
-            onClick={() => setActiveStep(2)}
-            className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+            onClick={() => {
+              setActiveStep(2);
+              const scrollBehavior = (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) ? 'auto' : 'smooth';
+              window.scrollTo({ top: 0, behavior: scrollBehavior });
+            }}
+            className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary-600 focus-visible:outline-none focus-visible:ring-offset-2 ${
               activeStep === 2
                 ? 'bg-[#102a43] text-white border-[#102a43] shadow-xs'
                 : 'bg-slate-50 hover:bg-slate-100/80 text-slate-700 border-slate-200'
@@ -215,7 +221,7 @@ export default function MyProfile() {
                 2
               </span>
               <span className="text-xs sm:text-sm font-bold">
-                Step 2: Identification &amp; Residential Addresses
+                Step 2: Identity &amp; Address Details
               </span>
             </div>
             <p className={`text-[11px] pl-8.5 ${activeStep === 2 ? 'text-slate-200' : 'text-slate-500'}`}>
@@ -232,7 +238,7 @@ export default function MyProfile() {
             <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
             <div>
               <p className="font-bold text-emerald-950">
-                Master Candidate Profile Successfully Updated!
+                Candidate Master Profile Successfully Updated!
               </p>
               <p className="text-emerald-800 text-xs mt-0.5 leading-relaxed">
                 Your official identity, Aadhaar verification, and residential addresses have been securely updated in the master recruitment registry and will automatically reflect on all current and upcoming applications.
@@ -269,14 +275,16 @@ export default function MyProfile() {
         {activeStep === 1 && (
           <Step1CreateProfile
             data={data}
-            userId={user?.id || (cleanVerifiedMobile ? `dummy-candidate-${cleanVerifiedMobile}` : 'profile-user')}
+            userId={user?.id || ''}
             verifiedMobile={cleanVerifiedMobile || data.mobile}
             candidateId={profile?.candidate_id || data.candidateId}
             profileCreatedDate={data.profileCreatedDate}
+            cancelButtonLabel="Return to Dashboard"
             onChange={updateField}
             onNext={() => {
               setActiveStep(2);
-              window.scrollTo({ top: 0, behavior: 'smooth' });
+              const scrollBehavior = (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) ? 'auto' : 'smooth';
+              window.scrollTo({ top: 0, behavior: scrollBehavior });
             }}
             onCancel={() => navigate('/candidate/dashboard')}
           />
@@ -285,15 +293,17 @@ export default function MyProfile() {
         {activeStep === 2 && (
           <Step2MasterProfile
             data={data}
-            userId={user?.id || (cleanVerifiedMobile ? `dummy-candidate-${cleanVerifiedMobile}` : 'profile-user')}
+            userId={user?.id || ''}
             verifiedMobile={cleanVerifiedMobile || data.mobile}
             isCasteRequired={false}
             submitButtonLabel="Save Master Profile"
+            cancelButtonLabel="Return to Dashboard"
             onChange={updateField}
             onNext={handleFinalSave}
             onBack={() => {
               setActiveStep(1);
-              window.scrollTo({ top: 0, behavior: 'smooth' });
+              const scrollBehavior = (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) ? 'auto' : 'smooth';
+              window.scrollTo({ top: 0, behavior: scrollBehavior });
             }}
             onCancel={() => navigate('/candidate/dashboard')}
           />

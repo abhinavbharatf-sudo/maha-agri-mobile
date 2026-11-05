@@ -13,6 +13,7 @@ import {
   listRecruitmentSteps, listJobFaqs, incrementJobViews,
   getExistingApplication
 } from '../lib/api';
+import { subscribeToJobUpdates } from '../lib/jobEvents';
 import type {
   RmsJobPosting, RmsJobBadge, RmsRecruitmentStep,
   RmsJobFaq, RmsApplication
@@ -106,27 +107,65 @@ export default function JobDetail() {
   const ackInputRef = useRef<HTMLInputElement>(null);
 
   // ── Load Job & Metadata ─────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!slug) return;
-    setLoading(true);
-    Promise.all([getJobBySlug(slug), listPublishedJobs()]).then(([j, all]) => {
+  const loadJobData = useCallback((targetSlug?: string) => {
+    const s = targetSlug || slug;
+    if (!s) return;
+    Promise.all([getJobBySlug(s), listPublishedJobs()]).then(([j, all]) => {
       const jobData = j.data;
       setJob(jobData);
-      setRelatedJobs((all.data || []).filter(r => r.slug !== slug).slice(0, 3));
+      setRelatedJobs((all.data || []).filter(r => r.slug !== s).slice(0, 3));
       setLoading(false);
       if (jobData?.id) {
         Promise.all([
           listJobBadges(jobData.id),
           listRecruitmentSteps(jobData.id),
           listJobFaqs(jobData.id),
-        ]).then(([b, s, f]) => {
+        ]).then(([b, sSteps, f]) => {
           setBadges((b.data || []).filter(x => x.enabled));
-          setCustomSteps((s.data || []).filter(x => x.enabled));
+          setCustomSteps((sSteps.data || []).filter(x => x.enabled));
           setCustomFaqs((f.data || []).filter(x => x.enabled));
         });
       }
     });
   }, [slug]);
+
+  useEffect(() => {
+    if (!slug) return;
+    setLoading(true);
+    loadJobData();
+
+    // Invalidate & refresh immediately when this job (or any job) is updated in Admin
+    const unsubscribe = subscribeToJobUpdates(detail => {
+      if (detail.slug && detail.slug !== slug && job?.id && detail.jobId === job.id) {
+        // HR updated the job title/slug — navigate smoothly to the new slug
+        navigate(`/careers/jobs/${detail.slug}`, { replace: true });
+      } else if (!detail.slug || detail.slug === slug || (job?.id && detail.jobId === job.id)) {
+        loadJobData();
+      } else {
+        // Another job was updated; refresh related jobs list
+        listPublishedJobs().then(all => {
+          setRelatedJobs((all.data || []).filter(r => r.slug !== slug).slice(0, 3));
+        });
+      }
+    });
+
+    // Invalidate & refresh whenever user switches back to this tab
+    const handleFocus = () => loadJobData();
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        loadJobData();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [slug, loadJobData, navigate, job?.id]);
 
   // Check if current authenticated candidate has an existing active application
   useEffect(() => {

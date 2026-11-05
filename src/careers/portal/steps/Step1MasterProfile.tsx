@@ -1361,7 +1361,7 @@ export default function Step1MasterProfile({
             </>
           ) : (
             <>
-              Save &amp; Proceed to Position Details <ArrowRight className="w-4 h-4" />
+              {submitButtonLabel || 'Save & Continue →'}
             </>
           )}
         </button>

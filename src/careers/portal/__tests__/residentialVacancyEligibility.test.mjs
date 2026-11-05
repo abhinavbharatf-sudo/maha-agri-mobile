@@ -1,5 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 // Helper logic mirrored from vacancyEligibility.ts for testing in ESM node:test
 function checkResidentialVacancyEligibility(candidateDistrict, candidateTaluka, job) {
@@ -338,5 +340,30 @@ describe('Candidate Residential Location & Job-Specific Vacancy Eligibility', ()
     const resNashik = checkResidentialVacancyEligibility('Nashik', 'AnyTaluka', districtJob);
     assert.equal(resNashik.status, 'No Vacancy');
     assert.equal(resNashik.vacancyCount, 0);
+  });
+
+  it('9. Section 3 cards display only District and Taluka in Location details without address-line text', () => {
+    const step2Path = resolve(process.cwd(), 'project/src/careers/portal/steps/Step2JobSpecific.tsx');
+    const step2Content = readFileSync(step2Path, 'utf8');
+
+    // Section 3 must still exist with its heading and components
+    assert.match(step2Content, /SECTION 3:\s*Your Residential Location & Vacancy Availability/);
+    assert.match(step2Content, /Current Residential Address/);
+    assert.match(step2Content, /Permanent Residential Address/);
+
+    // Section 3 Location detail must display district and taluka on a single line separated by '|'
+    assert.match(step2Content, /District:\s*<\/span>\s*<span[^>]*>\{currentAddress\.district \|\| 'Not specified'\}<\/span>\s*<span[^>]*>\|<\/span>\s*<span>Taluka:\s*<\/span>\s*<span[^>]*>\{currentAddress\.taluka \|\| 'Not specified'\}<\/span>/);
+    assert.match(step2Content, /District:\s*<\/span>\s*<span[^>]*>\{permanentAddress\.district \|\| 'Not specified'\}<\/span>\s*<span[^>]*>\|<\/span>\s*<span>Taluka:\s*<\/span>\s*<span[^>]*>\{permanentAddress\.taluka \|\| 'Not specified'\}<\/span>/);
+
+    // Section 3 must NOT contain address-line text displays
+    assert.doesNotMatch(step2Content, /Address Line:/);
+    assert.doesNotMatch(step2Content, /currentAddress\.line1 && <p/);
+    assert.doesNotMatch(step2Content, /permanentAddress\.line1 && <p/);
+
+    // Review & Submit (Step3ReviewSubmit.tsx) must retain full address-line details
+    const step3Path = resolve(process.cwd(), 'project/src/careers/portal/steps/Step3ReviewSubmit.tsx');
+    const step3Content = readFileSync(step3Path, 'utf8');
+    assert.match(step3Content, /masterProfile\.currentAddressLine1/);
+    assert.match(step3Content, /masterProfile\.permanentAddressLine1/);
   });
 });

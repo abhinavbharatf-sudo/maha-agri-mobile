@@ -14,12 +14,18 @@ import {
   Clock,
   Compass,
   Building2,
-  Home
+  Home,
+  X,
+  ShieldCheck
 } from 'lucide-react';
-import { getTalukasForDistrict } from '../../../data/maharashtraGeography';
+import { getTalukasForDistrict, MAHARASHTRA_DISTRICTS } from '../../../data/maharashtraGeography';
 import type { RmsJobPosting } from '../../lib/types';
 import { getDefaultLocationQuestions } from '../../lib/constants';
-import { checkResidentialVacancyEligibility, type VacancyEligibilityResult } from '../utils/vacancyEligibility';
+import {
+  checkResidentialVacancyEligibility,
+  getLocationVacancyStatus,
+  type VacancyEligibilityResult
+} from '../utils/vacancyEligibility';
 import {
   QUALIFICATION_LEVELS,
   COURSE_OPTIONS_BY_LEVEL,
@@ -30,8 +36,12 @@ import {
   type MasterProfileFormData,
   type QualificationEntry,
   type WorkExperienceEntry,
+  type DistrictPreference,
+  type MobilityConsentRecord
 } from '../types';
 import { calculateAge, calculateDuration, calculateMergedTotalExperience, getLocalTodayIso } from '../utils/verhoeff';
+
+export const MOBILITY_CONSENT_TEXT = "I understand that I have selected preferred posting locations outside my current and/or permanent residential district. I am willing to work in the selected districts, subject to vacancy availability, recruitment requirements and the organisation's final posting decision. My preferences do not guarantee posting in any specific district or taluka.";
 
 interface Step2JobSpecificProps {
   data: JobSpecificFormData;
@@ -41,6 +51,8 @@ interface Step2JobSpecificProps {
   onChange: <K extends keyof JobSpecificFormData>(field: K, value: JobSpecificFormData[K]) => void;
   onNext: () => void;
   onBack: () => void;
+  returnToReview?: boolean;
+  targetSection?: string | null;
 }
 
 export type FieldErrorMap = Record<string, string>;
@@ -71,9 +83,12 @@ export default function Step2JobSpecific({
   onChange,
   onNext,
   onBack,
+  returnToReview,
+  targetSection,
 }: Step2JobSpecificProps) {
   const [errors, setErrors] = useState<FieldErrorMap>({});
   const [topError, setTopError] = useState<string | null>(null);
+  const [showMobilityModal, setShowMobilityModal] = useState(false);
 
   // Dynamic references store for repeatable cards & form fields
   const elementRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -81,6 +96,28 @@ export default function Step2JobSpecific({
   const registerRef = (key: string) => (el: HTMLElement | null) => {
     elementRefs.current[key] = el;
   };
+
+  // Scroll to targeted section if directed from Step 4 Review
+  useEffect(() => {
+    if (targetSection) {
+      const sectionId =
+        targetSection === 'qualifications'
+          ? 'section-qualifications'
+          : targetSection === 'experience'
+          ? 'section-experience'
+          : targetSection === 'posting_location'
+          ? 'section-posting-location'
+          : null;
+      if (sectionId) {
+        setTimeout(() => {
+          const el = document.getElementById(sectionId);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }, 150);
+      }
+    }
+  }, [targetSection]);
 
   // ── 1. Dynamic Passing Years (1980 through current year, newest first) ──────
   const currentYear = new Date().getFullYear();
@@ -94,11 +131,20 @@ export default function Step2JobSpecific({
 
   // ── 2. Authoritative Allowed Districts from Job Posting ─────────────────────
   const allowedDistricts = useMemo<string[]>(() => {
+    // 1. Explicit districts configured in job.location_districts
     if (Array.isArray(job.location_districts) && job.location_districts.length > 0) {
-      return job.location_districts.filter(d => Boolean(d && d.trim()));
+      const filtered = job.location_districts.filter(d => Boolean(d && d.trim()));
+      if (filtered.length > 0) return filtered;
     }
-    return [];
-  }, [job.location_districts]);
+    // 2. Districts configured in vacancy_allocations.district_allocations
+    const distAlloc = job.vacancy_allocations?.district_allocations;
+    if (distAlloc && typeof distAlloc === 'object') {
+      const keys = Object.keys(distAlloc).filter(k => distAlloc[k]?.included !== false);
+      if (keys.length > 0) return keys;
+    }
+    // 3. Fallback to all Maharashtra districts so candidate can select any eligible posting location
+    return MAHARASHTRA_DISTRICTS;
+  }, [job.location_districts, job.vacancy_allocations]);
 
   const postingLevel = useMemo(() => {
     if (job.posting_level) return job.posting_level;
@@ -166,21 +212,14 @@ export default function Step2JobSpecific({
       }
     }
 
-    if (isDistrictLevel) {
-      const geoTalukas = getTalukasForDistrict(data.preferredDistrict);
-      return {
-        availableTalukas: geoTalukas,
-        talukaAllocationMap: {},
-        talukaFilterSupported: true,
-      };
-    }
-
+    // Fallback: If no granular taluka allocations specified, provide all talukas for the selected district
+    const geoTalukas = getTalukasForDistrict(data.preferredDistrict);
     return {
-      availableTalukas: [],
+      availableTalukas: geoTalukas,
       talukaAllocationMap: {},
-      talukaFilterSupported: false,
+      talukaFilterSupported: true,
     };
-  }, [data.preferredDistrict, job.vacancy_allocations, isDistrictLevel]);
+  }, [data.preferredDistrict, job.vacancy_allocations]);
 
   // ── 4. Residential Location & Vacancy Availability Computation ────────────
   // Uses strictly existing Candidate Profile fields: Current Address & Permanent Address
@@ -740,6 +779,199 @@ export default function Step2JobSpecific({
     clearFieldError('preferredTaluka');
   };
 
+  // ── Multiple Preferred Posting Locations Configuration & State ────────────
+  const isMultipleLocationsEnabled = Boolean(
+    job.multiple_locations_config?.enabled ||
+    job.vacancy_allocations?.multiple_locations_config?.enabled
+  );
+
+  const maxDistrictsAllowed = Math.min(
+    3,
+    Math.max(
+      1,
+      Number(
+        job.multiple_locations_config?.maxDistricts ||
+        job.vacancy_allocations?.multiple_locations_config?.maxDistricts ||
+        3
+      )
+    )
+  );
+
+  const maxTalukasPerDistrict = Math.min(
+    2,
+    Math.max(
+      1,
+      Number(
+        job.multiple_locations_config?.maxTalukasPerDistrict ||
+        job.vacancy_allocations?.multiple_locations_config?.maxTalukasPerDistrict ||
+        2
+      )
+    )
+  );
+
+  const candidateResidentialDistricts = useMemo(() => {
+    const list: string[] = [];
+    if (currentAddress.district) list.push(currentAddress.district.trim().toLowerCase());
+    if (permanentAddress.district) list.push(permanentAddress.district.trim().toLowerCase());
+    return list;
+  }, [currentAddress.district, permanentAddress.district]);
+
+  // Normalize preferredDistricts array
+  const preferredDistricts: DistrictPreference[] = useMemo(() => {
+    if (Array.isArray(data.preferredDistricts) && data.preferredDistricts.length > 0) {
+      return data.preferredDistricts;
+    }
+    if (data.preferredDistrict) {
+      return [
+        {
+          id: 'pref-1',
+          priority: 1,
+          district: data.preferredDistrict,
+          talukas: data.preferredTaluka ? [data.preferredTaluka] : [],
+        },
+      ];
+    }
+    return [
+      {
+        id: 'pref-1',
+        priority: 1,
+        district: '',
+        talukas: [],
+      },
+    ];
+  }, [data.preferredDistricts, data.preferredDistrict, data.preferredTaluka]);
+
+  // Sync preferred districts helper
+  const syncPreferredDistricts = useCallback((updated: DistrictPreference[]) => {
+    const normalized = updated.map((item, idx) => ({
+      ...item,
+      priority: idx + 1,
+    }));
+    onChange('preferredDistricts', normalized);
+    const p1 = normalized[0];
+    const p1District = p1?.district || '';
+    const p1Taluka = p1?.talukas?.[0] || '';
+    onChange('preferredDistrict', p1District);
+    onChange('preferredTaluka', p1Taluka);
+  }, [onChange]);
+
+  // Outside districts detection
+  const outsideDistricts = useMemo(() => {
+    if (!isMultipleLocationsEnabled) {
+      if (!data.preferredDistrict) return [];
+      const isOutside = !candidateResidentialDistricts.includes(data.preferredDistrict.trim().toLowerCase());
+      return isOutside ? [data.preferredDistrict] : [];
+    }
+    const outside: string[] = [];
+    preferredDistricts.forEach(p => {
+      if (p.district && !candidateResidentialDistricts.includes(p.district.trim().toLowerCase())) {
+        if (!outside.includes(p.district)) {
+          outside.push(p.district);
+        }
+      }
+    });
+    return outside;
+  }, [isMultipleLocationsEnabled, data.preferredDistrict, preferredDistricts, candidateResidentialDistricts]);
+
+  const requiresMobilityConsent = outsideDistricts.length > 0;
+
+  const handleAddPreferredDistrict = () => {
+    if (preferredDistricts.length >= maxDistrictsAllowed) return;
+    const newEntry: DistrictPreference = {
+      id: `pref-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      priority: preferredDistricts.length + 1,
+      district: '',
+      talukas: [],
+    };
+    syncPreferredDistricts([...preferredDistricts, newEntry]);
+  };
+
+  const handleRemovePreferredDistrict = (id: string) => {
+    if (preferredDistricts.length <= 1) return;
+    const filtered = preferredDistricts.filter(p => p.id !== id);
+    syncPreferredDistricts(filtered);
+  };
+
+  const handleDistrictPreferenceChange = (id: string, newDistrict: string) => {
+    const updated = preferredDistricts.map(p => {
+      if (p.id === id) {
+        return {
+          ...p,
+          district: newDistrict,
+          talukas: [],
+        };
+      }
+      return p;
+    });
+    syncPreferredDistricts(updated);
+    clearFieldError(`pref_dist_${id}`);
+    clearFieldError('preferredDistrict');
+  };
+
+  const handleAddTalukaToDistrict = (id: string) => {
+    const target = preferredDistricts.find(p => p.id === id);
+    if (!target || !target.district) return;
+    const currentTalukas = target.talukas || [];
+    if (currentTalukas.length >= maxTalukasPerDistrict) return;
+    const updated = preferredDistricts.map(p => {
+      if (p.id === id) {
+        return {
+          ...p,
+          talukas: [...currentTalukas, ''],
+        };
+      }
+      return p;
+    });
+    syncPreferredDistricts(updated);
+  };
+
+  const handleRemoveTalukaFromDistrict = (id: string, talukaIndex: number) => {
+    const updated = preferredDistricts.map(p => {
+      if (p.id === id) {
+        const currentTalukas = [...(p.talukas || [])];
+        currentTalukas.splice(talukaIndex, 1);
+        return {
+          ...p,
+          talukas: currentTalukas,
+        };
+      }
+      return p;
+    });
+    syncPreferredDistricts(updated);
+  };
+
+  const handleTalukaPreferenceChange = (id: string, talukaIndex: number, newTaluka: string) => {
+    const updated = preferredDistricts.map(p => {
+      if (p.id === id) {
+        const currentTalukas = [...(p.talukas || [])];
+        currentTalukas[talukaIndex] = newTaluka;
+        return {
+          ...p,
+          talukas: currentTalukas,
+        };
+      }
+      return p;
+    });
+    syncPreferredDistricts(updated);
+    clearFieldError(`pref_tal_${id}_${talukaIndex}`);
+    clearFieldError('preferredTaluka');
+  };
+
+  const getTalukasForSpecificDistrict = (distName: string): string[] => {
+    if (!distName) return [];
+    const distAlloc = job.vacancy_allocations?.district_allocations?.[distName];
+    if (distAlloc?.taluka_allocations && Object.keys(distAlloc.taluka_allocations).length > 0) {
+      const filtered: string[] = [];
+      Object.entries(distAlloc.taluka_allocations).forEach(([tName, tConfig]) => {
+        if (tConfig && tConfig.included !== false) {
+          filtered.push(tName);
+        }
+      });
+      if (filtered.length > 0) return filtered;
+    }
+    return getTalukasForDistrict(distName);
+  };
+
   // ── 8. Form Validation & Auto-Focus/Scroll ──────────────────────────────────
   const validateForm = (): boolean => {
     const newErrors: FieldErrorMap = {};
@@ -929,28 +1161,73 @@ export default function Step2JobSpecific({
     }
 
     // 3. Validate Posting Location
-    if (allowedDistricts.length === 0) {
-      newErrors['preferredDistrict'] = 'No eligible posting districts are configured for this position by HR.';
-      errorFieldKeys.push('preferredDistrict');
+    if (isMultipleLocationsEnabled) {
+      if (allowedDistricts.length === 0) {
+        newErrors['preferredDistrict'] = 'No eligible posting districts are configured for this position by HR.';
+        errorFieldKeys.push('preferredDistrict');
+      } else {
+        if (!preferredDistricts[0]?.district) {
+          newErrors['preferredDistrict'] = 'Please select Priority 1 Preferred District.';
+          errorFieldKeys.push('preferredDistrict');
+        }
+        const seenDistricts = new Set<string>();
+        preferredDistricts.forEach(p => {
+          if (!p.district) {
+            const key = `pref_dist_${p.id}`;
+            newErrors[key] = `Please select a district for Priority ${p.priority}.`;
+            errorFieldKeys.push(key);
+          } else if (!allowedDistricts.includes(p.district)) {
+            const key = `pref_dist_${p.id}`;
+            newErrors[key] = `Selected district for Priority ${p.priority} is not eligible for this job posting.`;
+            errorFieldKeys.push(key);
+          } else if (seenDistricts.has(p.district.toLowerCase())) {
+            const key = `pref_dist_${p.id}`;
+            newErrors[key] = `District "${p.district}" is already selected in another priority card.`;
+            errorFieldKeys.push(key);
+          } else {
+            seenDistricts.add(p.district.toLowerCase());
+          }
+
+          if (!isDistrictWise && p.district) {
+            const talukas = p.talukas || [];
+            if (talukas.length === 0 || !talukas[0]) {
+              const key = `pref_tal_${p.id}_0`;
+              newErrors[key] = `Please select at least one preferred taluka for Priority ${p.priority} (${p.district}).`;
+              errorFieldKeys.push(key);
+            }
+          }
+        });
+      }
+
+      // Check conditional mobility consent
+      if (requiresMobilityConsent && !data.mobilityConsent?.consented && !data.locationConfirmed) {
+        newErrors['mobilityConsent'] = 'Please confirm your willingness to work at the selected posting location(s) outside your residential district.';
+        errorFieldKeys.push('mobilityConsent');
+      }
     } else {
-      if (!data.preferredDistrict) {
-        newErrors['preferredDistrict'] = 'Please select your preferred posting district.';
+      if (allowedDistricts.length === 0) {
+        newErrors['preferredDistrict'] = 'No eligible posting districts are configured for this position by HR.';
         errorFieldKeys.push('preferredDistrict');
-      } else if (!allowedDistricts.includes(data.preferredDistrict)) {
-        newErrors['preferredDistrict'] = 'Selected district is not eligible for this job posting.';
-        errorFieldKeys.push('preferredDistrict');
+      } else {
+        if (!data.preferredDistrict) {
+          newErrors['preferredDistrict'] = 'Please select your preferred posting district.';
+          errorFieldKeys.push('preferredDistrict');
+        } else if (!allowedDistricts.includes(data.preferredDistrict)) {
+          newErrors['preferredDistrict'] = 'Selected district is not eligible for this job posting.';
+          errorFieldKeys.push('preferredDistrict');
+        }
+
+        if (!isDistrictWise && !data.preferredTaluka) {
+          newErrors['preferredTaluka'] = 'Please select your preferred posting taluka.';
+          errorFieldKeys.push('preferredTaluka');
+        }
       }
 
-      if (!isDistrictWise && !data.preferredTaluka) {
-        newErrors['preferredTaluka'] = 'Please select your preferred posting taluka.';
-        errorFieldKeys.push('preferredTaluka');
+      // 4. Validate Location Difference Confirmation
+      if (isDifferentFromNative && !data.locationConfirmed) {
+        newErrors['locationConfirmed'] = 'Please confirm your willingness to work at the selected posting location.';
+        errorFieldKeys.push('locationConfirmed');
       }
-    }
-
-    // 4. Validate Location Difference Confirmation
-    if (isDifferentFromNative && !data.locationConfirmed) {
-      newErrors['locationConfirmed'] = 'Please confirm your willingness to work at the selected posting location.';
-      errorFieldKeys.push('locationConfirmed');
     }
 
     // 5. Validate Location & Mobility Questions
@@ -1019,6 +1296,24 @@ export default function Step2JobSpecific({
         </span>
       </div>
 
+      {returnToReview && (
+        <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl flex items-center justify-between gap-3 text-xs text-blue-900">
+          <div className="flex items-center gap-2">
+            <Info className="w-4 h-4 text-blue-600 shrink-0" />
+            <span>
+              <strong>Editing from Review:</strong> Update your details below and click <strong>Save &amp; Return to Review</strong> to return directly to Step 4.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onBack}
+            className="text-xs font-bold text-blue-700 hover:text-blue-900 hover:underline shrink-0"
+          >
+            Cancel &amp; Return
+          </button>
+        </div>
+      )}
+
       {/* Top Error Callout */}
       {topError && (
         <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2.5 text-xs text-red-800">
@@ -1027,10 +1322,8 @@ export default function Step2JobSpecific({
         </div>
       )}
 
-
-
       {/* ── SECTION 1: Educational Qualifications (Dynamic Repeatable Cards) ─── */}
-      <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-5">
+      <div id="section-qualifications" className="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-5">
         <div className="flex items-center gap-2 pb-2 border-b border-slate-100 text-[#102a43]">
           <GraduationCap className="w-4 h-4 text-emerald-600" />
           <h3 className="text-xs font-bold uppercase tracking-wider">
@@ -1354,7 +1647,7 @@ export default function Step2JobSpecific({
       </div>
 
       {/* ── SECTION 2: Work Experience (Dynamic Repeatable Cards) ─────────────── */}
-      <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-5">
+      <div id="section-experience" className="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-5">
         <div className="flex items-center gap-2 pb-2 border-b border-slate-100 text-[#102a43]">
           <Briefcase className="w-4 h-4 text-emerald-600" />
           <h3 className="text-xs font-bold uppercase tracking-wider">
@@ -1753,21 +2046,19 @@ export default function Step2JobSpecific({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
               <div>
-                <span className="text-slate-500 block text-[11px]">District &amp; Taluka:</span>
-                <span className="font-semibold text-[#102a43]">
-                  {currentAddress.taluka ? `${currentAddress.taluka}, ` : ''}{currentAddress.district || 'Not specified'}
-                </span>
+                <span className="text-slate-500 block text-[11px] font-semibold mb-0.5">Location:</span>
+                <p className="text-slate-600 text-xs">
+                  <span>District: </span>
+                  <span className="font-semibold text-[#102a43]">{currentAddress.district || 'Not specified'}</span>
+                  <span className="text-slate-300 mx-1.5 select-none">|</span>
+                  <span>Taluka: </span>
+                  <span className="font-semibold text-[#102a43]">{currentAddress.taluka || 'Not specified'}</span>
+                </p>
               </div>
               {currentAddress.pincode && (
                 <div>
-                  <span className="text-slate-500 block text-[11px]">Pincode:</span>
-                  <span className="font-semibold text-[#102a43]">{currentAddress.pincode}</span>
-                </div>
-              )}
-              {currentAddress.line1 && (
-                <div className="sm:col-span-2">
-                  <span className="text-slate-500 block text-[11px]">Address Line:</span>
-                  <span className="text-slate-700">{currentAddress.line1}</span>
+                  <span className="text-slate-500 block text-[11px] font-semibold mb-0.5">Pincode:</span>
+                  <span className="font-semibold text-[#102a43] pl-0.5 block">{currentAddress.pincode}</span>
                 </div>
               )}
             </div>
@@ -1810,13 +2101,16 @@ export default function Step2JobSpecific({
               </div>
               <div className="space-y-1 text-xs">
                 <div>
-                  <span className="text-slate-500 block text-[11px]">Location:</span>
-                  <span className="font-semibold text-[#102a43]">
-                    {currentAddress.taluka ? `${currentAddress.taluka}, ` : ''}{currentAddress.district || 'Not specified'}
-                  </span>
+                  <span className="text-slate-500 block text-[11px] font-semibold mb-0.5">Location:</span>
+                  <p className="text-slate-600 text-xs">
+                    <span>District: </span>
+                    <span className="font-semibold text-[#102a43]">{currentAddress.district || 'Not specified'}</span>
+                    <span className="text-slate-300 mx-1.5 select-none">|</span>
+                    <span>Taluka: </span>
+                    <span className="font-semibold text-[#102a43]">{currentAddress.taluka || 'Not specified'}</span>
+                  </p>
                 </div>
-                {currentAddress.line1 && <p className="text-slate-600 text-[11px] truncate">{currentAddress.line1}</p>}
-                <p className="text-slate-700 text-xs pt-1">{currentEligibility.message}</p>
+                <p className="text-slate-700 text-xs pt-0.5">{currentEligibility.message}</p>
                 {currentEligibility.isReliable && currentEligibility.vacancyCount !== null && (
                   <p className="font-mono font-bold text-[11px] text-[#102a43]">
                     Count: {currentEligibility.vacancyCount} post(s)
@@ -1846,13 +2140,16 @@ export default function Step2JobSpecific({
               </div>
               <div className="space-y-1 text-xs">
                 <div>
-                  <span className="text-slate-500 block text-[11px]">Location:</span>
-                  <span className="font-semibold text-[#102a43]">
-                    {permanentAddress.taluka ? `${permanentAddress.taluka}, ` : ''}{permanentAddress.district || 'Not specified'}
-                  </span>
+                  <span className="text-slate-500 block text-[11px] font-semibold mb-0.5">Location:</span>
+                  <p className="text-slate-600 text-xs">
+                    <span>District: </span>
+                    <span className="font-semibold text-[#102a43]">{permanentAddress.district || 'Not specified'}</span>
+                    <span className="text-slate-300 mx-1.5 select-none">|</span>
+                    <span>Taluka: </span>
+                    <span className="font-semibold text-[#102a43]">{permanentAddress.taluka || 'Not specified'}</span>
+                  </p>
                 </div>
-                {permanentAddress.line1 && <p className="text-slate-600 text-[11px] truncate">{permanentAddress.line1}</p>}
-                <p className="text-slate-700 text-xs pt-1">{permanentEligibility.message}</p>
+                <p className="text-slate-700 text-xs pt-0.5">{permanentEligibility.message}</p>
                 {permanentEligibility.isReliable && permanentEligibility.vacancyCount !== null && (
                   <p className="font-mono font-bold text-[11px] text-[#102a43]">
                     Count: {permanentEligibility.vacancyCount} post(s)
@@ -1872,21 +2169,29 @@ export default function Step2JobSpecific({
         </div>
       </div>
 
-      {/* ── SECTION 4: Preferred Posting Location ────────────────────────────── */}
-      <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-4">
+      {/* ── SECTION 4: PREFERRED POSTING LOCATION ────────────────────────────── */}
+      <div id="section-posting-location" className="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-4">
         <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2 text-[#102a43]">
           <div className="flex items-center gap-2">
             <MapPin className="w-4 h-4 text-emerald-600" />
             <h3 className="text-xs font-bold uppercase tracking-wider">
-              4. Preferred Posting Location
+              4. PREFERRED POSTING LOCATION <span className="text-red-500">*</span>
             </h3>
           </div>
-          {isDistrictLevel && (
-            <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full normal-case">
-              District-Level Quota
-            </span>
-          )}
+          <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+            isDistrictWise 
+              ? 'text-purple-700 bg-purple-50 border border-purple-200' 
+              : 'text-blue-700 bg-blue-50 border border-blue-200'
+          }`}>
+            {isDistrictWise ? 'District-Wise Drive' : 'Taluka-Wise Drive'}
+          </span>
         </div>
+
+        <p className="text-[11px] text-[#627d98]">
+          {isDistrictWise
+            ? 'This position is recruited at the District level. Please select your preferred district of posting. You are eligible to apply regardless of your residential address.'
+            : 'This position is recruited at the Taluka level. Please select your preferred district and taluka. You are eligible to apply regardless of your residential address.'}
+        </p>
 
         {allowedDistricts.length === 0 ? (
           <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
@@ -1898,13 +2203,364 @@ export default function Step2JobSpecific({
               </p>
             </div>
           </div>
+        ) : isMultipleLocationsEnabled ? (
+          /* ── MULTIPLE PREFERRED POSTING LOCATIONS SELECTION ── */
+          <div className="space-y-5">
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-[#102a43] flex items-center justify-between flex-wrap gap-2">
+              <span className="font-semibold">
+                You can select up to <strong>{maxDistrictsAllowed} preferred districts</strong> in order of priority (Priority 1 = Highest Priority).
+                {!isDistrictWise && ` You may select up to ${maxTalukasPerDistrict} preferred talukas for each district.`}
+              </span>
+              <span className="font-bold text-[11px] bg-white border border-slate-300 px-2.5 py-0.5 rounded-full text-slate-700">
+                {preferredDistricts.filter(p => p.district).length} of {maxDistrictsAllowed} Selected
+              </span>
+            </div>
+
+            {/* List of District Preference Cards */}
+            <div className="space-y-4">
+              {preferredDistricts.map((card, cardIdx) => {
+                const priorityNum = cardIdx + 1;
+                const isFirstPriority = priorityNum === 1;
+                const distVacancy = card.district ? getLocationVacancyStatus(card.district, null, job) : null;
+                const cardTalukasForDist = card.district ? getTalukasForSpecificDistrict(card.district) : [];
+                const selectedDistrictsInOtherCards = preferredDistricts
+                  .filter(p => p.id !== card.id && p.district)
+                  .map(p => p.district.trim().toLowerCase());
+
+                const distError = errors[`pref_dist_${card.id}`] || (isFirstPriority ? errors['preferredDistrict'] : null);
+
+                return (
+                  <div
+                    key={card.id}
+                    className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-3.5 transition-all"
+                  >
+                    {/* Card Header: Priority & Remove Button */}
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-200/80">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
+                          isFirstPriority
+                            ? 'bg-[#102a43] text-white shadow-2xs'
+                            : priorityNum === 2
+                            ? 'bg-blue-100 text-blue-900 border border-blue-200'
+                            : 'bg-slate-200 text-slate-800'
+                        }`}>
+                          Priority {priorityNum} {isFirstPriority ? '(Primary)' : ''}
+                        </span>
+                        {card.district && (
+                          <span className="text-xs font-semibold text-[#102a43]">
+                            — {card.district}
+                          </span>
+                        )}
+                      </div>
+
+                      {preferredDistricts.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePreferredDistrict(card.id)}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                          title={`Remove Priority ${priorityNum} Preference`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Remove</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* District Selection & Vacancy Status */}
+                    <div className="space-y-2">
+                      <label className="block text-xs font-semibold text-slate-700">
+                        Preferred District (Priority {priorityNum}) <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        ref={registerRef(`pref_dist_${card.id}`)}
+                        value={card.district || ''}
+                        onChange={e => handleDistrictPreferenceChange(card.id, e.target.value)}
+                        aria-invalid={Boolean(distError)}
+                        className={`w-full px-3.5 py-2.5 bg-white border rounded-xl text-xs sm:text-sm font-semibold text-[#102a43] focus:outline-none focus:ring-2 transition-all cursor-pointer ${
+                          distError
+                            ? 'border-red-400 bg-red-50/20 focus:ring-red-200 focus:border-red-500'
+                            : 'border-slate-300 focus:ring-[#102a43]/20 focus:border-[#102a43]'
+                        }`}
+                      >
+                        <option value="">Select Priority {priorityNum} District</option>
+                        {allowedDistricts.map(dist => {
+                          const isAlreadySelected = selectedDistrictsInOtherCards.includes(dist.trim().toLowerCase());
+                          const isResidential = Boolean(
+                            currentAddress.district && dist.toLowerCase() === currentAddress.district.toLowerCase()
+                          );
+                          return (
+                            <option key={dist} value={dist} disabled={isAlreadySelected}>
+                              {dist} {isResidential ? '(Residential District)' : ''} {isAlreadySelected ? '(Already Selected in Another Priority)' : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+
+                      {distError && (
+                        <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3 shrink-0" />
+                          {distError}
+                        </p>
+                      )}
+
+                      {/* District-level Vacancy Status Badge */}
+                      {card.district && distVacancy && (
+                        <div className="flex items-center gap-2 pt-1 flex-wrap text-xs">
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                            distVacancy.status === 'AVAILABLE'
+                              ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                              : distVacancy.status === 'NO VACANCY'
+                              ? 'bg-slate-200 text-slate-800 border border-slate-300'
+                              : 'bg-amber-100 text-amber-900 border border-amber-300'
+                          }`}>
+                            {distVacancy.status === 'AVAILABLE' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />}
+                            {distVacancy.status === 'NO VACANCY' && <AlertCircle className="w-3.5 h-3.5 text-slate-600" />}
+                            {distVacancy.status === 'NOT DETERMINED' && <Info className="w-3.5 h-3.5 text-amber-700" />}
+                            {distVacancy.status === 'AVAILABLE'
+                              ? 'Vacancy Available'
+                              : distVacancy.status === 'NO VACANCY'
+                              ? 'No Vacancy'
+                              : 'Availability Not Determined'}
+                          </span>
+                          <span className="text-slate-600 text-xs">
+                            {distVacancy.message}
+                          </span>
+                          {distVacancy.count !== null && (
+                            <span className="font-mono font-bold text-[11px] text-[#102a43] bg-white border border-slate-200 px-2 py-0.5 rounded">
+                              {distVacancy.count} post{distVacancy.count === 1 ? '' : 's'}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Taluka Selection Controls (Rendered ONLY for Taluka-wise drive) */}
+                    {!isDistrictWise && (
+                      <div className="pt-2 border-t border-slate-200/70 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-xs font-semibold text-slate-700">
+                            Preferred Talukas in {card.district || 'Selected District'} <span className="text-red-500">*</span>
+                            <span className="text-[11px] font-normal text-slate-500 ml-1.5">
+                              (Equal priority within this district, max {maxTalukasPerDistrict})
+                            </span>
+                          </label>
+                        </div>
+
+                        {!card.district ? (
+                          <div className="px-3.5 py-2.5 bg-slate-100 border border-slate-300 rounded-xl text-xs text-slate-400 select-none">
+                            Select District above to configure preferred talukas
+                          </div>
+                        ) : cardTalukasForDist.length === 0 ? (
+                          <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
+                            No talukas configured or found for {card.district}.
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {(card.talukas && card.talukas.length > 0 ? card.talukas : ['']).map((talVal, talIdx) => {
+                              const talukaError = errors[`pref_tal_${card.id}_${talIdx}`] || (isFirstPriority && talIdx === 0 ? errors['preferredTaluka'] : null);
+                              const talVacancy = (card.district && talVal) ? getLocationVacancyStatus(card.district, talVal, job) : null;
+                              const otherTalukasInCard = (card.talukas || [])
+                                .filter((_, idx) => idx !== talIdx)
+                                .map(t => t.trim().toLowerCase());
+
+                              return (
+                                <div key={talIdx} className="p-3 bg-white border border-slate-200 rounded-xl space-y-2">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-[11px] font-bold text-slate-600">
+                                      Taluka Preference #{talIdx + 1}
+                                    </span>
+                                    {talIdx > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveTalukaFromDistrict(card.id, talIdx)}
+                                        className="text-red-600 hover:text-red-800 text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                                      >
+                                        <Trash2 className="w-3 h-3" /> Remove Taluka
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  <select
+                                    ref={registerRef(`pref_tal_${card.id}_${talIdx}`)}
+                                    value={talVal || ''}
+                                    onChange={e => handleTalukaPreferenceChange(card.id, talIdx, e.target.value)}
+                                    aria-invalid={Boolean(talukaError)}
+                                    className={`w-full px-3 py-2 bg-white border rounded-xl text-xs font-semibold text-[#102a43] focus:outline-none focus:ring-2 transition-all cursor-pointer ${
+                                      talukaError
+                                        ? 'border-red-400 bg-red-50/20 focus:ring-red-200 focus:border-red-500'
+                                        : 'border-slate-300 focus:ring-[#102a43]/20 focus:border-[#102a43]'
+                                    }`}
+                                  >
+                                    <option value="">Select Taluka #{talIdx + 1}</option>
+                                    {cardTalukasForDist.map(t => {
+                                      const isAlreadyChosen = otherTalukasInCard.includes(t.trim().toLowerCase());
+                                      return (
+                                        <option key={t} value={t} disabled={isAlreadyChosen}>
+                                          {t} {isAlreadyChosen ? '(Already Selected in this District)' : ''}
+                                        </option>
+                                      );
+                                    })}
+                                  </select>
+
+                                  {talukaError && (
+                                    <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
+                                      <AlertCircle className="w-3 h-3 shrink-0" />
+                                      {talukaError}
+                                    </p>
+                                  )}
+
+                                  {/* Taluka Vacancy Status Badge */}
+                                  {talVal && talVacancy && (
+                                    <div className="flex items-center gap-2 pt-1 flex-wrap text-xs">
+                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                        talVacancy.status === 'AVAILABLE'
+                                          ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                          : talVacancy.status === 'NO VACANCY'
+                                          ? 'bg-slate-200 text-slate-800 border border-slate-300'
+                                          : 'bg-amber-100 text-amber-900 border border-amber-300'
+                                      }`}>
+                                        {talVacancy.status === 'AVAILABLE'
+                                          ? 'Vacancy Available'
+                                          : talVacancy.status === 'NO VACANCY'
+                                          ? 'No Vacancy'
+                                          : 'Availability Not Determined'}
+                                      </span>
+                                      <span className="text-slate-600 text-[11px]">
+                                        {talVacancy.message}
+                                      </span>
+                                      {talVacancy.count !== null && (
+                                        <span className="font-mono font-bold text-[10px] text-[#102a43] bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">
+                                          {talVacancy.count} post{talVacancy.count === 1 ? '' : 's'}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+
+                            {/* Add Second Taluka Button */}
+                            {(card.talukas?.length || 0) < maxTalukasPerDistrict && card.talukas?.[0] && (
+                              <button
+                                type="button"
+                                onClick={() => handleAddTalukaToDistrict(card.id)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-[#102a43] rounded-lg text-xs font-semibold transition-all cursor-pointer"
+                              >
+                                <Plus className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>+ Add Second Preferred Taluka for {card.district}</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Dynamic Add Preferred District Button */}
+            <div className="pt-2">
+              {preferredDistricts.length < maxDistrictsAllowed ? (
+                <button
+                  type="button"
+                  onClick={handleAddPreferredDistrict}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#102a43] hover:bg-[#243b53] text-white rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs active:scale-98 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4 text-emerald-400" />
+                  <span>+ Add Preferred District (Priority {preferredDistricts.length + 1} of {maxDistrictsAllowed})</span>
+                </button>
+              ) : (
+                <div className="inline-flex items-center gap-2 px-3.5 py-2 bg-slate-100 border border-slate-200 text-slate-500 rounded-xl text-xs font-medium select-none">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Maximum {maxDistrictsAllowed} preferred districts configured</span>
+                </div>
+              )}
+            </div>
+
+            {/* ── CONDITIONAL MOBILITY CONSENT SECTION ── */}
+            <div className="pt-3 border-t border-slate-200">
+              {!requiresMobilityConsent ? (
+                /* All preferred locations match residential location: Consent NOT required */
+                <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-xl flex items-center gap-2.5 text-xs text-emerald-900">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>
+                    <strong>Native Location Match:</strong> All your selected preferred posting locations match your declared residential district(s). No outside mobility consent declaration is required.
+                  </span>
+                </div>
+              ) : (
+                /* Outside locations selected: Mandatory Mobility Consent with Modal */
+                <div className={`p-4 rounded-xl border transition-all space-y-3 ${
+                  errors['mobilityConsent']
+                    ? 'bg-amber-50/80 border-2 border-red-400'
+                    : 'bg-amber-50/40 border-amber-300'
+                }`}>
+                  <div className="flex items-start gap-2.5">
+                    <ShieldCheck className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-xs font-bold text-[#102a43] uppercase tracking-wider">
+                        Mobility &amp; Posting Allocation Consent <span className="text-red-500">*</span>
+                      </h4>
+                      <p className="text-xs text-amber-900 mt-0.5">
+                        You have selected preferred posting locations in <strong>{outsideDistricts.join(', ')}</strong>, which is outside your residential district ({currentAddress.district || 'residential area'}).
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 p-3 bg-white/80 border border-amber-200 rounded-xl">
+                    <input
+                      ref={registerRef('mobilityConsent')}
+                      id="mobilityConsentCheckbox"
+                      type="checkbox"
+                      checked={Boolean(data.mobilityConsent?.consented || data.locationConfirmed)}
+                      onChange={e => {
+                        if (e.target.checked) {
+                          setShowMobilityModal(true);
+                        } else {
+                          onChange('mobilityConsent', undefined);
+                          onChange('locationConfirmed', false);
+                        }
+                      }}
+                      className="w-4 h-4 mt-0.5 rounded text-[#102a43] focus:ring-[#102a43] border-slate-300 cursor-pointer"
+                    />
+                    <div className="flex-1 text-xs text-slate-800 leading-relaxed">
+                      <label htmlFor="mobilityConsentCheckbox" className="font-semibold text-[#102a43] cursor-pointer">
+                        I understand and accept the Mobility &amp; Posting Allocation Declaration for outside locations.
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowMobilityModal(true)}
+                        className="ml-2 text-blue-700 hover:text-blue-900 underline font-semibold text-xs cursor-pointer inline-block"
+                      >
+                        [Read Full Declaration]
+                      </button>
+                      {data.mobilityConsent?.consented && (
+                        <p className="text-[11px] text-emerald-700 font-semibold mt-1 flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          Consent recorded on {new Date(data.mobilityConsent.consentedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {errors['mobilityConsent'] && (
+                    <p className="text-xs text-red-600 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      {errors['mobilityConsent']}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         ) : (
+          /* ── SINGLE PREFERRED LOCATION WORKFLOW (LEGACY / DISABLED) ── */
           <div className="space-y-4">
             <div className={`grid grid-cols-1 ${isDistrictWise ? '' : 'sm:grid-cols-2'} gap-4`}>
               {/* Preferred District */}
               <div>
                 <label htmlFor="preferredDistrict" className="block text-xs font-semibold text-slate-700 mb-1">
-                  Preferred Posting District <span className="text-red-500">*</span>
+                  Preferred District <span className="text-red-500">*</span>
                 </label>
                 <select
                   ref={registerRef('preferredDistrict')}
@@ -1922,7 +2578,7 @@ export default function Step2JobSpecific({
                   <option value="">Select Preferred District</option>
                   {allowedDistricts.map(dist => (
                     <option key={dist} value={dist}>
-                      {dist} {Boolean(currentAddress.district && dist.toLowerCase() === currentAddress.district.toLowerCase()) ? '(Your Residential District)' : ''}
+                      {dist} {Boolean(currentAddress.district && dist.toLowerCase() === currentAddress.district.toLowerCase()) ? '(Residential District)' : ''}
                     </option>
                   ))}
                 </select>
@@ -1933,7 +2589,9 @@ export default function Step2JobSpecific({
                   </p>
                 ) : (
                   <p className="text-[11px] text-[#627d98] mt-1">
-                    Restricted to {allowedDistricts.length} Admin-allocated district{allowedDistricts.length === 1 ? '' : 's'}.
+                    {allowedDistricts.length === MAHARASHTRA_DISTRICTS.length
+                      ? 'Open for all Maharashtra districts. You may select any district.'
+                      : `Configured for ${allowedDistricts.length} eligible district${allowedDistricts.length === 1 ? '' : 's'}. You may select any listed district.`}
                   </p>
                 )}
               </div>
@@ -1942,16 +2600,16 @@ export default function Step2JobSpecific({
               {!isDistrictWise && (
                 <div>
                   <label htmlFor="preferredTaluka" className="block text-xs font-semibold text-slate-700 mb-1">
-                    Preferred Taluka Cluster <span className="text-red-500">*</span>
+                    Preferred Taluka <span className="text-red-500">*</span>
                   </label>
 
                   {!data.preferredDistrict ? (
                     <div className="px-3.5 py-2.5 bg-slate-100 border border-slate-300 rounded-xl text-xs text-slate-400 select-none">
                       Select Preferred District First
                     </div>
-                  ) : !talukaFilterSupported || availableTalukas.length === 0 ? (
-                    <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">
-                      No verified taluka quotas found for {data.preferredDistrict}.
+                  ) : availableTalukas.length === 0 ? (
+                    <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
+                      No talukas found for {data.preferredDistrict}.
                     </div>
                   ) : (
                     <>
@@ -2142,16 +2800,85 @@ export default function Step2JobSpecific({
           onClick={onBack}
           className="inline-flex items-center gap-1.5 px-4 py-2.5 border border-slate-300 text-slate-700 text-xs font-semibold rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
         >
-          <ArrowLeft className="w-4 h-4" /> Back to Master Profile
+          {returnToReview ? '← Return to Review' : <>&larr; Back to Identity &amp; Address</>}
         </button>
         <button
           type="submit"
           className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#16a34a] hover:bg-[#15803d] text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all active:scale-98 cursor-pointer"
         >
-          {hasPublishedQuestionnaire ? 'Continue to Job-Specific Questions' : 'Review Application'}{' '}
+          {returnToReview
+            ? 'Save & Return to Review'
+            : hasPublishedQuestionnaire
+            ? 'Continue to Job-Specific Questions'
+            : 'Review Application'}{' '}
           <ArrowRight className="w-4 h-4" />
         </button>
       </div>
+
+      {/* Mobility & Posting Allocation Modal */}
+      {showMobilityModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-[#102a43]">
+                <ShieldCheck className="w-5 h-5 text-amber-600" />
+                <h3 className="text-sm font-bold uppercase tracking-wider">
+                  Mobility &amp; Posting Allocation Declaration
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMobilityModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl text-xs space-y-2">
+              <span className="font-bold text-amber-900 block">
+                Selected Non-Residential Locations:
+              </span>
+              <p className="text-amber-800">
+                You have chosen to apply for posting in <strong>{outsideDistricts.join(', ')}</strong>, which differs from your declared residential location ({currentAddress.district || 'residential area'}).
+              </p>
+            </div>
+
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed max-h-48 overflow-y-auto">
+              <p className="font-semibold text-[#102a43] mb-1">Declaration Statement:</p>
+              <p>{MOBILITY_CONSENT_TEXT}</p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowMobilityModal(false)}
+                className="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onChange('mobilityConsent', {
+                    consented: true,
+                    consentedAt: new Date().toISOString(),
+                    outsideDistricts,
+                    consentText: MOBILITY_CONSENT_TEXT,
+                  });
+                  onChange('locationConfirmed', true);
+                  clearFieldError('mobilityConsent');
+                  clearFieldError('locationConfirmed');
+                  setShowMobilityModal(false);
+                }}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                I Agree &amp; Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   );
 }

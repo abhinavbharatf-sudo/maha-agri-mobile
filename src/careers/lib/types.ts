@@ -150,10 +150,29 @@ export interface DistrictAllocation {
   calculated_district_total?: number;
 }
 
+export interface CityLocationAllocation {
+  id: string;
+  cityName: string;
+  parentDistrict: string;
+  vacancies: number;
+  showCityPublicly: boolean;
+  publicLocationString?: string;
+  internalNotes?: string;
+}
+
+export interface MultipleLocationsConfig {
+  enabled: boolean;
+  maxDistricts: 1 | 2 | 3 | number; // 1, 2, or 3 (default: 3)
+  maxTalukasPerDistrict: 1 | 2 | number; // default: 2, max: 2
+}
+
 export interface VacancyAllocationsConfig {
   vacancy_level?: VacancyLevel | null;
   posting_level?: PostingLevel | null;
   location_questions?: JobLocationQuestion[] | null;
+  multiple_locations_config?: MultipleLocationsConfig | null;
+  city_selection_mode?: 'single' | 'multiple' | null;
+  cities?: CityLocationAllocation[] | null;
   default_per_taluka?: number | null;
   default_per_district?: number | null;
   district_allocations?: Record<string, DistrictAllocation>;
@@ -283,6 +302,7 @@ export interface RmsJobPosting {
   show_city_publicly?: boolean | null;
   city_name?: string | null;
   vacancy_allocations?: VacancyAllocationsConfig | null;
+  multiple_locations_config?: MultipleLocationsConfig | null;
   questionnaire?: JobQuestionnaire | null;
   auto_calculate_vacancies?: boolean | null;
   created_by: string | null;

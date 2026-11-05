@@ -10,7 +10,7 @@ import { sendApplicationSubmittedTemplate } from '../../services/whatsappService
 import { createApplication, upsertCandidateProfile } from '../lib/api';
 import { isDummyOtpMode } from '../lib/dummyOtp';
 import { maskAadhaar } from './utils/verhoeff';
-import type { MasterProfileFormData, JobSpecificFormData, PortalStep } from './types';
+import type { MasterProfileFormData, JobSpecificFormData, PortalStep, FinalDeclarationData } from './types';
 import type { RmsJobPosting } from '../lib/types';
 
 export interface SubmitCandidateApplicationParams {
@@ -19,6 +19,7 @@ export interface SubmitCandidateApplicationParams {
   masterProfile: MasterProfileFormData;
   jobSpecific: JobSpecificFormData;
   declarationText: string;
+  declarationData?: FinalDeclarationData;
 }
 
 export interface SubmissionResult {
@@ -43,11 +44,38 @@ export async function submitCandidateApplication({
   masterProfile,
   jobSpecific,
   declarationText,
+  declarationData,
 }: SubmitCandidateApplicationParams): Promise<SubmissionResult> {
-  const declarationPayload = {
+  const nowIso = new Date().toISOString();
+  if (declarationData) {
+    if (!declarationData.statutory_declaration_accepted || !declarationData.final_acknowledgement_accepted) {
+      return {
+        success: false,
+        applicationId: '',
+        applicationNumber: '',
+        status: '',
+        submittedAt: null,
+        alreadySubmitted: false,
+        error: 'Both Statutory Legal Undertaking & Declaration and Final Review Acknowledgement must be explicitly accepted before submission.',
+      };
+    }
+  }
+
+  const declarationPayload: FinalDeclarationData = declarationData || {
+    statutory_declaration_accepted: true,
+    statutory_declaration_text: declarationText,
+    statutory_declaration_accepted_at: nowIso,
+    statutory_declaration_version: (job as any)?.declaration_version || 'v1.0',
+
+    final_acknowledgement_accepted: true,
+    final_acknowledgement_text:
+      'I have carefully reviewed all information in this application. I understand that after final submission, I cannot edit my application, and duplicate applications for the same position will not be accepted.',
+    final_acknowledgement_accepted_at: nowIso,
+    final_acknowledgement_version: 'v1.0',
+
     acknowledged: true,
     declaration_text: declarationText,
-    acknowledged_at: new Date().toISOString(),
+    acknowledged_at: nowIso,
   };
 
   const isFree = Number(job.application_fee_amount ?? 0) === 0;
@@ -166,12 +194,28 @@ export async function submitCandidateApplication({
       status: targetStatus,
       application_data: {
         preferred_taluka: jobSpecific.preferredTaluka || null,
+        preferred_locations: jobSpecific.preferredDistricts || null,
+        mobility_consent: jobSpecific.mobilityConsent || null,
         master_profile: masterProfile,
         job_specific: jobSpecific,
         declaration: declarationPayload,
+        statutory_declaration: {
+          accepted: declarationPayload.statutory_declaration_accepted,
+          text: declarationPayload.statutory_declaration_text,
+          version: declarationPayload.statutory_declaration_version,
+          accepted_at: declarationPayload.statutory_declaration_accepted_at,
+        },
+        final_acknowledgement: {
+          accepted: declarationPayload.final_acknowledgement_accepted,
+          text: declarationPayload.final_acknowledgement_text,
+          version: declarationPayload.final_acknowledgement_version,
+          accepted_at: declarationPayload.final_acknowledgement_accepted_at,
+        },
         submission_snapshot: {
           candidate: masterProfile,
           job_specific: jobSpecific,
+          preferred_locations: jobSpecific.preferredDistricts || null,
+          mobility_consent: jobSpecific.mobilityConsent || null,
           job: {
             id: job.id,
             title: job.title,
@@ -179,6 +223,18 @@ export async function submitCandidateApplication({
             application_fee_amount: Number(job.application_fee_amount ?? 0),
           },
           declaration: declarationPayload,
+          statutory_declaration: {
+            accepted: declarationPayload.statutory_declaration_accepted,
+            text: declarationPayload.statutory_declaration_text,
+            version: declarationPayload.statutory_declaration_version,
+            accepted_at: declarationPayload.statutory_declaration_accepted_at,
+          },
+          final_acknowledgement: {
+            accepted: declarationPayload.final_acknowledgement_accepted,
+            text: declarationPayload.final_acknowledgement_text,
+            version: declarationPayload.final_acknowledgement_version,
+            accepted_at: declarationPayload.final_acknowledgement_accepted_at,
+          },
         },
       },
     });
@@ -328,20 +384,22 @@ export async function saveCandidateDraft({
   try {
     let resolvedCandidateId = candidateId;
 
-    // 1. Ensure master profile is persisted
-    if (masterProfile.fullName && masterProfile.mobile) {
+    // 1. Ensure master profile is persisted with a valid rms_candidate_profiles record
+    const fallbackMobile = typeof window !== 'undefined' ? localStorage.getItem('maha_verified_mobile') : null;
+    const targetMobile = masterProfile.mobile || fallbackMobile;
+    if (masterProfile.fullName || targetMobile) {
       const { data: profData } = await upsertCandidateProfile({
         user_id: userId,
-        full_name: masterProfile.fullName,
-        date_of_birth: masterProfile.dateOfBirth,
-        gender: masterProfile.gender as any,
-        mobile: masterProfile.mobile,
+        full_name: masterProfile.fullName || 'Candidate',
+        date_of_birth: masterProfile.dateOfBirth || null,
+        gender: (masterProfile.gender as any) || null,
+        mobile: targetMobile || '0000000000',
         emergency_mobile: masterProfile.alternateMobile || null,
         email: masterProfile.email || null,
-        district: masterProfile.homeDistrict,
-        taluka: masterProfile.homeTaluka,
-        address_line1: masterProfile.addressLine1,
-        pincode: masterProfile.pincode,
+        district: masterProfile.homeDistrict || null,
+        taluka: masterProfile.homeTaluka || null,
+        address_line1: masterProfile.addressLine1 || null,
+        pincode: masterProfile.pincode || null,
       });
       if (profData?.id) {
         resolvedCandidateId = profData.id;
@@ -370,13 +428,22 @@ export async function saveCandidateDraft({
     // Cache locally as immediate recovery safeguard
     if (typeof window !== 'undefined') {
       try {
-        const key = `maha_candidate_draft_${job.id}_${resolvedCandidateId}`;
-        sessionStorage.setItem(key, JSON.stringify({
+        const payloadStr = JSON.stringify({
+          job_id: job.id,
+          job_title: job.title,
+          job_location: job.location || job.city_name || 'Maharashtra',
           master_profile: safeMasterProfile,
           job_specific: jobSpecific,
           last_active_step: currentStep,
           last_saved_at: nowIso,
-        }));
+          candidate_id: resolvedCandidateId,
+        });
+        sessionStorage.setItem(`maha_candidate_draft_${job.id}_${resolvedCandidateId}`, payloadStr);
+        localStorage.setItem(`maha_candidate_draft_${job.id}_${resolvedCandidateId}`, payloadStr);
+        if (userId !== resolvedCandidateId) {
+          sessionStorage.setItem(`maha_candidate_draft_${job.id}_${userId}`, payloadStr);
+          localStorage.setItem(`maha_candidate_draft_${job.id}_${userId}`, payloadStr);
+        }
       } catch {}
     }
 
