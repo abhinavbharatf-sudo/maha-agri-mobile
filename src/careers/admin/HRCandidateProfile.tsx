@@ -19,6 +19,8 @@ import type { ApplicationStatus, RmsCandidateDocument } from '../lib/types';
 import ApplicationStatusBadge from '../components/ApplicationStatusBadge';
 import { APPLICATION_STATUS_CONFIG } from '../lib/constants';
 import { useAuth } from '../../lib/auth/AuthContext';
+import InterviewEvaluationModal from './components/InterviewEvaluationModal';
+import FinalSelectionModal from './components/FinalSelectionModal';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface Props {
@@ -94,6 +96,10 @@ export default function HRCandidateProfile({ applicationId, onClose, onStatusCha
   const [confirmAction, setConfirmAction] = useState<'archive' | 'restore' | 'trash' | 'restore_trash' | 'delete' | 'purge_candidate' | null>(null);
   const [purgeConfirmationInput, setPurgeConfirmationInput] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Evaluation & Final Selection modals
+  const [showEvalModal, setShowEvalModal] = useState(false);
+  const [showSelectionModal, setShowSelectionModal] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -385,7 +391,23 @@ export default function HRCandidateProfile({ applicationId, onClose, onStatusCha
           <div className="px-5 py-3 border-b border-primary-100 bg-white flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-bold text-primary-500 mr-1">Actions:</span>
-              {HR_ACTIONS.filter(a => a.status !== app.status).slice(0, 5).map(action => (
+              <button
+                type="button"
+                onClick={() => setShowEvalModal(true)}
+                className="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full border border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-all shadow-sm"
+              >
+                <Award className="w-3.5 h-3.5" /> Evaluate (100 Marks)
+              </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setShowSelectionModal(true)}
+                  className="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full border border-emerald-300 text-emerald-800 bg-emerald-50 hover:bg-emerald-100 transition-all shadow-sm"
+                >
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Final Selection Decision
+                </button>
+              )}
+              {HR_ACTIONS.filter(a => a.status !== app.status).slice(0, 4).map(action => (
                 <button key={action.status}
                   disabled={actionLoading}
                   onClick={() => handleStatusChange(action.status)}
@@ -1110,6 +1132,36 @@ export default function HRCandidateProfile({ applicationId, onClose, onStatusCha
             </div>
           )}
         </AnimatePresence>
+
+        {/* 100-Mark Interview Evaluation Modal */}
+        {app && (
+          <InterviewEvaluationModal
+            isOpen={showEvalModal}
+            applicationId={app.id}
+            candidateName={app.candidate?.full_name || 'Candidate'}
+            jobTitle={app.job_posting?.title || 'Job Position'}
+            onClose={() => setShowEvalModal(false)}
+            onSubmitted={() => {
+              load();
+              if (onStatusChanged) onStatusChanged();
+            }}
+          />
+        )}
+
+        {/* Final Selection Decision Modal */}
+        {app && (
+          <FinalSelectionModal
+            isOpen={showSelectionModal}
+            applicationId={app.id}
+            candidateName={app.candidate?.full_name || 'Candidate'}
+            jobTitle={app.job_posting?.title || 'Job Position'}
+            onClose={() => setShowSelectionModal(false)}
+            onDecisionRecorded={() => {
+              load();
+              if (onStatusChanged) onStatusChanged();
+            }}
+          />
+        )}
       </motion.div>
     </>
   );

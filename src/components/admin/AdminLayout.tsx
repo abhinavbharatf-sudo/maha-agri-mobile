@@ -35,7 +35,7 @@ const navItems = [
   { to: '/admin/settings', label: 'Settings', icon: Settings, end: false },
 ];
 
-function AdminShell() {
+function AdminShell({ children }: { children?: React.ReactNode }) {
   const { profile, roleKey, signOut } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -78,16 +78,28 @@ function AdminShell() {
           ))}
         </nav>
         <div className="border-t border-primary-800 p-3">
-          <div className="px-3 py-2 mb-2">
-            <div className="text-xs text-primary-400 truncate">{profile?.email ?? 'Signed in'}</div>
-          </div>
-          <button
-            onClick={handleSignOut}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-primary-300 hover:bg-primary-800/50 hover:text-white transition-colors w-full"
-          >
-            <LogOut className="w-4.5 h-4.5" />
-            Sign out
-          </button>
+          {profile ? (
+            <>
+              <div className="px-3 py-2 mb-2">
+                <div className="text-xs text-primary-400 truncate">{profile.email}</div>
+              </div>
+              <button
+                onClick={handleSignOut}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-primary-300 hover:bg-primary-800/50 hover:text-white transition-colors w-full"
+              >
+                <LogOut className="w-4.5 h-4.5" />
+                Sign out
+              </button>
+            </>
+          ) : (
+            <Link
+              to="/login"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-amber-300 hover:bg-primary-800/50 hover:text-white transition-colors w-full"
+            >
+              <LogOut className="w-4.5 h-4.5 rotate-180" />
+              Sign In
+            </Link>
+          )}
         </div>
       </aside>
 
@@ -130,9 +142,9 @@ function AdminShell() {
           </div>
         </header>
 
-        {/* Content — modules render here via Outlet */}
+        {/* Content — modules render here via children or Outlet */}
         <main className="flex-1 p-4 lg:p-8">
-          <Outlet />
+          {children || <Outlet />}
         </main>
       </div>
 
@@ -149,10 +161,10 @@ function AdminShell() {
   );
 }
 
-export default function AdminLayout() {
+export default function AdminLayout({ children }: { children?: React.ReactNode }) {
   return (
     <RequireAuth>
-      <AdminShell />
+      <AdminShell>{children}</AdminShell>
     </RequireAuth>
   );
 }

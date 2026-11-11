@@ -83,10 +83,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true;
 
     const checkFallbackSession = () => {
-      let stored = localStorage.getItem('maha_agri_auth_session');
-      
-      // Auto-initialize default Super Admin session if none exists
-      if (!stored) {
+      let stored: string | null = null;
+      try {
+        stored = localStorage.getItem('maha_agri_auth_session');
+      } catch {}
+
+      const isLiveSupabaseEnv = Boolean(import.meta.env.VITE_SUPABASE_URL);
+
+      // Clean up legacy mock sessions in live Supabase environment
+      if (stored && isLiveSupabaseEnv) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (parsed?.token && (parsed.token === 'demo-token' || parsed.token === 'demo-jwt-access-token')) {
+            localStorage.removeItem('maha_agri_auth_session');
+            stored = null;
+          }
+        } catch {
+          localStorage.removeItem('maha_agri_auth_session');
+          stored = null;
+        }
+      }
+
+      // Auto-initialize demo session ONLY in offline development when no Supabase URL is set
+      if (!stored && !isLiveSupabaseEnv) {
         const defaultSession = {
           sessionId: 'sess_default_super_admin',
           token: 'demo-token',
@@ -95,7 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             employee_code: 'MA-SUP-0001',
             mobile: '9876543210',
             full_name: 'Super Admin Officer',
-            email: 'admin@abhinavbharat.org',
+            email: 'super_admin@abhinavbharat.org',
             status: 'active',
             first_login: false,
             created_at: new Date().toISOString(),
@@ -115,7 +134,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             hierarchy_level: 1,
           }
         };
-        localStorage.setItem('maha_agri_auth_session', JSON.stringify(defaultSession));
+        try {
+          localStorage.setItem('maha_agri_auth_session', JSON.stringify(defaultSession));
+        } catch {}
         stored = JSON.stringify(defaultSession);
       }
 
@@ -128,7 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             
             const mockUser = {
               id: u.id || 'demo-user-id',
-              email: u.email || 'admin@abhinavbharat.org',
+              email: u.email || 'super_admin@abhinavbharat.org',
               user_metadata: { full_name: u.full_name || 'Super Admin' }
             } as unknown as User;
 
@@ -142,20 +163,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setSession(mockSession);
             setProfile({
               id: u.id || 'demo-user-id',
-              email: u.email || 'admin@abhinavbharat.org',
+              email: u.email || 'super_admin@abhinavbharat.org',
               full_name: u.full_name || 'Super Admin',
               created_at: new Date().toISOString()
             } as Profile);
-            setRoleKey('super_admin');
+            setRoleKey((role as RoleKey) || 'super_admin');
             setPermissions(new Set(['all', 'admin', 'hr', 'crm', 'super_admin']));
-
-            // If using default super admin account, sync Supabase auth session so PostgREST RLS passes
-            if (u.email === 'admin@abhinavbharat.org') {
-              supabase.auth.signInWithPassword({
-                email: 'admin@abhinavbharat.org',
-                password: 'Admin@123'
-              }).catch((e) => console.warn('[auth] Supabase background auth sync warning:', e));
-            }
 
             return true;
           }
@@ -239,7 +252,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadProfileAndPermissions]);
 
   const signOut = useCallback(async () => {
+    try {
+      localStorage.removeItem('maha_agri_auth_session');
+    } catch {}
     await supabase.auth.signOut();
+    setSession(null);
     setProfile(null);
     setRoleKey(null);
     setPermissions(new Set());

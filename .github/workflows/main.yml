@@ -3,22 +3,124 @@ name: Auto Sync and Deploy to abhinavbharatfoundation-v5
 on:
   push:
     branches:
+      - master
       - main
+  workflow_dispatch:
 
 jobs:
-  sync:
+  selective-sync:
+    name: Selective Web Sync & Validation
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Bolt Repository
+      - name: Checkout Source Monorepo (maha-agri-mobile)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          path: source
 
-      - name: Push to abhinavbharatfoundation-v5 Repository
-        run: |
-          git remote add abhinavbharatfoundation-v5 https://${{ secrets.SYNC_TOKEN }}@github.com/abhinavbharatf-sudo/abhinavbharatfoundation-v5.git
-          git push abhinavbharatfoundation-v5 main:main --force
+      - name: Checkout Target Deployment Repository (abhinavbharatfoundation-v5)
+        uses: actions/checkout@v4
+        with:
+          repository: abhinavbharatf-sudo/abhinavbharatfoundation-v5
+          token: ${{ secrets.SYNC_TOKEN }}
+          ref: main
+          path: target
+          fetch-depth: 1
 
-      - name: Trigger Live Deploy Workflow
+      - name: Setup Node.js Runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: source/package-lock.json
+
+      - name: Execute Safe Selective Web Sync
         run: |
-          curl -X POST -H "Authorization: token ${{ secrets.SYNC_TOKEN }}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/abhinavbharatf-sudo/abhinavbharatfoundation-v5/actions/workflows/deploy.yml/dispatches -d '{"ref":"main"}'
+          echo "========================================================"
+          echo "STARTING SELECTIVE WEB APPLICATION SYNCHRONIZATION"
+          echo "========================================================"
+          cd target
+
+          # 1. Preserve target's existing deployment workflow
+          mkdir -p /tmp/deploy_backup
+          if [ -f .github/workflows/deploy.yml ]; then
+            cp .github/workflows/deploy.yml /tmp/deploy_backup/deploy.yml
+            echo "Backed up target .github/workflows/deploy.yml"
+          else
+            echo "WARNING: target .github/workflows/deploy.yml not found!"
+          fi
+
+          # 2. Clean previous web source and stray artifacts
+          echo "Purging stale web assets and legacy stray files..."
+          rm -rf src public .bolt "New Volume (E).lnk" abhinavbharatfoundation-main
+
+          # 3. Synchronize pure web application files from source
+          echo "Copying web frontend application files from source..."
+          cp -r ../source/src ./
+          cp -r ../source/public ./
+          cp ../source/index.html ./
+          cp ../source/package.json ./
+          cp ../source/package-lock.json ./
+          cp ../source/vite.config.ts ./
+          cp ../source/tsconfig.json ./
+          cp ../source/tsconfig.app.json ./
+          cp ../source/tsconfig.node.json ./
+          cp ../source/tailwind.config.js ./
+          cp ../source/postcss.config.js ./
+          cp ../source/eslint.config.js ./
+          cp ../source/.gitignore ./
+
+          # 4. Strictly exclude monorepo native, backend, database, and infra directories
+          echo "Enforcing strict exclusion of monorepo non-web components..."
+          rm -rf backend mobile database supabase kubernetes k8s scripts docs
+
+          # 5. Restore target deployment workflow and ensure source sync workflow is omitted
+          mkdir -p .github/workflows
+          if [ -f /tmp/deploy_backup/deploy.yml ]; then
+            cp /tmp/deploy_backup/deploy.yml .github/workflows/deploy.yml
+          fi
+          rm -f .github/workflows/main.yml
+
+          echo "Selective web file sync complete."
+
+      - name: Validate Target Production Build
+        run: |
+          echo "========================================================"
+          echo "VALIDATING TARGET PRODUCTION BUILD VIA NPM CI"
+          echo "========================================================"
+          cd target
+          npm ci
+          npm run build
+          if [ ! -f dist/index.html ]; then
+            echo "ERROR: Target build failed - dist/index.html missing!"
+            exit 1
+          fi
+          echo "Target build verification SUCCESSFUL!"
+
+      - name: Commit and Push Changes to abhinavbharatfoundation-v5
+        run: |
+          echo "========================================================"
+          echo "COMMITTING AND PUSHING TO TARGET REPOSITORY (MAIN)"
+          echo "========================================================"
+          cd target
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No changes detected. Target repository is already up to date."
+          else
+            git add -A
+            SOURCE_COMMIT=$(cd ../source && git rev-parse --short HEAD)
+            git commit -m "sync(web): selective web platform deployment from maha-agri-mobile ($SOURCE_COMMIT)"
+            git push origin main
+            echo "Successfully pushed selective web update to abhinavbharatfoundation-v5 (main)."
+          fi
+
+      - name: Trigger Live FTP Deployment Dispatch
+        continue-on-error: true
+        run: |
+          echo "Dispatching deploy.yml workflow trigger as fail-safe..."
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.SYNC_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/abhinavbharatf-sudo/abhinavbharatfoundation-v5/actions/workflows/deploy.yml/dispatches \
+            -d '{"ref":"main"}' || true

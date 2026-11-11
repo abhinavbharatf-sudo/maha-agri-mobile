@@ -3,6 +3,7 @@
 // ============================================================
 
 import { supabase, candidateSupabase } from '../../lib/supabase/client';
+import env from '../../lib/config/env';
 import { sendInterviewConfirmedTemplate } from '../../services/whatsappService';
 import { syncProfileToLead } from '../../crm/lib/api';
 import { isDummyOtpMode } from './dummyOtp';
@@ -35,6 +36,16 @@ import type {
   RmsJobFaq,
   RmsJobAnalytics,
   RmsJobStats,
+  RmsInterviewer,
+  RmsInterviewerSchedule,
+  RmsInterviewerOverride,
+  RmsRescheduleRequest,
+  RmsInterviewEvaluation,
+  RmsOrganizationSignature,
+  RmsAppointmentTemplate,
+  StaffUser,
+  StaffDirectoryFilter,
+  InterviewerAuditEntry,
 } from './types';
 
 // ===== Candidate Profile =====
@@ -1470,13 +1481,13 @@ export async function getApplicationForHR(id: string) {
 export async function listInterviewSlotsForHR(filters?: { job_posting_id?: string; drive_id?: string }) {
   let q = supabase
     .from('rms_interview_slots' as never)
-    .select(`*, job_posting:rms_job_postings(id, title), bookings:rms_interview_bookings(id, attendance_status, application:rms_applications(candidate:rms_candidate_profiles(full_name, mobile)))`)
+    .select(`*, job_posting:rms_job_postings(id, title), bookings:rms_interview_bookings(id, attendance_status, google_meet_link, reschedule_count, no_show_reattempt_approved, application:rms_applications(id, candidate:rms_candidate_profiles(full_name, mobile), job_posting:rms_job_postings(title)))`)
     .order('slot_date', { ascending: true })
     .order('slot_time', { ascending: true });
   if (filters?.job_posting_id) q = q.eq('job_posting_id', filters.job_posting_id);
   if (filters?.drive_id) q = q.eq('drive_id', filters.drive_id);
   const { data, error } = await q;
-  return { data: (data ?? []) as (RmsInterviewSlot & { job_posting?: Pick<RmsJobPosting, 'id' | 'title'>; bookings?: Array<{ id: string; attendance_status: string; application?: { candidate?: { full_name: string; mobile: string } } }> })[], error };
+  return { data: (data ?? []) as any[], error };
 }
 
 export async function createInterviewSlot(slot: Partial<RmsInterviewSlot> & { slot_date: string; slot_time: string }) {
@@ -1499,71 +1510,54 @@ export async function updateInterviewSlot(id: string, updates: Partial<RmsInterv
 }
 
 export async function bookApplicationToSlot(applicationId: string, slotId: string) {
-  // 1. Validate payment boundary: paid jobs must be payment_successful before booking
-  const { data: appData, error: appErr } = await supabase
-    .from('rms_applications' as never)
-    .select(`
-      id, status,
-      job_posting:rms_job_postings(id, title, application_fee_amount),
-      candidate:rms_candidate_profiles(full_name, mobile)
-    `)
-    .eq('id', applicationId)
-    .single();
+  // 1. Atomic Concurrency-Safe Booking via PostgreSQL RPC with row-level locking
+  const { data: rpcRes, error: rpcErr } = await (supabase.rpc as any)('rms_book_interview_slot', {
+    p_application_id: applicationId,
+    p_slot_id: slotId,
+  });
 
-  if (appErr || !appData) {
-    return { data: null, error: { message: 'Application not found.', code: 'APP_NOT_FOUND' } as any };
-  }
-
-  const app = appData as any;
-  const fee = Number(app.job_posting?.application_fee_amount ?? 0);
-  if (fee > 0 && app.status !== 'payment_successful') {
+  if (rpcErr) {
+    console.error('[bookApplicationToSlot] RPC execution failed:', rpcErr);
     return {
       data: null,
       error: {
-        message: 'This position requires payment of the application fee before booking an interview slot.',
-        code: 'PAYMENT_REQUIRED',
+        message: rpcErr.message || 'Unable to complete interview slot booking. Please try again.',
+        code: rpcErr.code || 'BOOKING_RPC_FAILED',
       } as any,
     };
   }
 
-  // 2. Perform booking
-  const { data, error } = await supabase
-    .from('rms_interview_bookings' as never)
-    .upsert([{ application_id: applicationId, slot_id: slotId, attendance_status: 'booked' }], { onConflict: 'application_id' })
-    .select(`*, slot:rms_interview_slots(*)`)
-    .single();
-
-  if (error) {
-    return { data: null, error };
+  if (!rpcRes || rpcRes.success === false) {
+    return {
+      data: null,
+      error: {
+        message: rpcRes?.message || 'Interview slot booking was unsuccessful.',
+        code: rpcRes?.code || 'SLOT_FULL',
+      } as any,
+    };
   }
 
-  // 3. Update application status to interview_scheduled
-  await updateApplicationStatus(applicationId, 'interview_scheduled');
+  const bookingData = {
+    ...rpcRes.booking,
+    slot: rpcRes.slot,
+  };
 
-  // 4. Update slot capacity / status if capacity reached
+  // 2. Dispatch Interview Confirmation WhatsApp Template (non-blocking)
   try {
-    const { count } = await supabase
-      .from('rms_interview_bookings' as never)
-      .select('id', { count: 'exact', head: true })
-      .eq('slot_id', slotId);
+    const { data: appData } = await supabase
+      .from('rms_applications' as never)
+      .select(`
+        job_posting:rms_job_postings(title),
+        candidate:rms_candidate_profiles(full_name, mobile)
+      `)
+      .eq('id', applicationId)
+      .single();
 
-    const slotCapacity = (data as any)?.slot?.capacity ?? 1;
-    if (count != null && count >= slotCapacity) {
-      await supabase
-        .from('rms_interview_slots' as never)
-        .update({ status: 'full' } as any)
-        .eq('id', slotId);
-    }
-  } catch (capErr) {
-    console.error('[bookApplicationToSlot] Slot capacity check error:', capErr);
-  }
-
-  // 5. Dispatch Interview Confirmation WhatsApp Template
-  try {
-    const candidateMobile = app.candidate?.mobile;
-    const candidateName = app.candidate?.full_name || 'Candidate';
-    const jobTitle = app.job_posting?.title || 'Job';
-    const slot = (data as any)?.slot;
+    const app = appData as any;
+    const candidateMobile = app?.candidate?.mobile;
+    const candidateName = app?.candidate?.full_name || 'Candidate';
+    const jobTitle = app?.job_posting?.title || 'Job';
+    const slot = rpcRes.slot;
     const slotDate = slot?.slot_date || '';
     const slotTime = slot?.slot_time?.slice(0, 5) || '';
     const venueOrLink = slot?.location_or_link || (slot?.mode === 'online' ? 'Online Video Call' : 'Designated Centre');
@@ -1582,7 +1576,7 @@ export async function bookApplicationToSlot(applicationId: string, slotId: strin
     console.error('[bookApplicationToSlot] Failed to dispatch interview confirmation WhatsApp:', notifErr);
   }
 
-  return { data: data as RmsInterviewBooking | null, error: null };
+  return { data: bookingData as RmsInterviewBooking, error: null };
 }
 
 export async function updateInterviewAttendance(bookingId: string, status: 'booked' | 'present' | 'absent' | 'rescheduled') {
@@ -2298,4 +2292,886 @@ export async function fetchCandidateCRMTimeline(candidateId: string) {
   if (error) throw error;
   return { data, error };
 }
+
+// ============================================================
+// Interview Management, Selection & Initial Onboarding API
+// ============================================================
+
+// ── 0. Staff Directory & Management API ───────────────────────
+
+export function getStaffEnvironmentInfo() {
+  const isLive = env.isLiveDatabase;
+  return {
+    projectRef: env.projectRef,
+    isStaging: env.isStagingDatabase,
+    isStagingLive: isLive,
+    isProduction: env.isProductionDatabase,
+    label: env.isProductionDatabase
+      ? 'PRODUCTION – LIVE DATABASE'
+      : env.isStagingDatabase
+      ? 'STAGING – LIVE DATABASE'
+      : 'PREVIEW – IN-MEMORY / NON-PERSISTENT',
+    writesAllowed: isLive,
+  };
+}
+
+// In-Memory Fallback Store for Preview / Prototype Environments (e.g. MDM Preview without Staging config)
+const DEFAULT_FALLBACK_STAFF: StaffUser[] = [
+  {
+    id: 'preview-staff-01',
+    email: 'ramesh.patil@maha-agri.gov.in',
+    full_name: 'Ramesh Patil (Preview)',
+    designation: 'Admin',
+    department: 'Administration',
+    role_key: 'super_admin',
+    role_name: 'Super Admin',
+    is_active: true,
+    created_at: '2026-01-15T09:00:00Z',
+    is_interviewer: true,
+    interviewer_id: 'preview-intv-01',
+    interviewer_is_active: true,
+    interviewer_meet_link: 'https://meet.google.com/ramesh-admin-panel',
+    authorized_at: '2026-02-01T10:00:00Z',
+    authorized_by: 'preview-staff-01',
+    authorized_by_name: 'System Admin',
+  },
+  {
+    id: 'preview-staff-02',
+    email: 'aarav.patil@maha-agri.gov.in',
+    full_name: 'Aarav Patil (Preview)',
+    designation: 'HR',
+    department: 'Human Resources',
+    role_key: 'admin',
+    role_name: 'Admin',
+    is_active: true,
+    created_at: '2026-01-20T10:00:00Z',
+    is_interviewer: true,
+    interviewer_id: 'preview-intv-02',
+    interviewer_is_active: true,
+    interviewer_meet_link: 'https://meet.google.com/aarav-hr-lead',
+    authorized_at: '2026-02-05T11:00:00Z',
+    authorized_by: 'preview-staff-01',
+    authorized_by_name: 'Ramesh Patil',
+  },
+  {
+    id: 'preview-staff-03',
+    email: 'sneha.deshmukh@maha-agri.gov.in',
+    full_name: 'Sneha Deshmukh (Preview)',
+    designation: 'CSM',
+    department: 'Customer Support',
+    role_key: 'staff',
+    role_name: 'Staff',
+    is_active: true,
+    created_at: '2026-02-01T08:30:00Z',
+    is_interviewer: true,
+    interviewer_id: 'preview-intv-03',
+    interviewer_is_active: true,
+    interviewer_meet_link: 'https://meet.google.com/sneha-csm-panel',
+    authorized_at: '2026-02-10T14:00:00Z',
+    authorized_by: 'preview-staff-01',
+    authorized_by_name: 'Ramesh Patil',
+  },
+  {
+    id: 'preview-staff-04',
+    email: 'vikram.shinde@maha-agri.gov.in',
+    full_name: 'Vikram Shinde (Preview)',
+    designation: 'Telecaller',
+    department: 'Agriculture Operations',
+    role_key: 'staff',
+    role_name: 'Staff',
+    is_active: true,
+    created_at: '2026-02-15T09:15:00Z',
+    is_interviewer: false,
+    interviewer_id: null,
+    interviewer_is_active: false,
+    interviewer_meet_link: null,
+    authorized_at: null,
+    authorized_by: null,
+    authorized_by_name: null,
+  },
+  {
+    id: 'preview-staff-05',
+    email: 'pooja.kulkarni@maha-agri.gov.in',
+    full_name: 'Pooja Kulkarni (Preview)',
+    designation: 'Independent Interviewer',
+    department: 'Recruitment Operations',
+    role_key: 'staff',
+    role_name: 'Staff',
+    is_active: true,
+    created_at: '2026-03-01T11:00:00Z',
+    is_interviewer: true,
+    interviewer_id: 'preview-intv-05',
+    interviewer_is_active: true,
+    interviewer_meet_link: 'https://meet.google.com/pooja-independent-expert',
+    authorized_at: '2026-03-05T12:00:00Z',
+    authorized_by: 'preview-staff-02',
+    authorized_by_name: 'Aarav Patil',
+  },
+  {
+    id: 'preview-staff-06',
+    email: 'sunil.gaikwad@maha-agri.gov.in',
+    full_name: 'Sunil Gaikwad (Preview)',
+    designation: 'Other Staff',
+    department: 'Field Operations',
+    role_key: 'staff',
+    role_name: 'Staff',
+    is_active: false,
+    created_at: '2026-03-10T15:30:00Z',
+    is_interviewer: false,
+    interviewer_id: null,
+    interviewer_is_active: false,
+    interviewer_meet_link: null,
+    authorized_at: null,
+    authorized_by: null,
+    authorized_by_name: null,
+  },
+];
+
+function getFallbackStaffDirectory(filter: StaffDirectoryFilter = {}): StaffUser[] {
+  let list = [...DEFAULT_FALLBACK_STAFF];
+
+  if (filter.search?.trim()) {
+    const q = filter.search.trim().toLowerCase();
+    list = list.filter(s =>
+      s.full_name.toLowerCase().includes(q) ||
+      s.email.toLowerCase().includes(q) ||
+      s.designation.toLowerCase().includes(q)
+    );
+  }
+
+  if (filter.department && filter.department !== 'all') {
+    list = list.filter(s => s.department === filter.department);
+  }
+
+  if (filter.designation && filter.designation !== 'all') {
+    list = list.filter(s => s.designation === filter.designation);
+  }
+
+  if (filter.is_active !== undefined) {
+    list = list.filter(s => s.is_active === filter.is_active);
+  } else if (filter.status === 'active') {
+    list = list.filter(s => s.is_active === true);
+  } else if (filter.status === 'inactive') {
+    list = list.filter(s => s.is_active === false);
+  }
+
+  if (filter.offset) {
+    list = list.slice(filter.offset);
+  }
+  if (filter.limit) {
+    list = list.slice(0, filter.limit);
+  }
+
+  return list;
+}
+
+export async function listStaffDirectory(
+  filter: StaffDirectoryFilter = {}
+): Promise<{ data: StaffUser[]; error: string | null }> {
+  // If not connected to verified Staging or Production project, use preview repository with non-persistent status
+  if (!env.isLiveDatabase) {
+    return { data: getFallbackStaffDirectory(filter), error: null };
+  }
+
+  try {
+    const isActiveBool = filter.is_active !== undefined
+      ? filter.is_active
+      : filter.status === 'active'
+      ? true
+      : filter.status === 'inactive'
+      ? false
+      : null;
+
+    const { data, error } = await supabase.rpc('rms_list_staff_directory', {
+      p_search: filter.search?.trim() || null,
+      p_department: filter.department && filter.department !== 'all' ? filter.department : null,
+      p_designation: filter.designation && filter.designation !== 'all' ? filter.designation : null,
+      p_status: filter.status || (isActiveBool === true ? 'active' : isActiveBool === false ? 'inactive' : 'all'),
+      p_role_id: filter.role_id || null,
+      p_is_active: isActiveBool,
+      p_limit: filter.limit || null,
+      p_offset: filter.offset || 0,
+    });
+
+    if (error) {
+      return {
+        data: [],
+        error: `RPC error: ${error.message}. Please verify database connection.`
+      };
+    }
+
+    return { data: (data ?? []) as StaffUser[], error: null };
+  } catch (err: any) {
+    return {
+      data: [],
+      error: `Network failure connecting to Staging: ${err.message || 'Unknown error'}`
+    };
+  }
+}
+
+export const getStaffDirectory = listStaffDirectory;
+
+/**
+ * Safely extracts human-readable and secure error messages from Supabase FunctionsError context.
+ * Parses the actual JSON body returned by the Edge Function instead of generic non-2xx status code.
+ */
+async function extractEdgeFunctionError(edgeError: any): Promise<string> {
+  if (!edgeError) return 'Unknown Edge Function error';
+  let message = edgeError.message || 'Edge Function returned an error';
+
+  if (edgeError.context && typeof edgeError.context.clone === 'function') {
+    try {
+      const errBody = await edgeError.context.clone().json();
+      if (errBody && typeof errBody.error === 'string') {
+        return errBody.error;
+      }
+    } catch {}
+  } else if (edgeError.context && typeof edgeError.context.json === 'function') {
+    try {
+      const errBody = await edgeError.context.json();
+      if (errBody && typeof errBody.error === 'string') {
+        return errBody.error;
+      }
+    } catch {}
+  }
+
+  return message;
+}
+
+export async function createOrInviteStaff(params: {
+  email: string;
+  full_name: string;
+  designation: string;
+  department: string;
+  role_key?: string;
+  temporary_password?: string;
+  phone?: string;
+  assigned_district?: string;
+  assigned_taluka?: string;
+  assigned_location?: string;
+}): Promise<{ data: { success: boolean; user_id?: string; employee_code?: string; message?: string; temporary_password?: string; activation_method?: string } | null; error: string | null }> {
+  if (!env.isLiveDatabase) {
+    return {
+      data: null,
+      error: 'Write operations are strictly disabled in PREVIEW mode. Connect Localhost to an authorized MAHA-AGRI environment to create staff users.'
+    };
+  }
+
+  // Pre-flight session check: ensure caller has an active Supabase Auth session
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData?.session) {
+    return {
+      data: null,
+      error: 'Authentication required: You must be signed into an active Administrator or HR Lead session in Supabase Auth to perform staff provisioning.',
+    };
+  }
+
+  // Mandatory Server-Side Provisioning via Supabase Admin Auth API Edge Function
+  // Direct internal auth table manipulation fallbacks are strictly disabled for security compliance.
+  try {
+    const { data: edgeData, error: edgeError } = await supabase.functions.invoke('admin-provision-staff', {
+      body: {
+        action: 'create_staff',
+        email: params.email,
+        full_name: params.full_name,
+        designation: params.designation || 'Other Staff',
+        department: params.department || 'General Operations',
+        role_key: params.role_key || 'staff',
+        temporary_password: params.temporary_password,
+        phone: params.phone,
+        assigned_district: params.assigned_district,
+        assigned_taluka: params.assigned_taluka,
+        assigned_location: params.assigned_location,
+      },
+    });
+
+    if (edgeError) {
+      const errorMsg = await extractEdgeFunctionError(edgeError);
+      return { data: null, error: `Edge Function error: ${errorMsg}` };
+    }
+    if (!edgeData?.success) {
+      return { data: null, error: edgeData?.error || 'Staff provisioning failed via Edge Function' };
+    }
+
+    return { data: edgeData, error: null };
+  } catch (err: any) {
+    return { data: null, error: `Edge Function unavailable: ${err.message || 'Write operations failed securely without database fallback.'}` };
+  }
+}
+
+export async function generateStaffActivationPassword(params: {
+  user_id: string;
+  temporary_password?: string;
+}): Promise<{ data: { success: boolean; user_id?: string; email?: string; full_name?: string; temporary_password?: string; activation_method?: string; message?: string } | null; error: string | null }> {
+  if (!env.isLiveDatabase) {
+    return {
+      data: null,
+      error: 'Write operations are strictly disabled in PREVIEW mode. Connect Localhost to an authorized MAHA-AGRI environment.'
+    };
+  }
+
+  // Pre-flight session check: ensure caller has an active Supabase Auth session
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData?.session) {
+    return {
+      data: null,
+      error: 'Authentication required: You must be signed into an active Administrator or HR Lead session in Supabase Auth to generate activation credentials.',
+    };
+  }
+
+  // Mandatory Server-Side Password Reset via Supabase Admin Auth API Edge Function
+  // Direct internal auth table manipulation fallbacks are strictly disabled for security compliance.
+  try {
+    const { data: edgeData, error: edgeError } = await supabase.functions.invoke('admin-provision-staff', {
+      body: {
+        action: 'generate_activation_password',
+        user_id: params.user_id,
+        temporary_password: params.temporary_password,
+      },
+    });
+
+    if (edgeError) {
+      const errorMsg = await extractEdgeFunctionError(edgeError);
+      return { data: null, error: `Edge Function error: ${errorMsg}` };
+    }
+    if (!edgeData?.success) {
+      return { data: null, error: edgeData?.error || 'Failed to generate activation credentials via Edge Function' };
+    }
+
+    return { data: edgeData, error: null };
+  } catch (err: any) {
+    return { data: null, error: `Edge Function unavailable: ${err.message || 'Credential generation failed securely without database fallback.'}` };
+  }
+}
+
+export async function updateStaffProfile(params: {
+  user_id: string;
+  full_name: string;
+  designation: string;
+  department: string;
+  role_key?: string;
+  phone?: string;
+  assigned_state?: string;
+  assigned_district?: string;
+  assigned_taluka?: string;
+  assigned_location?: string;
+}): Promise<{ error: string | null }> {
+  if (!env.isLiveDatabase) {
+    return {
+      error: 'Profile modifications are disabled in PREVIEW mode. Connect Localhost to an authorized MAHA-AGRI environment to save changes.'
+    };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('rms_update_staff_profile', {
+      p_user_id: params.user_id,
+      p_full_name: params.full_name,
+      p_designation: params.designation,
+      p_department: params.department,
+      p_role_key: params.role_key || null,
+      p_assigned_state: params.assigned_state || 'Maharashtra',
+      p_assigned_district: params.assigned_district || null,
+      p_assigned_taluka: params.assigned_taluka || null,
+      p_assigned_location: params.assigned_location || null,
+      p_phone: params.phone || null,
+    });
+
+    if (error) return { error: error.message };
+    if (!data?.success) return { error: data?.error || 'Update failed' };
+    return { error: null };
+  } catch (err: any) {
+    return { error: err.message || 'Failed to update profile' };
+  }
+}
+
+export async function toggleStaffStatus(
+  userId: string,
+  isActive: boolean,
+  reason?: string
+): Promise<{ error: string | null }> {
+  if (!env.isLiveDatabase) {
+    return {
+      error: 'Staff activation/deactivation is disabled in PREVIEW mode. Connect Localhost to an authorized MAHA-AGRI environment to toggle status.'
+    };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('rms_toggle_staff_status', {
+      p_user_id: userId,
+      p_is_active: isActive,
+      p_reason: reason || null,
+    });
+
+    if (error) return { error: error.message };
+    if (!data?.success) return { error: data?.error || 'Status toggle failed' };
+    return { error: null };
+  } catch (err: any) {
+    return { error: err.message || 'Failed to toggle staff status' };
+  }
+}
+
+// ── 1. Interviewer Pool Management ───────────────────────────
+export async function listInterviewers(): Promise<{ data: RmsInterviewer[]; error: string | null }> {
+  try {
+    const { data, error } = await supabase
+      .from('rms_interviewers')
+      .select(`
+        *,
+        user_profile:profiles!rms_interviewers_user_id_fkey(id, full_name, email, designation, department, is_active),
+        authorizer:profiles!rms_interviewers_authorized_by_fkey(id, full_name)
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) return { data: [], error: error.message };
+    const mapped = (data ?? []).map((row: any) => ({
+      ...row,
+      authorized_by_name: row.authorizer?.full_name || null,
+    }));
+    return { data: mapped as RmsInterviewer[], error: null };
+  } catch (err: any) {
+    return { data: [], error: err.message || 'Failed to fetch interviewers' };
+  }
+}
+
+export async function authorizeInterviewer(
+  userId: string,
+  defaultMeetLink?: string
+): Promise<{ data: { success: boolean; interviewer_id?: string; message?: string } | null; error: string | null }> {
+  if (!env.isLiveDatabase) {
+    return {
+      data: null,
+      error: 'Interviewer authorization is disabled in PREVIEW mode. Connect Localhost to an authorized MAHA-AGRI environment to authorize interviewers.'
+    };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('rms_authorize_interviewer', {
+      p_user_id: userId,
+      p_default_meet_link: defaultMeetLink || null,
+    });
+
+    if (error) return { data: null, error: error.message };
+    if (!data?.success) return { data: null, error: data?.error || 'Authorization failed' };
+    return { data, error: null };
+  } catch (err: any) {
+    return { data: null, error: err.message || 'Failed to authorize interviewer' };
+  }
+}
+
+export async function toggleInterviewerStatus(
+  interviewerId: string,
+  isActive: boolean,
+  reason?: string
+): Promise<{ error: string | null }> {
+  if (!env.isLiveDatabase) {
+    return {
+      error: 'Interviewer status toggle is disabled in PREVIEW mode. Connect Localhost to an authorized MAHA-AGRI environment to update interviewer pool.'
+    };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('rms_toggle_interviewer_status', {
+      p_interviewer_id: interviewerId,
+      p_is_active: isActive,
+      p_reason: reason || null,
+    });
+
+    if (error) return { error: error.message };
+    if (!data?.success) return { error: data?.error || 'Interviewer status toggle failed' };
+    return { error: null };
+  } catch (err: any) {
+    return { error: err.message || 'Failed to toggle interviewer status' };
+  }
+}
+
+export async function getInterviewerAuditHistory(
+  interviewerId: string
+): Promise<{ data: InterviewerAuditEntry[]; error: string | null }> {
+  if (!env.isLiveDatabase) {
+    return { data: [], error: null };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('rms_get_interviewer_audit_history', {
+      p_interviewer_id: interviewerId,
+    });
+
+    if (error) return { data: [], error: error.message };
+    return { data: (data ?? []) as InterviewerAuditEntry[], error: null };
+  } catch (err: any) {
+    return { data: [], error: err.message || 'Failed to fetch audit history' };
+  }
+}
+
+export async function updateInterviewer(id: string, updates: Partial<RmsInterviewer>): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from('rms_interviewers')
+    .update({
+      ...updates,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id);
+
+  return { error: error ? error.message : null };
+}
+
+export async function deleteInterviewer(id: string): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from('rms_interviewers')
+    .delete()
+    .eq('id', id);
+
+  return { error: error ? error.message : null };
+}
+
+// ── 2. Schedules & Overrides ────────────────────────────────
+export async function getInterviewerSchedules(interviewerId: string): Promise<{ data: RmsInterviewerSchedule[]; error: string | null }> {
+  const { data, error } = await supabase
+    .from('rms_interviewer_schedules')
+    .select('*')
+    .eq('interviewer_id', interviewerId)
+    .order('day_of_week', { ascending: true });
+
+  if (error) return { data: [], error: error.message };
+  return { data: (data ?? []) as RmsInterviewerSchedule[], error: null };
+}
+
+export async function upsertInterviewerSchedule(schedule: {
+  interviewer_id: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  daily_capacity: number;
+  is_active?: boolean;
+}): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from('rms_interviewer_schedules')
+    .upsert({
+      ...schedule,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'interviewer_id,day_of_week' });
+
+  return { error: error ? error.message : null };
+}
+
+export async function getInterviewerOverrides(interviewerId: string): Promise<{ data: RmsInterviewerOverride[]; error: string | null }> {
+  const { data, error } = await supabase
+    .from('rms_interviewer_overrides')
+    .select('*')
+    .eq('interviewer_id', interviewerId)
+    .order('override_date', { ascending: true });
+
+  if (error) return { data: [], error: error.message };
+  return { data: (data ?? []) as RmsInterviewerOverride[], error: null };
+}
+
+export async function createInterviewerOverride(override: {
+  interviewer_id: string;
+  override_date: string;
+  is_leave: boolean;
+  custom_start_time?: string | null;
+  custom_end_time?: string | null;
+  custom_capacity?: number | null;
+  reason?: string | null;
+}): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from('rms_interviewer_overrides')
+    .upsert(override, { onConflict: 'interviewer_id,override_date' });
+
+  return { error: error ? error.message : null };
+}
+
+export async function deleteInterviewerOverride(id: string): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from('rms_interviewer_overrides')
+    .delete()
+    .eq('id', id);
+
+  return { error: error ? error.message : null };
+}
+
+// ── 3. Reschedule Requests ──────────────────────────────────
+export async function submitRescheduleRequest(applicationId: string, requestedSlotId: string, reason: string): Promise<{ data: any; error: string | null }> {
+  const { data, error } = await supabase.rpc('rms_submit_reschedule_request', {
+    p_application_id: applicationId,
+    p_requested_slot_id: requestedSlotId,
+    p_reason: reason,
+  });
+
+  if (error) return { data: null, error: error.message };
+  if (data && data.success === false) return { data: null, error: data.error };
+  return { data, error: null };
+}
+
+export async function listRescheduleRequests(status?: string): Promise<{ data: RmsRescheduleRequest[]; error: string | null }> {
+  let query = supabase
+    .from('rms_reschedule_requests')
+    .select(`
+      *,
+      application:rms_applications(
+        id, application_number, status,
+        candidate:rms_candidate_profiles(id, full_name, mobile),
+        job_posting:rms_job_postings(id, title)
+      ),
+      current_booking:rms_interview_bookings(id, slot_id, booked_at, attendance_status),
+      requested_slot:rms_interview_slots(id, slot_date, slot_time, mode, location_or_link)
+    `)
+    .order('created_at', { ascending: false });
+
+  if (status) {
+    query = query.eq('status', status);
+  }
+
+  const { data, error } = await query;
+  if (error) return { data: [], error: error.message };
+  return { data: (data ?? []) as unknown as RmsRescheduleRequest[], error: null };
+}
+
+export async function reviewRescheduleRequest(requestId: string, action: 'approved' | 'rejected', adminRemarks: string): Promise<{ data: any; error: string | null }> {
+  const { data, error } = await supabase.rpc('rms_review_reschedule_request', {
+    p_request_id: requestId,
+    p_action: action,
+    p_admin_remarks: adminRemarks,
+  });
+
+  if (error) return { data: null, error: error.message };
+  if (data && data.success === false) return { data: null, error: data.error };
+  return { data, error: null };
+}
+
+// ── 4. No-Show Management ───────────────────────────────────
+export async function recordNoShow(bookingId: string, notes?: string): Promise<{ data: any; error: string | null }> {
+  const { data, error } = await supabase.rpc('rms_record_no_show', {
+    p_booking_id: bookingId,
+    p_notes: notes || '',
+  });
+
+  if (error) return { data: null, error: error.message };
+  if (data && data.success === false) return { data: null, error: data.error };
+  return { data, error: null };
+}
+
+export async function approveNoShowReattempt(bookingId: string, adminRemarks: string): Promise<{ data: any; error: string | null }> {
+  const { data, error } = await supabase.rpc('rms_approve_no_show_reattempt', {
+    p_booking_id: bookingId,
+    p_admin_remarks: adminRemarks,
+  });
+
+  if (error) return { data: null, error: error.message };
+  if (data && data.success === false) return { data: null, error: data.error };
+  return { data, error: null };
+}
+
+// ── 5. Standardized 100-Mark Evaluation ─────────────────────
+export async function submitInterviewEvaluation(payload: {
+  applicationId: string;
+  scoreCommunication: number;
+  scoreSubjectKnowledge: number;
+  scoreExperience: number;
+  scorePracticalKnowledge: number;
+  scoreOverallRating: number;
+  criterionComments: Record<string, string>;
+  overallObservations: string;
+  recommendation: 'selected' | 'wait_list' | 'rejected' | 'hold';
+}): Promise<{ data: any; error: string | null }> {
+  const { data, error } = await supabase.rpc('rms_submit_interview_evaluation', {
+    p_application_id: payload.applicationId,
+    p_score_communication: payload.scoreCommunication,
+    p_score_subject_knowledge: payload.scoreSubjectKnowledge,
+    p_score_experience: payload.scoreExperience,
+    p_score_practical_knowledge: payload.scorePracticalKnowledge,
+    p_score_overall_rating: payload.scoreOverallRating,
+    p_criterion_comments: payload.criterionComments,
+    p_overall_observations: payload.overallObservations,
+    p_recommendation: payload.recommendation,
+  });
+
+  if (error) return { data: null, error: error.message };
+  if (data && data.success === false) return { data: null, error: data.error };
+  return { data, error: null };
+}
+
+export async function getApplicationEvaluations(applicationId: string): Promise<{ data: RmsInterviewEvaluation[]; error: string | null }> {
+  const { data, error } = await supabase
+    .from('rms_interview_evaluations')
+    .select(`
+      *,
+      evaluator:profiles!rms_interview_evaluations_evaluator_id_fkey(full_name)
+    `)
+    .eq('application_id', applicationId)
+    .order('round_number', { ascending: true });
+
+  if (error) return { data: [], error: error.message };
+  const mapped = (data ?? []).map((e: any) => ({
+    ...e,
+    evaluator_name: e.evaluator?.full_name || 'Staff Evaluator',
+  }));
+  return { data: mapped, error: null };
+}
+
+// ── 6. Final Selection Decision ─────────────────────────────
+export async function recordFinalSelection(
+  applicationId: string,
+  decision: 'selected' | 'rejected' | 'on_hold',
+  remarks: string
+): Promise<{ data: any; error: string | null }> {
+  const { data, error } = await supabase.rpc('rms_record_final_selection', {
+    p_application_id: applicationId,
+    p_decision: decision,
+    p_remarks: remarks,
+  });
+
+  if (error) return { data: null, error: error.message };
+  if (data && data.success === false) return { data: null, error: data.error };
+  return { data, error: null };
+}
+
+// ── 7. Organization Signatures & Templates ──────────────────
+export async function listOrganizationSignatures(): Promise<{ data: RmsOrganizationSignature[]; error: string | null }> {
+  const { data, error } = await supabase
+    .from('rms_organization_signatures')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) return { data: [], error: error.message };
+  return { data: (data ?? []) as RmsOrganizationSignature[], error: null };
+}
+
+export async function upsertOrganizationSignature(sig: {
+  id?: string;
+  signatory_name: string;
+  designation: string;
+  signature_image_url: string;
+  is_active?: boolean;
+}): Promise<{ data: RmsOrganizationSignature | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from('rms_organization_signatures')
+    .upsert({
+      ...sig,
+      updated_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+
+  if (error) return { data: null, error: error.message };
+  return { data: data as RmsOrganizationSignature, error: null };
+}
+
+export async function listAppointmentTemplates(): Promise<{ data: RmsAppointmentTemplate[]; error: string | null }> {
+  const { data, error } = await supabase
+    .from('rms_appointment_templates')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) return { data: [], error: error.message };
+  return { data: (data ?? []) as RmsAppointmentTemplate[], error: null };
+}
+
+export async function upsertAppointmentTemplate(tmpl: {
+  id?: string;
+  job_posting_id?: string | null;
+  designation: string;
+  common_terms: string[];
+  position_terms: string[];
+  is_active?: boolean;
+}): Promise<{ data: RmsAppointmentTemplate | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from('rms_appointment_templates')
+    .upsert({
+      ...tmpl,
+      updated_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+
+  if (error) return { data: null, error: error.message };
+  return { data: data as RmsAppointmentTemplate, error: null };
+}
+
+// ── 8. Provisional & Final Appointment Letters ──────────────
+export async function generateProvisionalAppointmentLetter(
+  applicationId: string,
+  joiningDate: string,
+  joiningVenue: string,
+  templateId?: string,
+  orgSigId?: string
+): Promise<{ data: any; error: string | null }> {
+  const { data, error } = await supabase.rpc('rms_generate_provisional_appointment_letter', {
+    p_application_id: applicationId,
+    p_joining_date: joiningDate,
+    p_joining_venue: joiningVenue,
+    p_template_id: templateId || null,
+    p_org_sig_id: orgSigId || null,
+  });
+
+  if (error) return { data: null, error: error.message };
+  if (data && data.success === false) return { data: null, error: data.error };
+  return { data, error: null };
+}
+
+export async function signProvisionalAppointmentLetter(
+  letterId: string,
+  legalName: string,
+  signatureData: string,
+  otpCode: string
+): Promise<{ data: any; error: string | null }> {
+  const { data, error } = await supabase.rpc('rms_sign_provisional_appointment_letter', {
+    p_letter_id: letterId,
+    p_legal_name: legalName,
+    p_signature_data: signatureData,
+    p_otp_code: otpCode,
+  });
+
+  if (error) return { data: null, error: error.message };
+  if (data && data.success === false) return { data: null, error: data.error };
+  return { data, error: null };
+}
+
+export async function issueFinalAppointmentLetter(applicationId: string): Promise<{ data: any; error: string | null }> {
+  const { data, error } = await supabase.rpc('rms_issue_final_appointment_letter', {
+    p_application_id: applicationId,
+  });
+
+  if (error) return { data: null, error: error.message };
+  if (data && data.success === false) return { data: null, error: data.error };
+  return { data, error: null };
+}
+
+export async function getAppointmentLetterWithDetails(applicationId: string): Promise<{ data: RmsAppointmentLetter | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from('rms_appointment_letters')
+    .select(`
+      *,
+      org_signature:rms_organization_signatures(*)
+    `)
+    .eq('application_id', applicationId)
+    .maybeSingle();
+
+  if (error && error.code !== 'PGRST116') return { data: null, error: error.message };
+  return { data: (data as unknown as RmsAppointmentLetter) ?? null, error: null };
+}
+
+// ── 9. Google Meet Link Management (Correction 4) ───────────
+export async function updateBookingMeetLink(bookingId: string, meetLink: string): Promise<{ data: any; error: string | null }> {
+  const { data, error } = await supabase.rpc('rms_update_booking_meet_link', {
+    p_booking_id: bookingId,
+    p_meet_link: meetLink,
+  });
+
+  if (error) return { data: null, error: error.message };
+  if (data && data.success === false) return { data: null, error: data.error };
+  return { data, error: null };
+}
+
+// ── 10. WhatsApp Scheduled Notification Batch Processor (Correction 3) ──
+export async function processNotificationBatch(batchSize: number = 20): Promise<{ data: any; error: string | null }> {
+  const { data, error } = await supabase.rpc('rms_process_notification_batch', {
+    p_batch_size: batchSize,
+  });
+
+  if (error) return { data: null, error: error.message };
+  if (data && data.success === false) return { data: null, error: data.error };
+  return { data, error: null };
+}
+
 

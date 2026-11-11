@@ -43,6 +43,47 @@ import { calculateAge, calculateDuration, calculateMergedTotalExperience, getLoc
 
 export const MOBILITY_CONSENT_TEXT = "I understand that I have selected preferred posting locations outside my current and/or permanent residential district. I am willing to work in the selected districts, subject to vacancy availability, recruitment requirements and the organisation's final posting decision. My preferences do not guarantee posting in any specific district or taluka.";
 
+/**
+ * Dynamically builds the explanatory text for outside preferred posting districts,
+ * taking into account both Current and Permanent Residential Districts.
+ */
+export function getOutsideDistrictsExplanation(
+  outsideDistricts: string[],
+  currentDistrict?: string | null,
+  permanentDistrict?: string | null,
+  isSameAddress?: boolean
+): string {
+  if (!outsideDistricts || outsideDistricts.length === 0) return '';
+
+  const outsideStr = outsideDistricts.join(', ');
+  const isPlural = outsideDistricts.length > 1;
+  const verb = isPlural ? 'are' : 'is';
+
+  const cleanCurrent = (currentDistrict || '').trim();
+  const cleanPermanent = (permanentDistrict || '').trim();
+
+  const hasBothDistinct = Boolean(
+    cleanCurrent &&
+    cleanPermanent &&
+    !isSameAddress &&
+    cleanCurrent.toLowerCase() !== cleanPermanent.toLowerCase()
+  );
+
+  if (hasBothDistinct) {
+    return `You have selected ${outsideStr}, which ${verb} outside both your current residential district (${cleanCurrent}) and permanent residential district (${cleanPermanent}).`;
+  }
+
+  if (cleanCurrent) {
+    return `You have selected ${outsideStr}, which ${verb} outside your declared residential district (${cleanCurrent}).`;
+  }
+
+  if (cleanPermanent) {
+    return `You have selected ${outsideStr}, which ${verb} outside your permanent residential district (${cleanPermanent}).`;
+  }
+
+  return `You have selected ${outsideStr}, which ${verb} outside your declared residential district.`;
+}
+
 interface Step2JobSpecificProps {
   data: JobSpecificFormData;
   masterProfile?: MasterProfileFormData;
@@ -875,6 +916,27 @@ export default function Step2JobSpecific({
 
   const requiresMobilityConsent = outsideDistricts.length > 0;
 
+  // Mobility Consent validation: consent is valid iff consented is true and consented outsideDistricts match current outsideDistricts exactly
+  const isMobilityConsentValid = useMemo(() => {
+    if (!requiresMobilityConsent) return true;
+    if (!data.mobilityConsent?.consented) return false;
+    const recordedOutside = (data.mobilityConsent.outsideDistricts || []).map(d => d.trim().toLowerCase()).sort();
+    const currentOutside = outsideDistricts.map(d => d.trim().toLowerCase()).sort();
+    if (recordedOutside.length !== currentOutside.length) return false;
+    return recordedOutside.every((d, i) => d === currentOutside[i]);
+  }, [requiresMobilityConsent, data.mobilityConsent, outsideDistricts]);
+
+  // Reactive invalidation: if preferred locations change such that outsideDistricts no longer match, invalidate stale consent
+  useEffect(() => {
+    if (!data.mobilityConsent?.consented) return;
+    const recorded = (data.mobilityConsent.outsideDistricts || []).map(d => d.trim().toLowerCase()).sort().join('|');
+    const current = outsideDistricts.map(d => d.trim().toLowerCase()).sort().join('|');
+    if (recorded !== current) {
+      onChange('mobilityConsent', undefined);
+      onChange('locationConfirmed', false);
+    }
+  }, [outsideDistricts, data.mobilityConsent?.consented, onChange]);
+
   const handleAddPreferredDistrict = () => {
     if (preferredDistricts.length >= maxDistrictsAllowed) return;
     const newEntry: DistrictPreference = {
@@ -1200,7 +1262,7 @@ export default function Step2JobSpecific({
       }
 
       // Check conditional mobility consent
-      if (requiresMobilityConsent && !data.mobilityConsent?.consented && !data.locationConfirmed) {
+      if ((requiresMobilityConsent && !data.mobilityConsent?.consented && !data.locationConfirmed) || (requiresMobilityConsent && !isMobilityConsentValid)) {
         newErrors['mobilityConsent'] = 'Please confirm your willingness to work at the selected posting location(s) outside your residential district.';
         errorFieldKeys.push('mobilityConsent');
       }
@@ -2502,7 +2564,7 @@ export default function Step2JobSpecific({
                         Mobility &amp; Posting Allocation Consent <span className="text-red-500">*</span>
                       </h4>
                       <p className="text-xs text-amber-900 mt-0.5">
-                        You have selected preferred posting locations in <strong>{outsideDistricts.join(', ')}</strong>, which is outside your residential district ({currentAddress.district || 'residential area'}).
+                        {getOutsideDistrictsExplanation(outsideDistricts, currentAddress.district, permanentAddress.district, isSameAddress)}
                       </p>
                     </div>
                   </div>
@@ -2512,7 +2574,7 @@ export default function Step2JobSpecific({
                       ref={registerRef('mobilityConsent')}
                       id="mobilityConsentCheckbox"
                       type="checkbox"
-                      checked={Boolean(data.mobilityConsent?.consented || data.locationConfirmed)}
+                      checked={Boolean(isMobilityConsentValid && (data.mobilityConsent?.consented || data.locationConfirmed))}
                       onChange={e => {
                         if (e.target.checked) {
                           setShowMobilityModal(true);
@@ -2840,7 +2902,7 @@ export default function Step2JobSpecific({
                 Selected Non-Residential Locations:
               </span>
               <p className="text-amber-800">
-                You have chosen to apply for posting in <strong>{outsideDistricts.join(', ')}</strong>, which differs from your declared residential location ({currentAddress.district || 'residential area'}).
+                {getOutsideDistrictsExplanation(outsideDistricts, currentAddress.district, permanentAddress.district, isSameAddress)}
               </p>
             </div>
 
@@ -2865,6 +2927,8 @@ export default function Step2JobSpecific({
                     consentedAt: new Date().toISOString(),
                     outsideDistricts,
                     consentText: MOBILITY_CONSENT_TEXT,
+                    consentVersion: 'v1.0',
+                    candidateId: masterProfile?.candidateId || undefined,
                   });
                   onChange('locationConfirmed', true);
                   clearFieldError('mobilityConsent');

@@ -39,6 +39,7 @@ import HRRecruitmentBlueprint from './admin/HRRecruitmentBlueprint';
 import HRNotificationTemplateManager from './admin/HRNotificationTemplateManager';
 import HRReports from './admin/HRReports';
 import HRJobTrash from './admin/HRJobTrash';
+import StaffUserManagement from '../modules/admin/StaffUserManagement';
 
 const withLayout = (element: React.ReactNode) => <Layout>{element}</Layout>;
 
@@ -74,6 +75,7 @@ export default function CareerRoutes() {
       {/* RMS admin */}
       <Route path="/admin/rms" element={<RMSAdminLayout />}>
         <Route path="dashboard"     element={<HRDashboard />} />
+        <Route path="users"         element={<StaffUserManagement />} />
         <Route path="campaigns"     element={<HRCampaignManager />} />
         <Route path="jobs"          element={<HRJobPostingEditor />} />
         <Route path="applications"  element={<HRApplications />} />

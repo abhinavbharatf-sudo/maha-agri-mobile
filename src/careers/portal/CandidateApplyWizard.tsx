@@ -718,6 +718,27 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
   // ── Active Step Index Calculation ──────────────────────────────────────────
   const currentStepIndex = visibleSteps.findIndex(s => s.id === state.currentStep);
 
+  // ── STEP 5: Final Application Submission Confirmation (Zero Wizard UI) ──────
+  if (state.currentStep === 'confirmation') {
+    return (
+      <div className="min-h-screen bg-[#f0f4f8] py-10 px-4 sm:px-6">
+        <div className="max-w-xl mx-auto">
+          <Step4Confirmation
+            applicationNumber={state.submittedAppNumber || existingApp?.application_number || ''}
+            applicationId={state.submittedAppId || existingApp?.id || ''}
+            submittedAt={state.submittedAt || existingApp?.created_at || null}
+            status={state.submittedStatus || existingApp?.status || (Number(job.application_fee_amount ?? 0) > 0 ? 'payment_pending' : 'submitted')}
+            applicationFeeAmount={Number(job.application_fee_amount ?? 0)}
+            job={job}
+            projectName={projectName}
+            masterProfile={state.masterProfile}
+            jobSpecific={state.jobSpecific}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#f0f4f8] py-8 px-4 sm:px-6">
       <div className="max-w-4xl mx-auto space-y-6">
@@ -1197,20 +1218,6 @@ export default function CandidateApplyWizard({ jobId: propJobId }: CandidateAppl
                 saveDraft('questionnaire', false);
               } : undefined}
               onSubmit={handleReviewSubmit}
-            />
-          )}
-
-          {/* STEP 5: Authoritative Confirmation & Receipt */}
-          {state.currentStep === 'confirmation' && (
-            <Step4Confirmation
-              applicationNumber={state.submittedAppNumber || existingApp?.application_number || ''}
-              applicationId={state.submittedAppId || existingApp?.id || ''}
-              submittedAt={state.submittedAt || existingApp?.created_at || null}
-              status={state.submittedStatus || existingApp?.status || (Number(job.application_fee_amount ?? 0) > 0 ? 'payment_pending' : 'submitted')}
-              applicationFeeAmount={Number(job.application_fee_amount ?? 0)}
-              job={job}
-              masterProfile={state.masterProfile}
-              jobSpecific={state.jobSpecific}
             />
           )}
 

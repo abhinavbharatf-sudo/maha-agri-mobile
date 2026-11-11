@@ -145,8 +145,8 @@ export class SupabaseAuthProvider implements IAuthRepository {
         mobile: normalizeMobileNumber((p.phone as string) || (authUser?.phone as string) || (authUser?.user_metadata?.phone as string) || ''),
         full_name: (p.full_name as string) || (authUser?.user_metadata?.full_name as string) || 'MAHA-AGRI User',
         email: (p.email as string) || authUser?.email || undefined,
-        status: 'active',
-        first_login: Boolean(p.is_first_login ?? authUser?.user_metadata?.is_first_login ?? false),
+        status: p.is_active === false ? 'inactive' : 'active',
+        first_login: Boolean(p.is_first_login ?? (authUser?.app_metadata as Record<string, unknown>)?.is_first_login ?? false),
         created_at: (p.created_at as string) || new Date().toISOString(),
         roles,
       };
@@ -185,7 +185,7 @@ export class SupabaseAuthProvider implements IAuthRepository {
         );
         if (seedUser) {
           targetEmail = seedUser.roleKey === 'SUPER_ADMIN'
-            ? 'admin@abhinavbharat.org'
+            ? 'super_admin@abhinavbharat.org'
             : `${seedUser.roleKey.toLowerCase()}@abhinavbharat.org`;
         } else {
           // Synthetic mobile email fallback
@@ -202,9 +202,9 @@ export class SupabaseAuthProvider implements IAuthRepository {
       }
 
       if (authRes.error || !authRes.data?.user) {
-        // Enforce production security: Disable UAT seed fallback in production mode
-        const isProductionEnv = import.meta.env.PROD && import.meta.env.VITE_SUPABASE_URL;
-        if (isProductionEnv) {
+        // Enforce staging/production security: Disable mock fallback when connected to live Supabase
+        const isLiveSupabaseEnv = Boolean(import.meta.env.VITE_SUPABASE_URL);
+        if (isLiveSupabaseEnv) {
           return {
             success: false,
             error: 'Invalid Employee ID or Password.',
@@ -299,6 +299,12 @@ export class SupabaseAuthProvider implements IAuthRepository {
         token: authRes.data.session?.access_token ?? '',
         expiresAt: (authRes.data.session?.expires_at ?? 0) * 1000,
       };
+
+      try {
+        localStorage.setItem('maha_agri_auth_session', JSON.stringify(session));
+      } catch (storageErr) {
+        console.warn('[SupabaseAuthProvider] Failed to persist session to localStorage:', storageErr);
+      }
 
       const requiresFirstLoginPasswordChange = user.first_login;
       const requiresRoleSelection = roles.length > 1;

@@ -203,3 +203,90 @@ export async function sendInterviewConfirmedTemplate(
   const recipient = getWhatsAppFormattedPhone(phone);
   return callEdgeFunction(recipient, 'interview_schedule', [candidateName, jobTitle, date, time, venueOrLink]);
 }
+
+/**
+ * Send automated interview reminder (1-day, 3-hour, or 10-minute in Asia/Kolkata timezone)
+ */
+export async function sendInterviewReminderTemplate(
+  phone: string,
+  candidateName: string,
+  jobTitle: string,
+  date: string,
+  time: string,
+  reminderType: '1-day' | '3-hour' | '10-minute',
+  meetLink: string,
+): Promise<DirectOtpResult> {
+  if (!phone?.trim()) return { success: false, error: 'Phone number is required.' };
+
+  const recipient = getWhatsAppFormattedPhone(phone);
+  return callEdgeFunction(recipient, `interview_reminder_${reminderType.replace('-', '_')}`, [
+    candidateName,
+    jobTitle,
+    date,
+    time,
+    meetLink || 'Google Meet link provided in portal'
+  ]);
+}
+
+/**
+ * Send reschedule confirmation template
+ */
+export async function sendRescheduleConfirmedTemplate(
+  phone: string,
+  candidateName: string,
+  jobTitle: string,
+  newDate: string,
+  newTime: string,
+  meetLink: string,
+): Promise<DirectOtpResult> {
+  if (!phone?.trim()) return { success: false, error: 'Phone number is required.' };
+
+  const recipient = getWhatsAppFormattedPhone(phone);
+  return callEdgeFunction(recipient, 'interview_rescheduled', [
+    candidateName,
+    jobTitle,
+    newDate,
+    newTime,
+    meetLink || 'Google Meet link provided in portal'
+  ]);
+}
+
+/**
+ * Send provisional appointment letter issued notification with 3-day deadline notice
+ */
+export async function sendProvisionalLetterIssuedTemplate(
+  phone: string,
+  candidateName: string,
+  jobTitle: string,
+  signingDeadlineFormatted: string,
+): Promise<DirectOtpResult> {
+  if (!phone?.trim()) return { success: false, error: 'Phone number is required.' };
+
+  const recipient = getWhatsAppFormattedPhone(phone);
+  return callEdgeFunction(recipient, 'provisional_appointment_issued', [
+    candidateName,
+    jobTitle,
+    signingDeadlineFormatted
+  ]);
+}
+
+/**
+ * Send onboarding fee payment window open notification with 7-day countdown notice
+ */
+export async function sendOnboardingPaymentWindowTemplate(
+  phone: string,
+  candidateName: string,
+  jobTitle: string,
+  amount: string,
+  paymentDeadlineFormatted: string,
+): Promise<DirectOtpResult> {
+  if (!phone?.trim()) return { success: false, error: 'Phone number is required.' };
+
+  const recipient = getWhatsAppFormattedPhone(phone);
+  return callEdgeFunction(recipient, 'onboarding_payment_window', [
+    candidateName,
+    jobTitle,
+    amount,
+    paymentDeadlineFormatted
+  ]);
+}

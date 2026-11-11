@@ -17,19 +17,21 @@ in sync with auth.users without requiring the frontend to insert it manually.
 ## Security
 - The function runs with SECURITY DEFINER so it can insert into profiles
   even though the anon role can't (RLS blocks unauthenticated inserts).
-- search_path is set to 'public' to prevent schema injection.
+- search_path is set to empty string ('') to prevent search_path injection attacks,
+  with all table references fully qualified (public.rbac_roles, public.profiles).
+- Zero dependencies on SMS, phone numbers, or external notification gateways.
 */
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = 'public'
+SET search_path = ''
 AS $$
 DECLARE
   default_role_id uuid;
 BEGIN
-  SELECT id INTO default_role_id FROM rbac_roles WHERE key = 'member' LIMIT 1;
+  SELECT id INTO default_role_id FROM public.rbac_roles WHERE key = 'member' LIMIT 1;
   INSERT INTO public.profiles (id, email, full_name, role_id, is_active)
   VALUES (
     NEW.id,

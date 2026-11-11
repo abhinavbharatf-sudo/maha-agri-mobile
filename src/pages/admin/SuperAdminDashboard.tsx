@@ -105,7 +105,7 @@ export default function SuperAdminDashboard() {
             </div>
 
             <Link
-              to="/mdm-preview"
+              to="/admin/users"
               className="inline-flex items-center space-x-2 text-xs font-black text-purple-600 hover:text-purple-700 transition-colors pt-2"
             >
               <span>Enter Admin Console</span>

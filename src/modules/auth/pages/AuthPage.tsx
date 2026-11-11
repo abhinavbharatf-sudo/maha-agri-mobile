@@ -35,6 +35,20 @@ export const AuthPage: React.FC = () => {
 
   // Resolve target route after authentication based on RBAC role and platform target
   const navigateToRoleDashboard = (role: MahaAgriRole, customTarget?: string) => {
+    const rKey = (role?.key || '').toUpperCase();
+    const rName = (role?.name || '').toLowerCase();
+    const isStaffRole = rKey === 'STAFF' || rName.includes('staff');
+
+    // 0. Requested origin route from location state
+    if (from && typeof from === 'string' && from !== '/login') {
+      // Security guard: If user is Staff, reject privileged origin routes and force /staff/dashboard
+      const isPrivilegedOrigin = /^\/(maha-agri|admin|super-admin|superadmin|dashboard|abf|root|governance|users|state-admin)/i.test(from);
+      if (!(isStaffRole && isPrivilegedOrigin)) {
+        navigate(from, { replace: true });
+        return;
+      }
+    }
+
     // 1. Direct Target specified by authenticated account
     if (customTarget) {
       navigate(customTarget, { replace: true });
@@ -42,18 +56,37 @@ export const AuthPage: React.FC = () => {
     }
 
     // 2. Role-specific Dashboard Resolution
-    if (role.key === 'SUPER_ADMIN' || role.name.toLowerCase().includes('super')) {
+    // Super Admin Gateway
+    if (rKey === 'SUPER_ADMIN' || rName.includes('super admin') || rName.includes('root')) {
       navigate('/dashboard', { replace: true });
-    } else if (role.name.includes('HR') || role.key.includes('HR') || user?.email === 'hr@abhinavbharat.org') {
+    }
+    // State Admin / Platform Administrator
+    else if (rKey === 'STATE_ADMIN' || rKey === 'ADMIN' || rName.includes('administrator')) {
+      navigate('/admin/dashboard', { replace: true });
+    }
+    // HR / Recruitment
+    else if (rName.includes('hr') || rKey.includes('HR') || user?.email === 'hr@abhinavbharat.org') {
       navigate('/admin/rms/dashboard', { replace: true });
-    } else if (role.name.includes('CRM') || role.name.includes('CSM') || role.key.includes('CRM') || user?.email === 'telecaller@abhinavbharat.org') {
+    }
+    // CRM / CSM / Telecalling
+    else if (rName.includes('crm') || rName.includes('csm') || rKey.includes('CRM') || user?.email === 'telecaller@abhinavbharat.org') {
       navigate('/crm/dashboard', { replace: true });
-    } else if (role.key === 'EDP_AGRI_ENTREPRENEUR') {
+    }
+    // EDP Entrepreneur
+    else if (rKey === 'EDP_AGRI_ENTREPRENEUR') {
       navigate('/candidate/training', { replace: true });
-    } else if (role.key === 'MAHA_AGRIDOOT' || role.name.includes('AGRIDOOT')) {
+    }
+    // Agridoot Field Staff
+    else if (rKey === 'MAHA_AGRIDOOT' || rName.includes('agridoot')) {
       navigate('/maha-agri/agridoot', { replace: true });
-    } else {
-      navigate('/maha-agri-admin', { replace: true });
+    }
+    // Operational Staff (e.g. Rasmika Patil) -> Dedicated Staff Dashboard
+    else if (rKey === 'STAFF' || rName.includes('staff')) {
+      navigate('/staff/dashboard', { replace: true });
+    }
+    // Default Fallback
+    else {
+      navigate('/staff/dashboard', { replace: true });
     }
   };
 

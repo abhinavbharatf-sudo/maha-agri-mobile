@@ -342,11 +342,11 @@ export const EDSHeader: React.FC<{
 
         <div className="flex items-center space-x-2 border-l border-slate-200 pl-3">
           <div className="w-8 h-8 rounded-full bg-emerald-800 text-white font-bold flex items-center justify-center text-xs shadow-sm">
-            RP
+            MA
           </div>
           <div className="hidden lg:block text-left">
-            <span className="text-xs font-bold text-slate-900 block leading-tight">Rahul Patil</span>
-            <span className="text-[10px] text-slate-500 font-semibold block leading-tight">Joint Director Agriculture</span>
+            <span className="text-xs font-bold text-slate-900 block leading-tight">Operations Officer</span>
+            <span className="text-[10px] text-slate-500 font-semibold block leading-tight">MAHA-AGRI Digital Platform</span>
           </div>
         </div>
       </div>

@@ -14,25 +14,68 @@ interface EnvConfig {
   appName: string;
   appEnv: AppEnv;
   isProduction: boolean;
+  isStaging: boolean;
   isDevelopment: boolean;
+  projectRef: string;
+  isStagingDatabase: boolean;
+  isProductionDatabase: boolean;
+  isLiveDatabase: boolean;
+}
+
+function getRawEnv(): Record<string, any> {
+  if (typeof import.meta !== 'undefined' && import.meta.env) {
+    return import.meta.env;
+  }
+  if (typeof process !== 'undefined' && process.env) {
+    return process.env;
+  }
+  return {};
 }
 
 function resolveEnv(): AppEnv {
-  const envObj = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : process.env;
+  const envObj = getRawEnv();
   const raw = envObj.VITE_APP_ENV;
   if (raw === 'production' || raw === 'staging') return raw;
   return 'development';
 }
 
-const envObj = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : process.env;
+function extractProjectRef(url: string): string {
+  try {
+    if (!url) return '';
+    const parsed = new URL(url);
+    const hostParts = parsed.hostname.split('.');
+    return hostParts[0] || '';
+  } catch {
+    return '';
+  }
+}
+
+const envObj = getRawEnv();
+
+const currentAppEnv = resolveEnv();
+const activeUrl = envObj.VITE_SUPABASE_URL || '';
+const activeKey = envObj.VITE_SUPABASE_ANON_KEY || '';
+const activeProjectRef = extractProjectRef(activeUrl);
+
+const STAGING_REF = 'vlpschmvotaunsxcunnn';
+const PRODUCTION_REF = 'dmtetjahbxedugszztla';
+
+const isStagingDatabase = activeProjectRef === STAGING_REF && activeKey && !activeKey.includes('PASTE_');
+const isProductionDatabase = activeProjectRef === PRODUCTION_REF && activeKey && !activeKey.includes('PASTE_');
+const isLiveDatabase = Boolean(isStagingDatabase || isProductionDatabase);
 
 const env: EnvConfig = {
-  supabaseUrl: envObj.VITE_SUPABASE_URL || '',
-  supabaseAnonKey: envObj.VITE_SUPABASE_ANON_KEY || '',
+  supabaseUrl: activeUrl,
+  supabaseAnonKey: activeKey,
   appName: envObj.VITE_APP_NAME ?? 'Abhinav Bharat Foundation',
-  appEnv: resolveEnv(),
-  isProduction: resolveEnv() === 'production',
-  isDevelopment: resolveEnv() === 'development',
+  appEnv: currentAppEnv,
+  isProduction: currentAppEnv === 'production',
+  isStaging: currentAppEnv === 'staging',
+  isDevelopment: currentAppEnv === 'development',
+  projectRef: activeProjectRef,
+  isStagingDatabase: Boolean(isStagingDatabase),
+  isProductionDatabase: Boolean(isProductionDatabase),
+  isLiveDatabase,
 };
 
 if (!env.supabaseUrl || !env.supabaseAnonKey) {

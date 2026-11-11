@@ -40,6 +40,7 @@ import { DocumentRecordsDirectory } from '../../documents/components/DocumentRec
 import { NotificationManagerDirectory } from '../../notification/components/NotificationManagerDirectory';
 import { PublicCitizenPortal } from '../../portal/components/PublicCitizenPortal';
 import { PlatformGovernanceConsole } from '../../../core/governance/components/PlatformGovernanceConsole';
+import StaffUserManagement from '../../admin/StaffUserManagement';
 
 export type LockedNavId =
   | 'DASHBOARD'
@@ -86,6 +87,7 @@ export const MDMPreviewPrototype: React.FC = () => {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
   const [adminMenuExpanded, setAdminMenuExpanded] = useState(false);
+  const [adminSubNav, setAdminSubNav] = useState<string>('Users');
 
   // Complete ABAC Context Variables
   const [activeRoleKey, setActiveRoleKey] = useState<EnterpriseRoleType>('SUPER_ADMIN');
@@ -486,16 +488,33 @@ export const MDMPreviewPrototype: React.FC = () => {
 
                         {adminMenuExpanded && !sidebarCollapsed && (
                           <div className="pl-9 space-y-1 text-[11px] font-medium text-slate-400">
-                            {['Users', 'Roles', 'Permissions', 'Organizations', 'Audit Logs', 'Feature Flags', 'System Health'].map((sub, sIdx) => (
-                              <button
-                                key={sIdx}
-                                onClick={() => setActiveNav('ADMINISTRATION')}
-                                className="w-full text-left py-1 px-2 hover:text-white hover:bg-slate-800/60 rounded-lg transition-colors flex items-center gap-1.5"
-                              >
-                                <span className="w-1 h-1 rounded-full bg-blue-400" />
-                                <span>{sub}</span>
-                              </button>
-                            ))}
+                            {['Users', 'Roles', 'Permissions', 'Organizations', 'Audit Logs', 'Feature Flags', 'System Health'].map((sub, sIdx) => {
+                              const isSubActive = activeNav === 'ADMINISTRATION' && adminSubNav === sub;
+                              return (
+                                <button
+                                  key={sIdx}
+                                  onClick={() => {
+                                    setActiveNav('ADMINISTRATION');
+                                    setAdminSubNav(sub);
+                                  }}
+                                  className={`w-full text-left py-1 px-2 rounded-lg transition-colors flex items-center justify-between ${
+                                    isSubActive
+                                      ? 'text-white bg-blue-600/50 font-bold'
+                                      : 'hover:text-white hover:bg-slate-800/60'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`w-1 h-1 rounded-full ${isSubActive ? 'bg-blue-300' : 'bg-slate-500'}`} />
+                                    <span>{sub}</span>
+                                  </div>
+                                  {sub === 'Users' && (
+                                    <span className="text-[9px] font-semibold bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded border border-emerald-500/30">
+                                      Active
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
@@ -590,7 +609,13 @@ export const MDMPreviewPrototype: React.FC = () => {
 
               {activeNav === 'REPORTS' && <ERPReportsScreen activeRoleKey={activeRoleKey} />}
               {activeNav === 'MASTER_DATA' && <ERPMasterDataScreen />}
-              {activeNav === 'ADMINISTRATION' && <ERPAdministrationScreen />}
+              {activeNav === 'ADMINISTRATION' && (
+                adminSubNav === 'Users' ? (
+                  <StaffUserManagement />
+                ) : (
+                  <ERPAdministrationScreen subTitle={adminSubNav} />
+                )
+              )}
               {activeNav === 'SETTINGS' && <ERPSettingsScreen />}
             </>
           )}
@@ -947,11 +972,11 @@ function ERPMasterDataScreen() {
   );
 }
 
-function ERPAdministrationScreen() {
+function ERPAdministrationScreen({ subTitle = 'Access Control' }: { subTitle?: string }) {
   return (
     <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-3 shadow-sm text-xs">
-      <h2 className="text-lg font-bold text-slate-900">Administration & RBAC Matrix (Super Admin Only)</h2>
-      <p className="text-slate-500">Organization management, roles, and data-driven permission matrix.</p>
+      <h2 className="text-lg font-bold text-slate-900">Administration & RBAC Matrix — {subTitle}</h2>
+      <p className="text-slate-500">Organization management, roles, and data-driven permission matrix for {subTitle}.</p>
     </div>
   );
 }

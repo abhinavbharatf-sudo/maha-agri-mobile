@@ -36,6 +36,7 @@ const navGroups = [
   {
     label: 'Operations',
     items: [
+      { path: '/admin/rms/users',       label: 'Staff Management', icon: Users },
       { path: '/admin/rms/training',    label: 'Training Batches', icon: Users },
       { path: '/admin/rms/letters',     label: 'Appointment Letters', icon: FileText },
     ],

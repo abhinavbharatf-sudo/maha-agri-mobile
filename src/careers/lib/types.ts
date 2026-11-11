@@ -451,6 +451,10 @@ export interface RmsApplication {
   is_trashed?: boolean;
   trashed_at?: string | null;
   trashed_by?: string | null;
+  final_selection_status?: 'pending' | 'selected' | 'rejected' | 'on_hold' | null;
+  final_selection_by?: string | null;
+  final_selection_at?: string | null;
+  final_selection_remarks?: string | null;
 }
 
 export interface RmsApplicationWithDetails extends RmsApplication {
@@ -500,13 +504,161 @@ export interface RmsInterviewSlot {
   created_at: string;
 }
 
+export interface RmsInterviewer {
+  id: string;
+  user_id: string;
+  is_active: boolean;
+  default_meet_link: string | null;
+  authorized_by: string | null;
+  authorized_at: string;
+  deauthorized_at?: string | null;
+  deauthorized_by?: string | null;
+  deauthorization_reason?: string | null;
+  created_at: string;
+  updated_at: string;
+  user_profile?: {
+    id: string;
+    full_name: string;
+    email: string;
+    designation?: string;
+    department?: string;
+    is_active?: boolean;
+    mobile?: string | null;
+  };
+  authorized_by_name?: string | null;
+}
+
+export interface StaffUser {
+  id: string;
+  email: string;
+  full_name: string;
+  designation: string;
+  department: string;
+  role_id: string;
+  role_key: string;
+  role_name: string;
+  is_active: boolean;
+  created_at: string;
+  employee_code?: string | null;
+  phone?: string | null;
+  assigned_state?: string | null;
+  assigned_district?: string | null;
+  assigned_taluka?: string | null;
+  assigned_location?: string | null;
+  is_interviewer: boolean;
+  interviewer_id?: string | null;
+  interviewer_is_active?: boolean | null;
+  interviewer_meet_link?: string | null;
+  authorized_at?: string | null;
+  authorized_by?: string | null;
+  authorized_by_name?: string | null;
+}
+
+export interface StaffDirectoryFilter {
+  search?: string;
+  role_id?: string;
+  designation?: string;
+  department?: string;
+  is_active?: boolean;
+  status?: 'active' | 'inactive' | 'all';
+  limit?: number;
+  offset?: number;
+}
+
+export interface InterviewerAuditEntry {
+  id: number;
+  interviewer_id: string;
+  user_id: string;
+  action: 'authorized' | 'deactivated' | 'reactivated';
+  performed_by: string;
+  performed_by_name?: string | null;
+  designation_at_time?: string | null;
+  department_at_time?: string | null;
+  reason?: string | null;
+  created_at: string;
+}
+
+export interface RmsInterviewerSchedule {
+  id: string;
+  interviewer_id: string;
+  day_of_week: number; // 0=Sunday, 1=Monday... 6=Saturday
+  start_time: string;
+  end_time: string;
+  daily_capacity: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RmsInterviewerOverride {
+  id: string;
+  interviewer_id: string;
+  override_date: string;
+  is_leave: boolean;
+  custom_start_time: string | null;
+  custom_end_time: string | null;
+  custom_capacity: number | null;
+  reason: string | null;
+  approved_by: string | null;
+  created_at: string;
+}
+
+export interface RmsRescheduleRequest {
+  id: string;
+  application_id: string;
+  current_booking_id: string;
+  requested_slot_id: string;
+  reason: string;
+  reschedule_number: number;
+  status: 'pending' | 'approved' | 'rejected';
+  admin_remarks: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  application?: RmsApplicationWithDetails;
+  current_booking?: RmsInterviewBooking;
+  requested_slot?: RmsInterviewSlot;
+}
+
+export interface RmsOrganizationSignature {
+  id: string;
+  signatory_name: string;
+  designation: string;
+  signature_image_url: string;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RmsAppointmentTemplate {
+  id: string;
+  job_posting_id: string | null;
+  designation: string;
+  common_terms: string[];
+  position_terms: string[];
+  is_active: boolean;
+  version: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface RmsInterviewBooking {
   id: string;
   application_id: string;
   slot_id: string;
+  interviewer_id?: string | null;
+  google_meet_link?: string | null;
+  reschedule_count: number;
+  no_show_recorded_at?: string | null;
+  no_show_reattempt_approved: boolean;
+  no_show_approved_by?: string | null;
+  no_show_approved_at?: string | null;
   booked_at: string;
   confirmation_sent_at: string | null;
   attendance_status: 'booked' | 'present' | 'absent' | 'rescheduled';
+  interviewer?: RmsInterviewer | null;
 }
 
 export interface RmsInterviewEvaluation {
@@ -514,10 +666,21 @@ export interface RmsInterviewEvaluation {
   application_id: string;
   evaluator_id: string | null;
   round_number: number;
+  score_communication?: number;
+  score_subject_knowledge?: number;
+  score_experience?: number;
+  score_practical_knowledge?: number;
+  score_overall_rating?: number;
+  total_score?: number;
+  criterion_comments?: Record<string, string>;
+  overall_observations?: string | null;
+  is_locked?: boolean;
+  locked_at?: string | null;
   scores: Record<string, number>;
   remarks: string | null;
   recommendation: 'selected' | 'wait_list' | 'rejected' | 'hold' | null;
   evaluated_at: string;
+  evaluator_name?: string;
 }
 
 // ===== Documents =====
@@ -598,12 +761,26 @@ export interface RmsAppointmentLetter {
   id: string;
   application_id: string;
   letter_number: string;
+  letter_type: 'provisional' | 'final';
   pdf_url: string | null;
   joining_date: string | null;
   joining_venue: string | null;
+  terms_payload?: { common_terms?: string[]; position_terms?: string[] } | null;
+  org_signature_id?: string | null;
+  signing_deadline_at?: string | null;
+  signature_status: 'pending' | 'signed' | 'expired';
+  signed_at?: string | null;
+  signed_legal_name?: string | null;
+  signature_image_data?: string | null;
+  doc_hash?: string | null;
+  otp_verified_at?: string | null;
+  onboarding_payment_deadline_at?: string | null;
+  onboarding_payment_status: 'pending' | 'completed' | 'expired';
+  onboarding_payment_id?: string | null;
   issued_by: string | null;
   issued_at: string;
   downloaded_at: string | null;
+  org_signature?: RmsOrganizationSignature | null;
 }
 
 // ===== HR Notes =====
