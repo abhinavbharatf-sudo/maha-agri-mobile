@@ -17,14 +17,17 @@ jobs:
         with:
           path: source
 
-      - name: Checkout Target Deployment Repository (abhinavbharatfoundation-v5)
-        uses: actions/checkout@v4
-        with:
-          repository: abhinavbharatf-sudo/abhinavbharatfoundation-v5
-          token: ${{ secrets.SYNC_TOKEN }}
-          ref: main
-          path: target
-          fetch-depth: 1
+      - name: Clone Target Deployment Repository (abhinavbharatfoundation-v5)
+        env:
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+        run: |
+          if [ -z "$SYNC_TOKEN" ]; then
+            echo "::error::SYNC_TOKEN secret is empty or missing in repository settings!"
+            exit 1
+          fi
+          echo "SYNC_TOKEN verified present (token length: ${#SYNC_TOKEN}). Cloning target repo..."
+          git clone --depth 1 --branch main "https://${SYNC_TOKEN}@github.com/abhinavbharatf-sudo/abhinavbharatfoundation-v5.git" target
+          echo "Target repository successfully checked out."
 
       - name: Setup Node.js Runtime
         uses: actions/setup-node@v4
@@ -97,6 +100,8 @@ jobs:
           echo "Target build verification SUCCESSFUL!"
 
       - name: Commit and Push Changes to abhinavbharatfoundation-v5
+        env:
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
         run: |
           echo "========================================================"
           echo "COMMITTING AND PUSHING TO TARGET REPOSITORY (MAIN)"
@@ -111,16 +116,18 @@ jobs:
             git add -A
             SOURCE_COMMIT=$(cd ../source && git rev-parse --short HEAD)
             git commit -m "sync(web): selective web platform deployment from maha-agri-mobile ($SOURCE_COMMIT)"
-            git push origin main
+            git push "https://${SYNC_TOKEN}@github.com/abhinavbharatf-sudo/abhinavbharatfoundation-v5.git" main
             echo "Successfully pushed selective web update to abhinavbharatfoundation-v5 (main)."
           fi
 
       - name: Trigger Live FTP Deployment Dispatch
         continue-on-error: true
+        env:
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
         run: |
           echo "Dispatching deploy.yml workflow trigger as fail-safe..."
           curl -X POST \
-            -H "Authorization: token ${{ secrets.SYNC_TOKEN }}" \
+            -H "Authorization: token ${SYNC_TOKEN}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/abhinavbharatf-sudo/abhinavbharatfoundation-v5/actions/workflows/deploy.yml/dispatches \
             -d '{"ref":"main"}' || true
